@@ -1,0 +1,30 @@
+# Dependencies
+node_modules
+.pnpm-debug.log
+
+# Next.js
+.next
+out
+next-env.d.ts
+
+# Python
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.uv
+
+# Logs
+logs/
+*.log
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS
+.DS_Store
+Thumbs.db
