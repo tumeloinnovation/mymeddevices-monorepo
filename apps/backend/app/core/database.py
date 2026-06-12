@@ -4,15 +4,25 @@ from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sess
 from sqlalchemy.orm import DeclarativeBase
 from sqlalchemy import event
 from .logging import logger
-from pydantic_settings import BaseSettings
+from app.core.config import settings
 
-class DatabaseSettings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://nickm@localhost:5432/mymeddevices"
-    ECHO_SQL: bool = False
+# Safe fallback for import time or if DATABASE_URL is not set
+if not settings.DATABASE_URL:
+    db_url = "sqlite+aiosqlite:///:memory:"
+else:
+    db_url = settings.DATABASE_URL
 
-settings = DatabaseSettings()
+# Configure engine options (pooling is only supported by PostgreSQL/MySQL, not SQLite)
+engine_kwargs = {"echo": settings.ECHO_SQL}
+if db_url.startswith("postgresql") or db_url.startswith("postgres"):
+    engine_kwargs.update({
+        "pool_size": settings.DB_POOL_SIZE,
+        "max_overflow": settings.DB_MAX_OVERFLOW,
+        "pool_recycle": settings.DB_POOL_RECYCLE,
+        "pool_pre_ping": settings.DB_POOL_PRE_PING
+    })
 
-engine = create_async_engine(settings.DATABASE_URL, echo=settings.ECHO_SQL)
+engine = create_async_engine(db_url, **engine_kwargs)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 class Base(DeclarativeBase):

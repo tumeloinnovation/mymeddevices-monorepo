@@ -1,13 +1,16 @@
 import uuid
 from datetime import datetime
 from typing import Optional
-from sqlalchemy import String, ForeignKey, DateTime, func
+from sqlalchemy import String, ForeignKey, DateTime, func, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.core.database import Base
 from app.domains.shared.models import IDMixin, AuditMixin
 
 class RefreshToken(Base, IDMixin, AuditMixin):
     __tablename__ = "refresh_tokens"
+    __table_args__ = (
+        Index("idx_refresh_tokens_user_expires", "user_id", "expires_at", "revoked"),
+    )
 
     token: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)

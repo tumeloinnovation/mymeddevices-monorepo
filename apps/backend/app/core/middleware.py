@@ -113,3 +113,66 @@ class RequestLoggingMiddleware:
             await send(message)
 
         await self.app(scope, receive_replay, send_wrapper)
+
+
+class ContentLengthLimitMiddleware:
+    """
+    Middleware to limit the request body size based on Content-Length header
+    and actual streamed bytes.
+    """
+    def __init__(self, app: ASGIApp, max_content_length: int = 10 * 1024 * 1024):
+        self.app = app
+        self.max_content_length = max_content_length
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        # Check content-length header
+        headers = {k.lower(): v for k, v in scope.get("headers", [])}
+        content_length = headers.get(b"content-length")
+        
+        if content_length:
+            try:
+                cl_val = int(content_length)
+                if cl_val > self.max_content_length:
+                    await self._send_error_response(send)
+                    return
+            except ValueError:
+                pass
+
+        # Wrap receive channel to limit total streamed bytes (e.g. for chunked transfer)
+        total_bytes = 0
+
+        async def receive_with_limit() -> Message:
+            nonlocal total_bytes
+            message = await receive()
+            if message["type"] == "http.request":
+                body = message.get("body", b"")
+                total_bytes += len(body)
+                if total_bytes > self.max_content_length:
+                    raise ValueError("Request body too large")
+            return message
+
+        try:
+            await self.app(scope, receive_with_limit, send)
+        except ValueError as exc:
+            if str(exc) == "Request body too large":
+                await self._send_error_response(send)
+            else:
+                raise
+
+    async def _send_error_response(self, send: Send) -> None:
+        await send({
+            "type": "http.response.start",
+            "status": 413,
+            "headers": [
+                (b"content-type", b"application/json")
+            ]
+        })
+        await send({
+            "type": "http.response.body",
+            "body": b'{"detail": "Request entity too large"}',
+            "more_body": False
+        })

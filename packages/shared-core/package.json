@@ -1,0 +1,19 @@
+{
+  "name": "@mymeddevices/shared-core",
+  "version": "1.0.0",
+  "main": "./src/index.ts",
+  "dependencies": {
+    "next": "16.2.9",
+    "sonner": "^2.0.7",
+    "zustand": "^5.0.14"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.42",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3"
+  },
+  "peerDependencies": {
+    "react": "19.2.4",
+    "react-dom": "19.2.4"
+  }
+}

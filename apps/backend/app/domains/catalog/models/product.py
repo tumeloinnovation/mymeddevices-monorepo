@@ -1,0 +1,148 @@
+from typing import Optional, List
+from datetime import datetime
+from sqlalchemy import (
+    String, Text, Boolean, Integer, Float, Numeric,
+    ForeignKey, JSON, DateTime, Index
+)
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID
+from app.core.database import Base
+from app.domains.shared.models import IDMixin, AuditMixin, SoftDeleteMixin
+import uuid
+
+
+class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
+    """
+    Core product model for medical device marketplace.
+    
+    Lifecycle: draft -> pending_review -> published -> archived
+    Products must be verified by the vendor before publishing.
+    """
+    __tablename__ = "products"
+    __table_args__ = (
+        Index("ix_products_vendor_status", "vendor_id", "status"),
+        Index("ix_products_status_featured", "status", "is_featured"),
+        Index("ix_products_status_popularity", "status", "popularity_score"),
+        Index("idx_products_status_deleted", "status", "is_deleted"),
+        Index("idx_products_vendor_status_deleted", "vendor_id", "status", "is_deleted"),
+    )
+
+    # ===============================
+    # OWNERSHIP
+    # ===============================
+    vendor_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("vendor_profiles.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    category_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("categories.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+
+    # ===============================
+    # BASIC INFO
+    # ===============================
+    name: Mapped[str] = mapped_column(String(500), nullable=False)
+    slug: Mapped[str] = mapped_column(String(500), unique=True, index=True, nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    short_description: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    sku: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+
+    # ===============================
+    # PRICING
+    # ===============================
+    base_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    markup_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    commission_fee: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    compare_at_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    cost_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(String(3), default="KES")
+
+    # ===============================
+    # INVENTORY
+    # ===============================
+    stock_quantity: Mapped[int] = mapped_column(Integer, default=0)
+    low_stock_threshold: Mapped[int] = mapped_column(Integer, default=5)
+    track_inventory: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # ===============================
+    # STATUS & VISIBILITY
+    # ===============================
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="draft",
+        nullable=False,
+        index=True
+    )  # draft, pending_review, published, archived
+    is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # ===============================
+    # MERCHANDISING FLAGS
+    # ===============================
+    is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_on_sale: Mapped[bool] = mapped_column(Boolean, default=False)
+    popularity_score: Mapped[int] = mapped_column(Integer, default=0)
+    view_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    # ===============================
+    # PHYSICAL ATTRIBUTES
+    # ===============================
+    weight_kg: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    dimensions: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # {length, width, height, unit}
+
+    # ===============================
+    # MEDICAL DEVICE SPECIFICS
+    # ===============================
+    brand: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    model_number: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    manufacturer: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    specifications: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Flexible key-value specs
+    certifications: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # [{type, number, expiry}]
+    kmpdb_registration_number: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    ppb_classification: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    ce_marking_or_fda_clearance: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    warranty_info: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # ===============================
+    # SEO
+    # ===============================
+    meta_title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    meta_description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    tags: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # ["surgical", "disposable", ...]
+
+    # ===============================
+    # AI ASSIST TRACKING
+    # ===============================
+    ai_generated_fields: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Tracks which fields AI filled
+    completeness_score: Mapped[int] = mapped_column(Integer, default=0)
+
+    # ===============================
+    # RELATIONSHIPS
+    # ===============================
+    vendor: Mapped["VendorProfile"] = relationship(
+        "VendorProfile",
+        backref="products"
+    )
+    category: Mapped[Optional["Category"]] = relationship(
+        "Category",
+        back_populates="products",
+        lazy="selectin"
+    )
+    images: Mapped[List["ProductImage"]] = relationship(
+        "ProductImage",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="ProductImage.sort_order",
+        lazy="selectin"
+    )
+    variants: Mapped[List["ProductVariant"]] = relationship(
+        "ProductVariant",
+        back_populates="product",
+        cascade="all, delete-orphan"
+    )

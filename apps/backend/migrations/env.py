@@ -17,6 +17,8 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 from app.core.database import Base
 from app.domains.auth.models import User, RefreshToken, UserDevice, OTP
+from app.domains.vendor.models import VendorProfile
+from app.domains.catalog.models import Category, Product, ProductImage, ProductVariant
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:

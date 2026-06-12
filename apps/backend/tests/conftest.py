@@ -10,17 +10,21 @@ from app.core.database import Base, get_db
 DATABASE_URL = "postgresql+asyncpg://nickm@localhost:5432/mymeddevices_test"
 
 @pytest.fixture(scope="session")
-def event_loop_policy():
-    return asyncio.get_event_loop_policy()
-
-@pytest.fixture(scope="session")
 async def engine():
     # Setup test DB
     import asyncpg
     conn = await asyncpg.connect("postgresql://nickm@localhost:5432/postgres")
     try:
+        # Terminate any active connections to the test DB
+        await conn.execute(
+            "SELECT pg_terminate_backend(pg_stat_activity.pid) "
+            "FROM pg_stat_activity "
+            "WHERE pg_stat_activity.datname = 'mymeddevices_test' "
+            "AND pid <> pg_backend_pid();"
+        )
+        await conn.execute("DROP DATABASE IF EXISTS mymeddevices_test")
         await conn.execute("CREATE DATABASE mymeddevices_test")
-    except:
+    except Exception:
         pass
     finally:
         await conn.close()
@@ -46,3 +50,10 @@ async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def clear_rate_limiter():
+    from app.core.rate_limiting import rate_limiter
+    rate_limiter.clear()
+

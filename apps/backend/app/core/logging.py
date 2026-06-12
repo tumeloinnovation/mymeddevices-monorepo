@@ -3,13 +3,7 @@ import logging
 import re
 from pathlib import Path
 from loguru import logger
-from pydantic_settings import BaseSettings
-
-class LoggingSettings(BaseSettings):
-    LOG_LEVEL: str = "INFO"
-    SHOW_SQL_QUERIES: bool = True
-
-settings = LoggingSettings()
+from app.core.config import settings
 
 # Format for logs with Trace and Request ID support
 LOG_FORMAT = (
@@ -31,7 +25,7 @@ def log_patcher(record):
 def setup_logging():
     # Remove default handler
     logger.remove()
-    
+
     # Console handler (colored logs)
     logger.add(
         sys.stdout,
