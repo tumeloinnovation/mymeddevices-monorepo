@@ -1,6 +1,7 @@
 "use client"
 
-import { useAuthStore, AuthGuard, useAuthCookie, type UserRole } from "@mymeddevices/shared-core"
+import { useAuthStore, AuthGuard, useAuthCookie, getUserDisplayName, type UserRole } from "@mymeddevices/shared-core"
+import { SidebarLogo } from "./logo"
 import {
   Sidebar,
   SidebarContent,
@@ -44,11 +45,25 @@ import {
   ChevronDownIcon,
   MessageSquareIcon,
   FolderTreeIcon,
+  TrendingUpIcon,
+  HeadphonesIcon,
+  FileEditIcon,
+  MegaphoneIcon,
+  GitBranchIcon,
+  ShieldIcon,
+  ActivityIcon,
+  HeartIcon,
+  MapPinIcon,
+  ClockIcon,
+  SearchIcon,
+  LockIcon,
+  EyeIcon,
   type LucideIcon,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { TooltipProvider } from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,7 +75,7 @@ import {
 import { useRouter, usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 
-export type DashboardTheme = "admin" | "vendor"
+export type DashboardTheme = "admin" | "vendor" | "customer"
 
 export type NavItem = {
   label: string
@@ -90,45 +105,93 @@ const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
       items: [
         { label: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
         { label: "Analytics", href: "/dashboard/analytics", icon: BarChart3Icon },
+        {
+          label: "Reports",
+          href: "/dashboard/reports",
+          icon: TrendingUpIcon,
+          isCollapsible: true,
+          children: [
+            { label: "Overview", href: "/dashboard/reports", icon: LayoutDashboardIcon },
+            { label: "Sales Reports", href: "/dashboard/reports/sales", icon: TrendingUpIcon },
+            { label: "Inventory Reports", href: "/dashboard/reports/inventory", icon: PackageIcon },
+            { label: "Customer Insights", href: "/dashboard/reports/customers", icon: UsersIcon },
+            { label: "Vendor Performance", href: "/dashboard/reports/vendors", icon: StoreIcon },
+          ],
+        },
       ],
     },
     {
-      label: "Ecommerce",
+      label: "Catalog",
       items: [
-        {
-          label: "Catalog",
-          href: "/dashboard/catalog",
-          icon: TagIcon,
-          isCollapsible: true,
-          children: [
-            { label: "Overview", href: "/dashboard/catalog", icon: PackageIcon },
-            { label: "Products", href: "/dashboard/catalog/products", icon: PackageIcon },
-            { label: "Categories", href: "/dashboard/catalog/categories", icon: FolderTreeIcon },
-            { label: "Brands", href: "/dashboard/catalog/brands", icon: TagIcon },
-            { label: "Tags", href: "/dashboard/catalog/tags", icon: TagIcon },
-          ],
-        },
-        { label: "Orders", href: "/dashboard/orders", icon: ShoppingCartIcon },
-        { label: "Customers", href: "/dashboard/customers", icon: UsersIcon },
-        { label: "Inventory", href: "/dashboard/inventory", icon: StoreIcon },
+        { label: "Overview", href: "/dashboard/catalog", icon: LayoutDashboardIcon },
+        { label: "Products", href: "/dashboard/catalog/products", icon: PackageIcon },
+        { label: "Categories", href: "/dashboard/catalog/categories", icon: FolderTreeIcon },
+        { label: "Brands", href: "/dashboard/catalog/brands", icon: TagIcon },
+        { label: "Tags", href: "/dashboard/catalog/tags", icon: TagIcon },
+      ],
+    },
+    {
+      label: "Orders & Shopping",
+      items: [
+        { label: "Orders", href: "/dashboard/shopping/orders", icon: ShoppingCartIcon },
+        { label: "Order Statuses", href: "/dashboard/shopping/order-statuses", icon: GitBranchIcon },
+        { label: "Returns", href: "/dashboard/shopping/returns", icon: AlertCircleIcon },
+        { label: "Refunds", href: "/dashboard/shopping/refunds", icon: CreditCardIcon },
+        { label: "Coupons", href: "/dashboard/shopping/coupons", icon: TagIcon },
+        { label: "Abandoned Carts", href: "/dashboard/shopping/abandoned-carts", icon: ShoppingCartIcon },
+        { label: "Shopping Analytics", href: "/dashboard/shopping/analytics", icon: BarChart3Icon },
+      ],
+    },
+    {
+      label: "Users",
+      items: [
+        { label: "Customers", href: "/dashboard/users/customers", icon: UsersIcon },
+        { label: "Vendors", href: "/dashboard/vendors", icon: StoreIcon },
+        { label: "Staff", href: "/dashboard/users/staff", icon: UsersIcon },
+        { label: "Reviews", href: "/dashboard/users/reviews", icon: MessageSquareIcon },
+      ],
+    },
+    {
+      label: "Financial",
+      items: [
         { label: "Payments", href: "/dashboard/payments", icon: CreditCardIcon },
+        { label: "Invoices", href: "/dashboard/financial/invoices", icon: FileTextIcon },
+        { label: "Payouts", href: "/dashboard/financial/payouts", icon: CreditCardIcon },
+        { label: "Tax Settings", href: "/dashboard/financial/tax", icon: FileEditIcon },
+      ],
+    },
+    {
+      label: "Shipping & Fulfillment",
+      items: [
         { label: "Shipping", href: "/dashboard/shipping", icon: TruckIcon },
+        { label: "Delivery Tracking", href: "/dashboard/shipping/tracking", icon: ActivityIcon },
+        { label: "Warehouse", href: "/dashboard/shipping/warehouse", icon: PackageIcon },
+      ],
+    },
+    {
+      label: "Customer Service",
+      items: [
+        { label: "Support Tickets", href: "/dashboard/support/tickets", icon: HeadphonesIcon },
+        { label: "Disputes", href: "/dashboard/support/disputes", icon: AlertCircleIcon },
+        { label: "Email Templates", href: "/dashboard/support/emails", icon: FileEditIcon },
       ],
     },
     {
       label: "Content",
       items: [
-        { label: "Pages", href: "/dashboard/pages", icon: FileTextIcon },
-        { label: "Banners", href: "/dashboard/banners", icon: FileTextIcon },
+        { label: "CMS & Blog", href: "/dashboard/content/cms", icon: MegaphoneIcon },
+        { label: "FAQs", href: "/dashboard/content/faqs", icon: MessageSquareIcon },
+        { label: "Pages", href: "/dashboard/content/pages", icon: FileTextIcon },
       ],
     },
     {
-      label: "Management",
+      label: "System",
       items: [
-        { label: "Users", href: "/users", icon: UsersIcon },
-        { label: "Vendors", href: "/dashboard/vendors", icon: StoreIcon },
-        { label: "System", href: "/system", icon: CogIcon },
         { label: "Settings", href: "/settings", icon: SettingsIcon },
+        { label: "System Health", href: "/dashboard/system/health", icon: ActivityIcon },
+        { label: "Audit Logs", href: "/dashboard/system/audit-logs", icon: ShieldIcon },
+        { label: "Feature Flags", href: "/dashboard/system/feature-flags", icon: GitBranchIcon },
+        { label: "Playground", href: "/dashboard/shopping/playground", icon: ShoppingCartIcon },
       ],
     },
   ],
@@ -176,6 +239,38 @@ const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
       ],
     },
   ],
+  customer: [
+    {
+      label: "Overview",
+      items: [
+        { label: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
+      ],
+    },
+    {
+      label: "Shopping",
+      items: [
+        { label: "Orders", href: "/dashboard/orders", icon: ShoppingCartIcon },
+        { label: "Wishlist", href: "/dashboard/wishlist", icon: MessageSquareIcon },
+        { label: "Addresses", href: "/dashboard/addresses", icon: StoreIcon },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { label: "Profile", href: "/dashboard/profile", icon: UsersIcon },
+        { label: "Payment Methods", href: "/dashboard/payment-methods", icon: CreditCardIcon },
+        { label: "Returns", href: "/dashboard/returns", icon: AlertCircleIcon },
+        { label: "Support", href: "/dashboard/support", icon: MessageSquareIcon },
+      ],
+    },
+    {
+      label: "Settings",
+      items: [
+        { label: "Preferences", href: "/dashboard/preferences", icon: SettingsIcon },
+        { label: "Security", href: "/dashboard/security", icon: CogIcon },
+      ],
+    },
+  ],
 }
 
 const THEME_COLORS: Record<DashboardTheme, { primary: string; hover: string; accent: string }> = {
@@ -189,21 +284,29 @@ const THEME_COLORS: Record<DashboardTheme, { primary: string; hover: string; acc
     hover: "hover:bg-orange-500",
     accent: "focus:border-orange-400 focus:ring-orange-100",
   },
+  customer: {
+    primary: "bg-emerald-600",
+    hover: "hover:bg-emerald-500",
+    accent: "focus:border-emerald-400 focus:ring-emerald-100",
+  },
 }
 
 const ALLOWED_ROLES: Record<DashboardTheme, UserRole[]> = {
   admin: ["admin", "worker"],
   vendor: ["vendor"],
+  customer: ["customer"],
 }
 
 const DEFAULT_INITIALS: Record<DashboardTheme, string> = {
   admin: "A",
   vendor: "V",
+  customer: "C",
 }
 
 const DEFAULT_USER_LABEL: Record<DashboardTheme, string> = {
   admin: "Admin",
   vendor: "Vendor",
+  customer: "Customer",
 }
 
 function useTheme() {
@@ -234,17 +337,18 @@ function useTheme() {
   return { theme, toggleTheme }
 }
 
-function Breadcrumbs() {
+function Breadcrumbs({ theme }: { theme: DashboardTheme }) {
   const pathname = usePathname()
   const segments = pathname.split("/").filter(Boolean)
+  const dashboardHref = theme === "vendor" ? "/vendor/dashboard" : "/dashboard"
 
   // Start with a Home/Dashboard root
   const breadcrumbs = [
-    { label: "Dashboard", href: "/dashboard", isLast: pathname === "/dashboard" }
+    { label: "Dashboard", href: dashboardHref, isLast: pathname === dashboardHref }
   ]
 
   // If we are not on the dashboard, add other segments
-  if (pathname !== "/dashboard" && pathname !== "/") {
+  if (pathname !== dashboardHref && pathname !== "/") {
     segments.forEach((segment, index) => {
       // Skip "dashboard" segment if it's the first one to avoid "Dashboard > Dashboard"
       if (segment === "dashboard" && index === 0) return
@@ -310,18 +414,14 @@ function NotificationBell() {
 }
 
 function SidebarBranding({ theme }: { theme: DashboardTheme }) {
+  const dashboardHref = theme === "vendor" ? "/vendor/dashboard" : "/dashboard"
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
-        <SidebarMenuButton size="lg" asChild>
-          <a href="/dashboard">
-            <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-              <span className="text-sm font-bold">M</span>
-            </div>
-            <div className="grid flex-1 text-left text-sm leading-tight">
-              <span className="truncate font-medium">MyMedDevices</span>
-              <span className="truncate text-xs">{theme === "admin" ? "Admin" : "Vendor"}</span>
-            </div>
+        <SidebarMenuButton size="lg" asChild className="h-20 py-2">
+          <a href={dashboardHref} className="gap-2">
+            <SidebarLogo theme={theme} className="shrink-0" />
           </a>
         </SidebarMenuButton>
       </SidebarMenuItem>
@@ -329,8 +429,9 @@ function SidebarBranding({ theme }: { theme: DashboardTheme }) {
   )
 }
 
-function SidebarNav({ navConfig }: { navConfig: NavConfig }) {
+function SidebarNav({ navConfig, theme }: { navConfig: NavConfig; theme: DashboardTheme }) {
   const pathname = usePathname()
+  const dashboardHref = theme === "vendor" ? "/vendor/dashboard" : "/dashboard"
 
   return (
     <>
@@ -383,7 +484,7 @@ function SidebarNav({ navConfig }: { navConfig: NavConfig }) {
               // Regular menu item (non-collapsible)
               const isActive =
                 pathname === item.href ||
-                (pathname.startsWith(item.href + "/") && item.href !== "/dashboard")
+                (pathname.startsWith(item.href + "/") && item.href !== dashboardHref)
 
               return (
                 <SidebarMenuItem key={item.href}>
@@ -407,10 +508,13 @@ function SidebarUserMenu({ theme }: { theme: DashboardTheme }) {
   const { user, logout, isLoading } = useAuthStore()
   const { clearAuthCookie } = useAuthCookie()
   const router = useRouter()
+  
+  console.log("User object:", user);
 
+  const displayName = getUserDisplayName(user);
   const initials =
-    user?.name
-      ?.split(" ")
+    displayName
+      .split(" ")
       .map((n) => n[0])
       .join("")
       .toUpperCase() || user?.email?.[0]?.toUpperCase() || DEFAULT_INITIALS[theme]
@@ -434,7 +538,7 @@ function SidebarUserMenu({ theme }: { theme: DashboardTheme }) {
                 <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
-                <span className="truncate font-medium">{user?.name || DEFAULT_USER_LABEL[theme]}</span>
+                <span className="truncate font-medium">{displayName || DEFAULT_USER_LABEL[theme]}</span>
                 <span className="truncate text-xs">{user?.email || ""}</span>
               </div>
               <ChevronsUpDownIcon className="ml-auto size-4" />
@@ -452,11 +556,18 @@ function SidebarUserMenu({ theme }: { theme: DashboardTheme }) {
                   <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
-                  <span className="truncate font-medium">{user?.name || DEFAULT_USER_LABEL[theme]}</span>
+                  <span className="truncate font-medium">{displayName || DEFAULT_USER_LABEL[theme]}</span>
                   <span className="truncate text-xs">{user?.email || ""}</span>
                 </div>
               </div>
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <a href={theme === "vendor" ? "/vendor/settings/profile" : theme === "customer" ? "/dashboard/profile" : "/settings"} className="cursor-pointer">
+                <SettingsIcon className="mr-2 size-4" />
+                Account Settings
+              </a>
+            </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} disabled={isLoading}>
               <LogOutIcon className="mr-2 size-4" />
@@ -479,48 +590,50 @@ export default function DashboardLayout({
 
   return (
     <AuthGuard allowedRoles={allowedRoles}>
-      <SidebarProvider>
-        <Sidebar collapsible="icon">
-          <SidebarHeader>
-            <SidebarBranding theme={theme} />
-          </SidebarHeader>
-          <SidebarContent>
-            <div className="overflow-y-auto h-[calc(100vh-8rem)]">
-              <SidebarNav navConfig={config} />
-            </div>
-          </SidebarContent>
-          <SidebarFooter>
-            <SidebarUserMenu theme={theme} />
-          </SidebarFooter>
-          <SidebarRail />
-        </Sidebar>
-        <SidebarInset id="main-content">
-          <header className="flex h-16 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
-            <div className="flex w-full items-center gap-2 px-4 lg:gap-3 lg:px-6">
-              <SidebarTrigger className="-ml-1" />
-              <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-              <Breadcrumbs />
-              <div className="ml-auto flex items-center gap-1">
-                <NotificationBell />
-                <ThemeToggle />
+      <TooltipProvider>
+        <SidebarProvider>
+          <Sidebar collapsible="icon">
+            <SidebarHeader>
+              <SidebarBranding theme={theme} />
+            </SidebarHeader>
+            <SidebarContent>
+              <div className="overflow-y-auto h-[calc(100vh-8rem)]">
+                <SidebarNav navConfig={config} theme={theme} />
               </div>
-            </div>
-          </header>
-          <div className="flex-1 p-6">{children}</div>
-          <footer className="border-t bg-card/50 backdrop-blur-xs px-6 py-4 text-xs text-muted-foreground">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div>
-                &copy; {new Date().getFullYear()} MyMedDevices. All rights reserved.
+            </SidebarContent>
+            <SidebarFooter>
+              <SidebarUserMenu theme={theme} />
+            </SidebarFooter>
+            <SidebarRail />
+          </Sidebar>
+          <SidebarInset id="main-content">
+            <header className="flex h-16 shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+              <div className="flex w-full items-center gap-2 px-4 lg:gap-3 lg:px-6">
+                <SidebarTrigger className="-ml-1" />
+                <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
+                <Breadcrumbs theme={theme} />
+                <div className="ml-auto flex items-center gap-1">
+                  <NotificationBell />
+                  <ThemeToggle />
+                </div>
               </div>
-              <div className="flex items-center gap-6">
-                <a href="/privacy" className="transition-colors hover:text-foreground">Privacy Policy</a>
-                <a href="/terms" className="transition-colors hover:text-foreground">Terms of Service</a>
-                <a href="mailto:support@mymeddevices.com" className="transition-colors hover:text-foreground">Support</a>
+            </header>
+            <div className="flex-1 p-6">{children}</div>
+            <footer className="border-t bg-card/50 backdrop-blur-xs px-6 py-4 text-xs text-muted-foreground">
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div>
+                  &copy; {new Date().getFullYear()} MyMedDevices. All rights reserved.
+                </div>
+                <div className="flex items-center gap-6">
+                  <a href="/privacy" className="transition-colors hover:text-foreground">Privacy Policy</a>
+                  <a href="/terms" className="transition-colors hover:text-foreground">Terms of Service</a>
+                  <a href="mailto:support@mymeddevices.com" className="transition-colors hover:text-foreground">Support</a>
+                </div>
               </div>
-            </div>
-          </footer>
-        </SidebarInset>
-      </SidebarProvider>
+            </footer>
+          </SidebarInset>
+        </SidebarProvider>
+      </TooltipProvider>
     </AuthGuard>
   )
 }
