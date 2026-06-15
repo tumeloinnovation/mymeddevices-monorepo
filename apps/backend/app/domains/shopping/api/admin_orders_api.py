@@ -7,12 +7,12 @@ from app.core.database import get_db
 from app.core.responses import success_response, ApiSuccessResponse
 from app.core.dependencies import require_role
 from app.domains.auth.models.user import User
-from app.domains.shopping.schemas.order_schemas import OrderResponse, OrderStatusUpdate
+from app.domains.shopping.schemas.order_schemas import OrderResponse, OrderStatusUpdate, OrderListResponse
 from app.domains.shopping.services.order_service import OrderService
 
 router = APIRouter(prefix="/admin/shopping/orders", tags=["Admin Order Management"])
 
-@router.get("", response_model=ApiSuccessResponse[List[OrderResponse]])
+@router.get("", response_model=ApiSuccessResponse[OrderListResponse])
 async def admin_list_orders(
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
     status: Optional[str] = Query(None),
@@ -29,7 +29,7 @@ async def admin_list_orders(
         offset=(page - 1) * page_size,
         limit=page_size
     )
-    return success_response(orders)
+    return success_response({"orders": orders, "total": total})
 
 @router.patch("/{order_id}/status", response_model=ApiSuccessResponse[OrderResponse])
 async def admin_update_order_status(
@@ -45,7 +45,7 @@ async def admin_update_order_status(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
     return success_response(order)
 
-@router.get("/vendor", response_model=ApiSuccessResponse[List[OrderResponse]])
+@router.get("/vendor", response_model=ApiSuccessResponse[OrderListResponse])
 async def vendor_list_orders(
     current_user: Annotated[User, Depends(require_role("vendor", "admin"))],
     page: int = Query(1, ge=1),
@@ -74,11 +74,13 @@ async def vendor_list_orders(
     # Secure data: filter order items and recalculate totals for the vendor
     secured_orders = []
     for order in orders:
-        vendor_items = [item for item in order.items if item.vendor_id == vendor_profile.id]
+        # Convert to Pydantic to avoid mutating SQLAlchemy model side-effects
+        order_dto = OrderResponse.model_validate(order)
+        vendor_items = [item for item in order_dto.items if item.vendor_id == vendor_profile.id]
         if vendor_items:
             # Overwrite items and total for the response view
-            order.items = vendor_items
-            order.total_amount = sum(item.subtotal for item in vendor_items)
-            secured_orders.append(order)
+            order_dto.items = vendor_items
+            order_dto.total_amount = sum(item.subtotal for item in vendor_items)
+            secured_orders.append(order_dto)
 
-    return success_response(secured_orders)
+    return success_response({"orders": secured_orders, "total": total})
