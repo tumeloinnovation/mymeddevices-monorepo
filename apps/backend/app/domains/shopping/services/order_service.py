@@ -8,8 +8,20 @@ from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
 from app.domains.shopping.models.order import Order, OrderItem, OrderStatus
 from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.services.cart_calculation_service import CartCalculationService
-from app.domains.shopping.services.email_notification_service import EmailNotificationService
 from app.domains.auth.models.user import User
+
+class InvalidStateTransitionError(ValueError):
+    pass
+
+VALID_ORDER_TRANSITIONS = {
+    OrderStatus.PENDING: [OrderStatus.PAID, OrderStatus.CANCELLED],
+    OrderStatus.PAID: [OrderStatus.PROCESSING, OrderStatus.REFUNDED],
+    OrderStatus.PROCESSING: [OrderStatus.SHIPPED, OrderStatus.REFUNDED],
+    OrderStatus.SHIPPED: [OrderStatus.DELIVERED, OrderStatus.REFUNDED],
+    OrderStatus.DELIVERED: [OrderStatus.REFUNDED],
+    OrderStatus.CANCELLED: [],
+    OrderStatus.REFUNDED: []
+}
 
 class CheckoutService:
     def __init__(self, db: AsyncSession):
@@ -97,7 +109,6 @@ class CheckoutService:
 class OrderService:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self.email_service = EmailNotificationService()
 
     async def get_order(self, order_id: uuid.UUID) -> Optional[Order]:
         stmt = select(Order).where(Order.id == order_id).options(
@@ -145,43 +156,26 @@ class OrderService:
         if not order:
             raise ValueError("Order not found")
         
-        old_status = order.status
-        
-        stmt = update(Order).where(Order.id == order_id).values(status=new_status)
+        old_status = OrderStatus(order.status)
+        new_status_enum = OrderStatus(new_status)
+
+        if new_status_enum not in VALID_ORDER_TRANSITIONS[old_status]:
+            raise InvalidStateTransitionError(f"Cannot transition order from {old_status.value} to {new_status_enum.value}")
+
+        stmt = update(Order).where(Order.id == order_id).values(status=new_status_enum.value)
         await self.db.execute(stmt)
+
+        # Write outbox event for the transition
+        if old_status != new_status_enum:
+            event = OutboxEvent(
+                id=uuid.uuid4(),
+                aggregate_type="Order",
+                aggregate_id=str(order.id),
+                event_type=f"Order{new_status_enum.value.capitalize()}",
+                payload={"order_id": str(order.id), "status": new_status_enum.value},
+                status=OutboxStatus.PENDING
+            )
+            self.db.add(event)
+
         await self.db.commit()
-        
-        # Reload updated order
-        updated_order = await self.get_order(order_id)
-
-        # Send notifications based on status change
-        if old_status != new_status:
-            try:
-                user_name = f"{updated_order.user.firstName} {updated_order.user.lastName}".strip() or updated_order.user.email.split('@')[0]
-                order_number = str(updated_order.id)[:8].upper()
-
-                if new_status == "paid":
-                    await self.email_service.send_payment_received(
-                        user_email=updated_order.user.email,
-                        user_name=user_name,
-                        order_number=order_number,
-                        amount=updated_order.total_amount
-                    )
-                elif new_status == "shipped":
-                    await self.email_service.send_order_shipped(
-                        user_email=updated_order.user.email,
-                        user_name=user_name,
-                        order_number=order_number,
-                        tracking_number=f"TRK-{order_number}" # Placeholder
-                    )
-                elif new_status == "delivered":
-                    await self.email_service.send_delivery_confirmation(
-                        user_email=updated_order.user.email,
-                        user_name=user_name,
-                        order_number=order_number
-                    )
-            except Exception as e:
-                from app.core.logging import logger
-                logger.error(f"Failed to send order status email: {e}")
-
-        return updated_order
+        return await self.get_order(order_id)
