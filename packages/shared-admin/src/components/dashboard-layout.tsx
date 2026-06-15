@@ -524,8 +524,6 @@ function SidebarUserMenu({ theme }: { theme: DashboardTheme }) {
   const { user, logout, isLoading } = useAuthStore()
   const { clearAuthCookie } = useAuthCookie()
   const router = useRouter()
-  
-  console.log("User object:", user);
 
   const displayName = getUserDisplayName(user);
   const initials =
