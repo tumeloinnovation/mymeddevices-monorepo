@@ -10,7 +10,6 @@ from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.services.cart_calculation_service import CartCalculationService
 from app.domains.shopping.services.email_notification_service import EmailNotificationService
 from app.domains.auth.models.user import User
-import json
 
 class CheckoutService:
     def __init__(self, db: AsyncSession):
@@ -25,8 +24,10 @@ class CheckoutService:
         idempotency_key: Optional[str] = None
     ) -> Order:
         """Atomic conversion of a cart to an order."""
-        # 1. Fetch cart with items
-        stmt = select(Cart).where(Cart.id == cart_id).options(selectinload(Cart.items))
+        # 1. Fetch cart with items and products
+        stmt = select(Cart).where(Cart.id == cart_id).options(
+            selectinload(Cart.items).selectinload(CartItem.product)
+        )
         result = await self.db.execute(stmt)
         cart = result.scalar_one_or_none()
 
@@ -56,14 +57,14 @@ class CheckoutService:
 
         # 4. Create OrderItem records (snapshots of current price)
         for item in cart.items:
-            # We need the current product price/vendor
-            # For simplicity, we assume CartItem already has these or we fetch them
-            # In our current schema, CartItem links to product but we should snapshot
+            if not item.product or not item.product.vendor_id:
+                raise ValueError(f"Product or vendor information missing for item {item.product_id}")
+
             order_item = OrderItem(
                 id=uuid.uuid4(),
                 order_id=order.id,
                 product_id=item.product_id,
-                vendor_id=item.product.vendor_id if hasattr(item.product, 'vendor_id') else uuid.uuid4(), # Fallback
+                vendor_id=item.product.vendor_id,
                 quantity=item.quantity,
                 unit_price=item.product.price, # Snapshot price
                 subtotal=item.product.price * item.quantity
