@@ -79,10 +79,16 @@ class CheckoutService:
         )
         self.db.add(order)
 
-        # 4. Create OrderItem records (snapshots of current price)
+        # 4. Create OrderItem records (snapshots of current price) and deduct stock
         for item in cart.items:
             if not item.product or not item.product.vendor_id:
                 raise ValueError(f"Product or vendor information missing for item {item.product_id}")
+
+            # Deduct stock
+            item.product.stock_quantity -= item.quantity
+            if item.product.stock_quantity <= 0:
+                item.product.stock_quantity = 0
+                item.product.stock_status = "outofstock"
 
             order_item = OrderItem(
                 id=uuid.uuid4(),
