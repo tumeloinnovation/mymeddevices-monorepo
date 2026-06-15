@@ -103,7 +103,15 @@ class CheckoutService:
 
         # Commit happens ONCE at the end now
         await self.db.commit()
-        await self.db.refresh(order)
+        
+        # Reload with items and user for response
+        stmt = select(Order).where(Order.id == order.id).options(
+            selectinload(Order.items),
+            selectinload(Order.user)
+        )
+        result = await self.db.execute(stmt)
+        order = result.scalar_one()
+        
         return order
 
 class OrderService:
