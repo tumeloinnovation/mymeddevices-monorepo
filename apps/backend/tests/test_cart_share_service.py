@@ -18,3 +18,20 @@ async def test_create_share_success(db: AsyncSession):
     assert share.share_token is not None
     assert len(share.share_token) == 32
     assert share.cart_id == cart.id
+
+@pytest.mark.asyncio
+async def test_get_shared_cart_success(db: AsyncSession):
+    cart = Cart(cart_type="persistent", is_active=True)
+    db.add(cart)
+    await db.commit()
+    
+    service = CartShareService(db)
+    share = await service.create_share(cart.id)
+    
+    retrieved_cart = await service.get_shared_cart(share.share_token)
+    assert retrieved_cart is not None
+    assert retrieved_cart.id == cart.id
+    
+    # Verify access count incremented
+    await db.refresh(share)
+    assert share.access_count == 1
