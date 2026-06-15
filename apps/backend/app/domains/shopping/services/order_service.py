@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload
 
+from app.core.logging import logger
 from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
 from app.domains.shopping.models.order import Order, OrderItem, OrderStatus
 from app.domains.shopping.models.cart import Cart, CartItem
@@ -30,10 +31,11 @@ class CheckoutService:
     async def create_order_from_cart(
         self, 
         cart_id: uuid.UUID, 
-        user_id: uuid.UUID, 
-        shipping_address: dict,
+        user_id: Optional[uuid.UUID] = None, 
+        shipping_address: dict = None,
         notes: Optional[str] = None,
-        idempotency_key: Optional[str] = None
+        idempotency_key: Optional[str] = None,
+        guest_token: Optional[str] = None
     ) -> Order:
         """Atomic conversion of a cart to an order."""
         # 1. Fetch cart with items and products
@@ -44,11 +46,20 @@ class CheckoutService:
         cart = result.scalar_one_or_none()
 
         if not cart:
+            logger.error(f"Cart not found: {cart_id}")
             raise ValueError("Cart not found")
         if not cart.is_active:
+            logger.error(f"Cart is no longer active: {cart_id}")
             raise ValueError("Cart is no longer active")
         if not cart.items:
+            logger.error(f"Cannot checkout an empty cart: {cart_id}")
             raise ValueError("Cannot checkout an empty cart")
+
+        # 1.5 Check stock availability
+        for item in cart.items:
+            if item.product.stock_quantity < item.quantity:
+                logger.warning(f"Insufficient stock for product {item.product.id}: has {item.product.stock_quantity}, requested {item.quantity}")
+                raise ValueError(f"Insufficient stock for product: {item.product.name}")
 
         # 2. Calculate final totals (snapshot)
         calc_service = CartCalculationService(self.db)
@@ -58,6 +69,7 @@ class CheckoutService:
         order = Order(
             id=uuid.uuid4(),
             user_id=user_id,
+            guest_token=guest_token,
             status=OrderStatus.PENDING,
             total_amount=totals["total"],
             currency="KES",
@@ -94,7 +106,8 @@ class CheckoutService:
             event_type="OrderCreated",
             payload={
                 "order_id": str(order.id),
-                "user_id": str(order.user_id),
+                "user_id": str(order.user_id) if order.user_id else None,
+                "guest_token": order.guest_token,
                 "total_amount": float(order.total_amount),
             },
             status=OutboxStatus.PENDING
@@ -106,9 +119,11 @@ class CheckoutService:
         
         # Reload with items and user for response
         stmt = select(Order).where(Order.id == order.id).options(
-            selectinload(Order.items),
-            selectinload(Order.user)
+            selectinload(Order.items)
         )
+        if order.user_id:
+            stmt = stmt.options(selectinload(Order.user))
+            
         result = await self.db.execute(stmt)
         order = result.scalar_one()
         
