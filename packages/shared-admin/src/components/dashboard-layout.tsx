@@ -241,33 +241,49 @@ const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
   ],
   customer: [
     {
-      label: "Overview",
+      label: "Dashboard",
       items: [
         { label: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
       ],
     },
     {
-      label: "Shopping",
-      items: [
-        { label: "Orders", href: "/dashboard/orders", icon: ShoppingCartIcon },
-        { label: "Wishlist", href: "/dashboard/wishlist", icon: MessageSquareIcon },
-        { label: "Addresses", href: "/dashboard/addresses", icon: StoreIcon },
-      ],
-    },
-    {
-      label: "Account",
+      label: "My Account",
       items: [
         { label: "Profile", href: "/dashboard/profile", icon: UsersIcon },
         { label: "Payment Methods", href: "/dashboard/payment-methods", icon: CreditCardIcon },
+        { label: "Addresses", href: "/dashboard/addresses", icon: MapPinIcon },
+        { label: "Communication", href: "/dashboard/communication", icon: BellIcon },
+      ],
+    },
+    {
+      label: "My Orders",
+      items: [
+        { label: "Orders", href: "/dashboard/orders", icon: ShoppingCartIcon },
         { label: "Returns", href: "/dashboard/returns", icon: AlertCircleIcon },
-        { label: "Support", href: "/dashboard/support", icon: MessageSquareIcon },
+        { label: "Order Tracking", href: "/dashboard/tracking", icon: TruckIcon },
+      ],
+    },
+    {
+      label: "My Stuff",
+      items: [
+        { label: "Wishlist", href: "/dashboard/wishlist", icon: HeartIcon },
+        { label: "Recently Viewed", href: "/dashboard/recently-viewed", icon: ClockIcon },
+        { label: "Saved Searches", href: "/dashboard/saved-searches", icon: SearchIcon },
+      ],
+    },
+    {
+      label: "Medical",
+      items: [
+        { label: "Prescriptions", href: "/dashboard/prescriptions", icon: FileTextIcon },
+        { label: "Insurance", href: "/dashboard/insurance", icon: ShieldIcon },
       ],
     },
     {
       label: "Settings",
       items: [
         { label: "Preferences", href: "/dashboard/preferences", icon: SettingsIcon },
-        { label: "Security", href: "/dashboard/security", icon: CogIcon },
+        { label: "Security", href: "/dashboard/security", icon: LockIcon },
+        { label: "Privacy", href: "/dashboard/privacy", icon: EyeIcon },
       ],
     },
   ],
