@@ -1,8 +1,10 @@
+import os
 from contextlib import asynccontextmanager
 import asyncio
 from datetime import datetime, timezone
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from app.core.logging import logger
 from app.core.middleware import RequestLoggingMiddleware, ContentLengthLimitMiddleware
 from app.core.config import settings
@@ -11,10 +13,30 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.domains.auth.api.auth_api import router as auth_router
 from app.domains.auth.api.otp_api import router as otp_router
 from app.domains.users.api.users_api import router as users_router
+from app.domains.customers.api.customer_api import router as customer_router
 from app.domains.vendor.api.vendor_api import router as vendor_router
+from app.domains.vendor.api.vendor_analytics_api import router as vendor_analytics_router
 from app.domains.catalog.api.catalog_api import router as catalog_router
 from app.domains.catalog.api.storefront_api import router as storefront_router
+from app.domains.shopping.api.cart_api import router as cart_router
+from app.domains.shopping.api.cart_share_api import router as cart_share_router
+from app.domains.shopping.api.coupons_api import router as coupons_router
+from app.domains.shopping.api.saved_cart_api import router as saved_cart_router
+from app.domains.shopping.api.admin_shopping_api import router as admin_shopping_router
+from app.domains.shopping.api.checkout_api import router as checkout_router
+from app.domains.shopping.api.order_api import router as order_router
+from app.domains.shopping.api.payment_api import router as payment_router
+from app.domains.shopping.api.shipping_api import router as shipping_router
+from app.domains.payments.api import payments_router as mpesa_payments_router
+from app.domains.payments.api.simple_payments_api import router as simple_payments_router
+from app.domains.shopping.api.admin_orders_api import router as admin_orders_router
+from app.domains.shopping.api.vendor_orders_api import router as vendor_orders_router
 from app.domains.admin.api.system_api import router as system_router
+from app.domains.admin.api.users_management_api import router as users_management_router
+from app.domains.recommendations.api.recommendations_api import router as recommendations_router
+from app.domains.tickets.api.tickets_api import router as tickets_router
+from app.domains.returns.api.returns_api import router as returns_router
+from app.domains.payments.api.payment_methods_api import router as payment_methods_router
 from app.core.tasks import start_cleanup_scheduler
 
 @asynccontextmanager
@@ -96,10 +118,35 @@ app.add_middleware(ContentLengthLimitMiddleware, max_content_length=settings.MAX
 app.include_router(auth_router, prefix="/api/v1/auth")
 app.include_router(otp_router, prefix="/api/v1")
 app.include_router(users_router, prefix="/api/v1")
+app.include_router(customer_router, prefix="/api/v1/customers")
 app.include_router(vendor_router, prefix="/api/v1")
+app.include_router(vendor_analytics_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1/catalog")
 app.include_router(storefront_router, prefix="/api/v1/storefront")
-app.include_router(system_router, prefix="/api/v1")
+app.include_router(cart_router, prefix="/api/v1/shopping")
+app.include_router(cart_share_router, prefix="/api/v1/shopping")
+app.include_router(coupons_router, prefix="/api/v1/shopping")
+app.include_router(saved_cart_router, prefix="/api/v1/shopping")
+app.include_router(checkout_router, prefix="/api/v1/shopping")
+app.include_router(order_router, prefix="/api/v1/shopping")
+app.include_router(payment_router, prefix="/api/v1/shopping")
+app.include_router(shipping_router, prefix="/api/v1/shopping")
+app.include_router(admin_shopping_router, prefix="/api/v1")
+app.include_router(recommendations_router, prefix="/api/v1/recommendations")
+app.include_router(tickets_router, prefix="/api/v1")
+app.include_router(returns_router, prefix="/api/v1")
+app.include_router(payment_methods_router, prefix="/api/v1")
+app.include_router(admin_orders_router, prefix="/api/v1")
+app.include_router(vendor_orders_router, prefix="/api/v1")
+app.include_router(mpesa_payments_router, prefix="/api/v1")
+app.include_router(simple_payments_router, prefix="/api/v1")
+app.include_router(system_router, prefix="/api/v1/admin")
+app.include_router(users_management_router, prefix="/api/v1/admin")
+
+# Serve uploaded static files
+os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+os.makedirs(settings.AVATAR_UPLOAD_DIR, exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 @app.get("/")
 async def root():
@@ -112,7 +159,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         "status": "healthy",
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
-    
+
     # Check database connectivity
     try:
         from sqlalchemy import text
@@ -122,7 +169,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         health_status["database"] = "down"
         health_status["status"] = "unhealthy"
         health_status["database_error"] = str(e)
-        
+
     # Check Redis connectivity
     from app.core.rate_limiting import rate_limiter
     if rate_limiter.redis_client:
@@ -137,3 +184,50 @@ async def health_check(db: AsyncSession = Depends(get_db)):
         health_status["redis"] = "disabled"
 
     return health_status
+
+
+@app.post("/debug/reset-rate-limits")
+async def reset_rate_limits():
+    """
+    Reset all rate limits. Development-only endpoint.
+
+    This endpoint:
+    - Clears in-memory rate limit storage
+    - Clears Redis rate limit keys if Redis is configured
+    - Only works in development/staging environments
+
+    Returns: Summary of what was cleared
+    """
+    from app.core.rate_limiting import rate_limiter
+
+    if settings.ENVIRONMENT == "production":
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Rate limit reset is not allowed in production"}
+        )
+
+    result = {"cleared": {}}
+
+    # Clear in-memory storage
+    if rate_limiter._requests:
+        count = len(rate_limiter._requests)
+        rate_limiter.clear()
+        result["cleared"]["in_memory"] = count
+
+    # Clear Redis keys if configured
+    if rate_limiter.redis_client:
+        try:
+            # Find all rate limit keys
+            keys = []
+            async for key in rate_limiter.redis_client.scan_iter(match="rate_limit:*"):
+                keys.append(key)
+
+            if keys:
+                await rate_limiter.redis_client.delete(*keys)
+                result["cleared"]["redis"] = len(keys)
+        except Exception as e:
+            result["redis_error"] = str(e)
+            logger.warning(f"Failed to clear Redis rate limits: {e}")
+
+    logger.info(f"Rate limits reset: {result}")
+    return result

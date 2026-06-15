@@ -24,8 +24,15 @@ async def create_cart_share(
     # Simple URL generation for example
     share_url = f"/shared-cart/{share.share_token}"
     
-    response_data = CartShareResponse.model_validate(share)
-    response_data.share_url = share_url
+    response_data = CartShareResponse(
+        id=share.id,
+        cart_id=share.cart_id,
+        share_token=share.share_token,
+        expires_at=share.expires_at,
+        access_count=share.access_count,
+        share_url=share_url,
+        created_at=share.created_at
+    )
     return success_response(response_data)
 
 @router.get("/{token}", response_model=ApiSuccessResponse[SharedCartResponse])
