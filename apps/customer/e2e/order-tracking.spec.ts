@@ -2,6 +2,14 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Order Tracking', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies([{
+      name: 'auth_token',
+      value: 'demo-customer-token',
+      url: 'http://localhost:3000',
+    }]);
+  });
+
   test('should display tracking information for an order', async ({ page }) => {
     // Intercept API calls to provide mock data for predictable testing
     await page.route('**/orders*', async route => {

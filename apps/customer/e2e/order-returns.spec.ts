@@ -2,6 +2,14 @@
 import { test, expect } from '@playwright/test';
 
 test.describe('Order Returns', () => {
+  test.beforeEach(async ({ context }) => {
+    await context.addCookies([{
+      name: 'auth_token',
+      value: 'demo-customer-token',
+      url: 'http://localhost:3000',
+    }]);
+  });
+
   test('should submit a return request with selected items', async ({ page }) => {
     // Mock the returns API
     await page.route('**/returns', async route => {
