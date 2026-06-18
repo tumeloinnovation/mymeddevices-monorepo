@@ -34,12 +34,20 @@ export default function DashboardLayout({
 
   if (!hydrated) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-12 w-12 animate-spin rounded-full border-4 border-muted-foreground border-t-primary" />
-          <p className="text-sm text-muted-foreground">Loading your dashboard...</p>
+      <SidebarProvider defaultOpen={true}>
+        <div className="flex h-screen w-full bg-background">
+          <div className="w-64 border-r bg-muted/20 animate-pulse" />
+          <div className="flex flex-1 flex-col">
+            <header className="h-16 border-b bg-background animate-pulse" />
+            <div className="flex-1 flex items-center justify-center">
+              <div className="flex flex-col items-center gap-4">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-muted-foreground border-t-primary" />
+                <p className="text-xs text-muted-foreground">Initializing dashboard...</p>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+      </SidebarProvider>
     );
   }
 

@@ -47,6 +47,8 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     // Vendor specific
     const [companyName, setCompanyName] = useState('');
 
+    const [error, setError] = useState<string | null>(null);
+
     useEffect(() => {
         if (!open) {
             // Reset state on close
@@ -64,9 +66,15 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                 setRegisterPassword('');
                 setCompanyName('');
                 setIsLoading(false);
+                setError(null);
             }, 300);
         }
     }, [open]);
+
+    useEffect(() => {
+        // Clear error when switching mode
+        setError(null);
+    }, [mode]);
 
     useEffect(() => {
         if (resendCooldown > 0) {
@@ -78,21 +86,20 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
+        setError(null);
 
         try {
-            const { login, getDashboardRoute } = useAuthStore.getState();
+            const { login } = useAuthStore.getState();
             await login({ email: loginEmail, password: loginPassword });
-            toast.success('Welcome back!');
-            // Close modal first
+            // Removed toast.success as it's handled in store
+            // Removed redirect as requested
             onOpenChange(false);
-            // Navigate after modal closes (small delay for animation)
-            setTimeout(() => {
-                const params = new URLSearchParams(window.location.search);
-                const returnUrl = params.get('returnUrl');
-                window.location.href = returnUrl || getDashboardRoute();
-            }, 300);
-        } catch (error: any) {
-            toast.error(error?.message || 'Login failed. Please try again.');
+        } catch (err: any) {
+            const msg = err?.response?.data?.detail || err?.message || 'Login failed. Please try again.';
+            setError(msg);
+            // toast.error is also often handled in store, but store only does success?
+            // Checking store... store calls toast.success. It does NOT call toast.error in login.
+            toast.error(msg);
         } finally {
             setIsLoading(false);
         }
@@ -101,19 +108,19 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     const handleSendOTP = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
+        setError(null);
 
         try {
-            const { register } = useAuthStore.getState();
-            await register({
+            const { initiateRegistration } = useAuthStore.getState();
+            await initiateRegistration({
                 email: registerEmail,
-                password: 'pending',
                 role: userType,
-                phone: 'pending',
             });
             setRegistrationStep('otp');
-            toast.success('Verification code sent!');
-        } catch (error: any) {
-            toast.error(error?.message || 'Failed to send verification code.');
+        } catch (err: any) {
+            const msg = err?.response?.data?.detail || err?.message || 'Failed to send verification code.';
+            setError(msg);
+            toast.error(msg);
         } finally {
             setIsLoading(false);
         }
@@ -122,14 +129,19 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     const handleVerifyOTP = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
+        setError(null);
 
         try {
             const { verifyOTP } = useAuthStore.getState();
             await verifyOTP(registerEmail, otp, 'registration');
             setRegistrationStep('profile');
+            // Success toast is fine here as it's not in store's verifyOTP?
+            // Checking store... verifyOTP does NOT have a toast.
             toast.success('Email verified successfully!');
-        } catch (error: any) {
-            toast.error(error?.message || 'Invalid verification code.');
+        } catch (err: any) {
+            const msg = err?.response?.data?.detail || err?.message || 'Invalid verification code.';
+            setError(msg);
+            toast.error(msg);
         } finally {
             setIsLoading(false);
         }
@@ -138,33 +150,29 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
     const handleRegister = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
+        setError(null);
 
         try {
-            const { register, login, getDashboardRoute } = useAuthStore.getState();
-            await register({
+            const { completeRegistration, login } = useAuthStore.getState();
+            await completeRegistration({
                 email: registerEmail,
                 password: registerPassword,
-                role: userType,
+                first_name: firstName || undefined,
+                last_name: lastName || undefined,
                 phone: phone || undefined,
-                firstName: firstName || undefined,
-                lastName: lastName || undefined,
-                companyName: userType === 'vendor' ? companyName : undefined,
+                company_name: userType === 'vendor' ? companyName : undefined,
             });
 
             if (userType === 'vendor') {
                 setRegistrationStep('success');
             } else {
                 await login({ email: registerEmail, password: registerPassword });
-                toast.success('Account created successfully!');
                 onOpenChange(false);
-                setTimeout(() => {
-                    const params = new URLSearchParams(window.location.search);
-                    const returnUrl = params.get('returnUrl');
-                    window.location.href = returnUrl || getDashboardRoute();
-                }, 300);
             }
-        } catch (error: any) {
-            toast.error(error?.message || 'Registration failed.');
+        } catch (err: any) {
+            const msg = err?.response?.data?.detail || err?.message || 'Registration failed.';
+            setError(msg);
+            toast.error(msg);
         } finally {
             setIsLoading(false);
         }
@@ -186,21 +194,32 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                         <div className="bg-primary p-8 text-white relative">
                             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
                             <div className="relative z-10">
-                                <div className="flex items-center gap-2 mb-2">
+                                <div className="flex items-center justify-between mb-4">
+                                    <img 
+                                        src="/logo-landscape.svg" 
+                                        alt="MyMedDevices Logo" 
+                                        className="h-10 brightness-0 invert"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                        }}
+                                    />
+                                    <div className="hidden text-xl font-bold tracking-tight">
+                                        MyMedDevices
+                                    </div>
                                     <div className="p-2 bg-white/20 rounded-lg">
                                         {mode === 'login' ? <Lock className="h-5 w-5" /> : <UserCircle className="h-5 w-5" />}
                                     </div>
-                                    <span className="text-sm font-medium uppercase tracking-wider opacity-80">
-                                        MyMedDevices
-                                    </span>
                                 </div>
-                                <h2 className="text-3xl font-bold mb-1">
-                                    {mode === 'login' ? 'Welcome Back' : 'Join Us'}
+                                <h2 className="text-2xl font-bold mb-1">
+                                    {mode === 'login' ? 'Welcome Back' : 'Create Account'}
                                 </h2>
-                                <p className="text-primary-foreground/80">
+                                <p className="text-primary-foreground/80 text-sm">
                                     {mode === 'login' 
                                         ? 'Access your account and orders' 
-                                        : 'Create an account to start shopping'}
+                                        : userType === 'customer' 
+                                            ? 'Join our medical device marketplace'
+                                            : 'Start selling your medical devices'}
                                 </p>
                             </div>
                         </div>
@@ -208,7 +227,7 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                         {/* Content Area */}
                         <div className="flex-1 overflow-y-auto p-8 bg-background">
                             {/* Mode Switcher */}
-                            <div className="flex p-1 bg-muted rounded-xl mb-8">
+                            <div className="flex p-1 bg-muted rounded-xl mb-6">
                                 <button
                                     onClick={() => setMode('login')}
                                     className={cn(
@@ -228,6 +247,13 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                                     Register
                                 </button>
                             </div>
+
+                            {error && (
+                                <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-lg flex items-start gap-2 animate-in fade-in slide-in-from-top-1">
+                                    <CheckCircle2 className="h-4 w-4 mt-0.5 rotate-180" />
+                                    <span>{error}</span>
+                                </div>
+                            )}
 
                             {mode === 'login' ? (
                                 /* Login Form */
@@ -272,7 +298,7 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                                             <button
                                                 type="button"
                                                 onClick={() => setShowLoginPassword(!showLoginPassword)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                                                className="absolute right-3 top-0 h-full flex items-center text-muted-foreground hover:text-foreground z-10"
                                             >
                                                 {showLoginPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                             </button>
@@ -285,42 +311,19 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                             ) : (
                                 /* Registration Flow */
                                 <div className="space-y-6">
-                                    {/* User Type Switcher (only on email step) */}
                                     {registrationStep === 'email' && (
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <button
-                                                onClick={() => setUserType('customer')}
-                                                className={cn(
-                                                    "flex flex-col items-center p-3 rounded-xl border-2 transition-all",
-                                                    userType === 'customer' ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-muted-foreground/30"
-                                                )}
-                                            >
-                                                <User className="h-6 w-6 mb-1" />
-                                                <span className="text-xs font-semibold">Customer</span>
-                                            </button>
-                                            <button
-                                                onClick={() => setUserType('vendor')}
-                                                className={cn(
-                                                    "flex flex-col items-center p-3 rounded-xl border-2 transition-all",
-                                                    userType === 'vendor' ? "border-primary bg-primary/5 text-primary" : "border-border hover:border-muted-foreground/30"
-                                                )}
-                                            >
-                                                <Building className="h-6 w-6 mb-1" />
-                                                <span className="text-xs font-semibold">Vendor</span>
-                                            </button>
-                                        </div>
-                                    )}
-
-                                    {registrationStep === 'email' && (
-                                        <form onSubmit={handleSendOTP} className="space-y-4">
+                                        <form 
+                                            onSubmit={handleSendOTP} 
+                                            className="space-y-4"
+                                        >
                                             <div className="space-y-2">
-                                                <Label htmlFor="reg-email">Email Address</Label>
+                                                <Label htmlFor="reg-email">{userType === 'customer' ? 'Email Address' : 'Business Email'}</Label>
                                                 <div className="relative">
                                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                                     <Input
                                                         id="reg-email"
                                                         type="email"
-                                                        placeholder="you@example.com"
+                                                        placeholder={userType === 'customer' ? 'you@example.com' : 'sales@company.com'}
                                                         value={registerEmail}
                                                         onChange={(e) => setRegisterEmail(e.target.value)}
                                                         className="pl-10 h-11"
@@ -328,8 +331,17 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                                                     />
                                                 </div>
                                             </div>
+                                            
+                                            <div className="text-center text-sm text-muted-foreground">
+                                                {userType === 'customer' ? (
+                                                    <span>Registering as a customer. <button type="button" onClick={() => setUserType('vendor')} className="text-primary hover:underline">Register as vendor instead</button></span>
+                                                ) : (
+                                                    <span>Registering as a vendor. <button type="button" onClick={() => setUserType('customer')} className="text-primary hover:underline">Register as customer instead</button></span>
+                                                )}
+                                            </div>
+
                                             <Button type="submit" className="w-full h-11 font-semibold" disabled={isLoading}>
-                                                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Continue with Email'}
+                                                {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Continue to Verification'}
                                             </Button>
                                         </form>
                                     )}
@@ -412,7 +424,7 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                                                     <button
                                                         type="button"
                                                         onClick={() => setShowRegisterPassword(!showRegisterPassword)}
-                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                                                        className="absolute right-3 top-0 h-full flex items-center text-muted-foreground z-10"
                                                     >
                                                         {showRegisterPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                                                     </button>

@@ -10,8 +10,46 @@ from app.domains.auth.schemas.auth_schemas import (
     UserCreate, VendorUserCreate, UserResponse, Token, LoginRequest, RefreshRequest,
     OTPLoginRequest, GuestLoginRequest, ChangePasswordRequest, ChangeEmailRequest,
     ConfirmEmailChangeRequest, DeleteAccountRequest, ForgotPasswordRequest, ResetPasswordRequest,
-    UserRegisterResponse, VendorRegisterResponse
+    UserRegisterResponse, VendorRegisterResponse, RegisterInitiateRequest, RegisterCompleteRequest
 )
+...
+@router.post("/register/initiate", response_model=ApiSuccessResponse[UserRegisterResponse])
+async def register_initiate(
+    data: RegisterInitiateRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Step 1: Initiate registration by providing email and role.
+    Creates a pending user and sends OTP.
+    """
+    auth_service = AuthService(db)
+    try:
+        user = await auth_service.initiate_registration(data)
+        return success_response(UserRegisterResponse(
+            id=str(user.id),
+            email=user.email,
+            role=user.role,
+            is_active=user.is_active,
+            is_verified=user.is_verified
+        ))
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+@router.post("/register/complete", response_model=ApiSuccessResponse[UserResponse])
+async def register_complete(
+    data: RegisterCompleteRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Step 3: Complete registration after OTP verification.
+    Sets profile details and final password.
+    """
+    auth_service = AuthService(db)
+    try:
+        user = await auth_service.complete_registration(data)
+        return success_response(user)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 from app.domains.auth.services.auth_service import AuthService
 from app.domains.auth.models.user import User
 from app.domains.auth.models.token_device import RefreshToken
@@ -80,6 +118,13 @@ async def register_vendor(vendor_in: VendorUserCreate, db: AsyncSession = Depend
 async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
     auth_service = AuthService(db)
     user, refresh_token = await auth_service.authenticate(login_data)
+    
+    if user == "vendor_pending_approval":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Your vendor account is pending admin approval. You will receive an email once approved."
+        )
+        
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

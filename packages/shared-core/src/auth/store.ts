@@ -108,6 +108,9 @@ export interface AuthState {
   isVendor: () => boolean;
   isCustomer: () => boolean;
   apiFetch: (endpoint: string, init?: RequestInit) => Promise<Response>;
+
+  initiateRegistration: (data: { email: string; role: string }) => Promise<void>;
+  completeRegistration: (data: any) => Promise<void>;
 }
 
 function normalizeUser(user: any): any {
@@ -260,7 +263,6 @@ export const useAuthStore = create<AuthState>()(
             userEmail: normalizedUser?.email,
             userKeys: normalizedUser ? Object.keys(normalizedUser) : [],
           });
-          toast.success('Login successful!');
         } catch (error: any) {
           console.error('❌ [AuthStore] Login failed:', error);
           set({ isLoading: false, error: error.message });
@@ -305,8 +307,6 @@ export const useAuthStore = create<AuthState>()(
             isLoading: false,
             lastValidated: Date.now(),
           });
-
-          toast.success('Login successful!');
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -318,7 +318,6 @@ export const useAuthStore = create<AuthState>()(
         try {
           await apiClient.post('/otp/send', { email, purpose: 'login' });
           set({ isLoading: false });
-          toast.success('Verification code sent to your email!');
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -357,7 +356,6 @@ export const useAuthStore = create<AuthState>()(
 
           await apiClient.post('/auth/register', payload);
           set({ isLoading: false });
-          toast.success('Registration successful!');
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -369,7 +367,6 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await apiClient.post<any>('/auth/register/vendor', data);
           set({ isLoading: false });
-          toast.success('Vendor application submitted! Our team will review it.');
           return response;
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
@@ -738,6 +735,28 @@ export const useAuthStore = create<AuthState>()(
         if (state.isAdmin()) return '/admin/dashboard';
         if (state.isVendor()) return '/vendor/dashboard';
         return '/dashboard';
+      },
+
+      initiateRegistration: async (data) => {
+        set({ isLoading: true, error: null });
+        try {
+          await apiClient.post('/auth/register/initiate', data);
+          set({ isLoading: false });
+        } catch (error: any) {
+          set({ isLoading: false, error: error.message });
+          throw error;
+        }
+      },
+
+      completeRegistration: async (data) => {
+        set({ isLoading: true, error: null });
+        try {
+          await apiClient.post('/auth/register/complete', data);
+          set({ isLoading: false });
+        } catch (error: any) {
+          set({ isLoading: false, error: error.message });
+          throw error;
+        }
       },
 
       apiFetch: async (endpoint: string, init?: RequestInit): Promise<Response> => {

@@ -9,7 +9,8 @@ from app.domains.auth.models.user import User
 from app.domains.auth.models.token_device import RefreshToken, UserDevice
 from app.domains.auth.schemas.auth_schemas import (
     UserCreate, VendorUserCreate, LoginRequest, OTPLoginRequest, GuestLoginRequest,
-    ChangePasswordRequest, ChangeEmailRequest, DeleteAccountRequest
+    ChangePasswordRequest, ChangeEmailRequest, DeleteAccountRequest,
+    RegisterInitiateRequest, RegisterCompleteRequest
 )
 from app.core.logging import logger
 from app.domains.auth.services.otp_service import OTPService
@@ -22,6 +23,62 @@ class AuthService:
         self.user_repo = UserRepository(db)
         self.token_repo = RefreshTokenRepository(db)
         self.device_repo = UserDeviceRepository(db)
+
+    async def initiate_registration(self, data: RegisterInitiateRequest) -> User:
+        # Check if user already exists
+        existing = await self.user_repo.get_by_email(data.email)
+        if existing:
+            if existing.is_verified:
+                raise ValueError("A verified user with this email already exists")
+            # If exists but not verified, reuse it
+            user = existing
+        else:
+            # Create a "pending" user
+            user = User(
+                email=data.email,
+                password_hash="!pending_registration_" + secrets.token_hex(16),
+                role=data.role,
+                is_active=True,
+                is_verified=False
+            )
+            user = await self.user_repo.create(user)
+            
+        # Send OTP
+        otp_service = OTPService(self.db)
+        await otp_service.initiate_verification(user, method="email")
+        
+        return user
+
+    async def complete_registration(self, data: RegisterCompleteRequest) -> User:
+        user = await self.user_repo.get_by_email(data.email)
+        if not user:
+            raise ValueError("User not found")
+        if not user.is_verified:
+            raise ValueError("Email must be verified first")
+            
+        # Update user profile and password
+        updates = {
+            "password_hash": get_password_hash(data.password),
+            "first_name": data.first_name,
+            "last_name": data.last_name,
+            "phone": data.phone,
+            "company_name": data.company_name
+        }
+        user = await self.user_repo.update(user, updates)
+        
+        # If vendor, ensure profile is created if not already
+        if user.role == "vendor":
+            from app.domains.vendor.services.vendor_service import VendorService
+            vendor_service = VendorService(self.db)
+            profile = await vendor_service.get_vendor_profile(str(user.id))
+            if not profile:
+                await vendor_service.create_vendor_profile(
+                    user_id=str(user.id),
+                    company_name=data.company_name or "Pending Store Name"
+                )
+                
+        logger.info(f"Registration completed for user: {user.email}")
+        return user
 
     async def register_user(self, user_in: UserCreate) -> User:
         user = User(
@@ -102,6 +159,19 @@ class AuthService:
         if not user.is_active:
             await self.log_failed_login(login_data.email, login_data.device_id, "account_disabled")
             return None, None
+
+        # Check vendor approval status
+        if user.role == "vendor":
+            from app.domains.vendor.models.vendor_profile import VendorProfile
+            result = await self.db.execute(
+                select(VendorProfile).where(VendorProfile.user_id == user.id)
+            )
+            profile = result.scalar_one_or_none()
+            if not profile or profile.approval_status != "approved":
+                await self.log_failed_login(login_data.email, login_data.device_id, "vendor_not_approved")
+                # We return a specific message for this in the API layer or handle it here
+                # For now, let's return None and we'll handle the specific error message in the API
+                return "vendor_pending_approval", None
 
         # Create or update device record
         device = await self.device_repo.get_by_user_and_device(user.id, login_data.device_id)

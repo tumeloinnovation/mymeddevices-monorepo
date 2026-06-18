@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.responses import success_response, ApiSuccessResponse
 from app.core.config import settings
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, require_role
 from app.domains.auth.models.user import User
 from app.domains.customers.services.customer_service import CustomerService
 from app.domains.customers.schemas.customer_schemas import (
@@ -22,7 +22,7 @@ router = APIRouter(tags=["Customers"])
 
 @router.get("/me", response_model=ApiSuccessResponse[CustomerResponse])
 async def get_my_profile(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -64,7 +64,7 @@ async def get_my_profile(
 @router.put("/me", response_model=ApiSuccessResponse[CustomerResponse])
 async def update_my_profile(
     data: CustomerProfileUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -105,7 +105,7 @@ async def update_my_profile(
 @router.post("/me/avatar", response_model=ApiSuccessResponse[dict])
 async def upload_my_avatar(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     """Upload avatar image for the current user."""
@@ -125,7 +125,7 @@ async def upload_my_avatar(
 
 @router.get("/me/loyalty", response_model=ApiSuccessResponse[LoyaltyStatusResponse])
 async def get_my_loyalty_status(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -135,7 +135,7 @@ async def get_my_loyalty_status(
 # Address Management
 @router.get("/addresses", response_model=ApiSuccessResponse[List[AddressResponse]])
 async def get_my_addresses(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -145,7 +145,7 @@ async def get_my_addresses(
 @router.post("/addresses", response_model=ApiSuccessResponse[AddressResponse])
 async def create_my_address(
     data: AddressCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -156,7 +156,7 @@ async def create_my_address(
 async def update_my_address(
     address_id: uuid.UUID,
     data: AddressUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -166,7 +166,7 @@ async def update_my_address(
 @router.delete("/addresses/{address_id}")
 async def delete_my_address(
     address_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -175,7 +175,7 @@ async def delete_my_address(
 
 @router.get("/addresses/default/shipping", response_model=ApiSuccessResponse[AddressResponse])
 async def get_my_default_shipping_address(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -186,7 +186,7 @@ async def get_my_default_shipping_address(
 
 @router.get("/addresses/default/billing", response_model=ApiSuccessResponse[AddressResponse])
 async def get_my_default_billing_address(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -199,7 +199,7 @@ async def get_my_default_billing_address(
 async def set_my_default_address(
     address_id: uuid.UUID,
     payload: dict, # Should contain {"type": "shipping" | "billing"}
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -210,7 +210,7 @@ async def set_my_default_address(
 # Wishlist Management
 @router.get("/wishlist", response_model=ApiSuccessResponse[List[WishlistItemResponse]])
 async def get_my_wishlist(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -220,7 +220,7 @@ async def get_my_wishlist(
 @router.post("/wishlist", response_model=ApiSuccessResponse[WishlistItemResponse])
 async def add_to_my_wishlist(
     data: WishlistItemCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -231,7 +231,7 @@ async def add_to_my_wishlist(
 async def update_my_wishlist_item(
     item_id: uuid.UUID,
     payload: dict,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -242,7 +242,7 @@ async def update_my_wishlist_item(
 @router.delete("/wishlist/items/{item_id}")
 async def remove_from_my_wishlist(
     item_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -251,7 +251,7 @@ async def remove_from_my_wishlist(
 
 @router.delete("/wishlist")
 async def clear_my_wishlist(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -261,7 +261,7 @@ async def clear_my_wishlist(
 # Reviews Management
 @router.get("/reviews", response_model=ApiSuccessResponse[List[ReviewResponse]])
 async def get_my_reviews(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -271,7 +271,7 @@ async def get_my_reviews(
 @router.post("/reviews", response_model=ApiSuccessResponse[ReviewResponse])
 async def create_my_review(
     data: ReviewCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -282,7 +282,7 @@ async def create_my_review(
 async def update_my_review(
     review_id: uuid.UUID,
     data: ReviewUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -292,7 +292,7 @@ async def update_my_review(
 @router.delete("/reviews/{review_id}")
 async def delete_my_review(
     review_id: uuid.UUID,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     service = CustomerService(db)
@@ -305,7 +305,7 @@ async def delete_my_review(
 
 @router.get("/me/loyalty/summary", response_model=ApiSuccessResponse[LoyaltySummaryResponse])
 async def get_loyalty_summary(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     """Get loyalty program summary with tier info and progress."""
@@ -315,7 +315,7 @@ async def get_loyalty_summary(
 
 @router.get("/me/loyalty/ledger", response_model=ApiSuccessResponse[LoyaltyLedgerResponse])
 async def get_loyalty_ledger(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db),
     page: int = 1,
     limit: int = 20,
@@ -340,7 +340,7 @@ async def get_loyalty_ledger(
 @router.post("/me/loyalty/redeem", response_model=ApiSuccessResponse[dict])
 async def redeem_loyalty_points(
     request: PointsRedeemRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_role("customer")),
     db: AsyncSession = Depends(get_db)
 ):
     """Redeem loyalty points."""

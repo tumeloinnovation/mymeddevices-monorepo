@@ -73,6 +73,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useRouter, usePathname } from "next/navigation"
+import Link from "next/link"
 import { useEffect, useState } from "react"
 
 export type DashboardTheme = "admin" | "vendor" | "customer"
@@ -396,9 +397,9 @@ function Breadcrumbs({ theme }: { theme: DashboardTheme }) {
               {item.label}
             </span>
           ) : (
-            <a href={item.href} className="transition-colors hover:text-foreground">
+            <Link href={item.href} className="transition-colors hover:text-foreground">
               {item.label}
-            </a>
+            </Link>
           )}
         </span>
       ))}
@@ -436,9 +437,9 @@ function SidebarBranding({ theme }: { theme: DashboardTheme }) {
     <SidebarMenu>
       <SidebarMenuItem>
         <SidebarMenuButton size="lg" asChild className="h-20 py-2">
-          <a href={dashboardHref} className="gap-2">
+          <Link href={dashboardHref} className="gap-2">
             <SidebarLogo theme={theme} className="shrink-0" />
-          </a>
+          </Link>
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>
@@ -483,10 +484,10 @@ function SidebarNav({ navConfig, theme }: { navConfig: NavConfig; theme: Dashboa
                                 asChild
                                 isActive={pathname === child.href}
                               >
-                                <a href={child.href}>
+                                <Link href={child.href}>
                                   {child.icon && <child.icon className="size-4" />}
                                   <span>{child.label}</span>
-                                </a>
+                                </Link>
                               </SidebarMenuSubButton>
                             </SidebarMenuSubItem>
                           ))}
@@ -505,10 +506,10 @@ function SidebarNav({ navConfig, theme }: { navConfig: NavConfig; theme: Dashboa
               return (
                 <SidebarMenuItem key={item.href}>
                   <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
-                    <a href={item.href}>
+                    <Link href={item.href}>
                       {item.icon && <item.icon className="size-4" />}
                       <span>{item.label}</span>
-                    </a>
+                    </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               )
@@ -577,10 +578,10 @@ function SidebarUserMenu({ theme }: { theme: DashboardTheme }) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <a href={theme === "vendor" ? "/vendor/settings/profile" : theme === "customer" ? "/dashboard/profile" : "/settings"} className="cursor-pointer">
+              <Link href={theme === "vendor" ? "/vendor/settings/profile" : theme === "customer" ? "/dashboard/profile" : "/settings"} className="cursor-pointer">
                 <SettingsIcon className="mr-2 size-4" />
                 Account Settings
-              </a>
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout} disabled={isLoading}>
@@ -639,8 +640,8 @@ export default function DashboardLayout({
                   &copy; {new Date().getFullYear()} MyMedDevices. All rights reserved.
                 </div>
                 <div className="flex items-center gap-6">
-                  <a href="/privacy" className="transition-colors hover:text-foreground">Privacy Policy</a>
-                  <a href="/terms" className="transition-colors hover:text-foreground">Terms of Service</a>
+                  <Link href="/privacy" className="transition-colors hover:text-foreground">Privacy Policy</Link>
+                  <Link href="/terms" className="transition-colors hover:text-foreground">Terms of Service</Link>
                   <a href="mailto:support@mymeddevices.com" className="transition-colors hover:text-foreground">Support</a>
                 </div>
               </div>

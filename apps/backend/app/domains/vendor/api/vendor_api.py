@@ -69,16 +69,10 @@ def format_vendor_profile_response(profile, user) -> VendorProfileResponse:
 
 @router.get("/me/status", response_model=ApiSuccessResponse[VendorStatusResponse])
 async def get_vendor_status(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_role("vendor"))],
     db: AsyncSession = Depends(get_db)
 ):
     """Get current user's vendor approval status"""
-    if current_user.role != "vendor":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only vendor accounts have a vendor status"
-        )
-
     service = VendorService(db)
     profile = await service.get_vendor_profile(str(current_user.id))
 
@@ -103,16 +97,10 @@ async def get_vendor_status(
 
 @router.get("/me/profile", response_model=ApiSuccessResponse[VendorProfileResponse])
 async def get_my_vendor_profile(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_role("vendor"))],
     db: AsyncSession = Depends(get_db)
 ):
     """Get full vendor profile for the current user"""
-    if current_user.role != "vendor":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only vendor accounts have a vendor profile"
-        )
-
     service = VendorService(db)
     profile = await service.get_vendor_profile(str(current_user.id))
 
@@ -128,16 +116,10 @@ async def get_my_vendor_profile(
 @router.patch("/me/profile", response_model=ApiSuccessResponse[dict])
 async def update_my_vendor_profile(
     update_data: VendorProfileUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_role("vendor"))],
     db: AsyncSession = Depends(get_db)
 ):
     """Update current user's vendor profile"""
-    if current_user.role != "vendor":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only vendor accounts can update a vendor profile"
-        )
-
     service = VendorService(db)
     profile = await service.get_vendor_profile(str(current_user.id))
 

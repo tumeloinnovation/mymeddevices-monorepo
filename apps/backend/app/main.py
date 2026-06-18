@@ -73,6 +73,32 @@ app = FastAPI(
 
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
+from fastapi.exceptions import RequestValidationError
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request, exc: RequestValidationError):
+    errors = []
+    for error in exc.errors():
+        loc = " -> ".join([str(x) for x in error["loc"] if x != "body"])
+        msg = error["msg"]
+        errors.append(f"{loc}: {msg}")
+    
+    # Create a friendly message for common errors
+    friendly_msg = "Validation error"
+    if errors:
+        friendly_msg = "; ".join(errors)
+        # Custom transformations for known errors
+        friendly_msg = friendly_msg.replace("Value error, ", "")
+    
+    logger.warning(f"Validation error: {friendly_msg}")
+    return JSONResponse(
+        status_code=422,
+        content={
+            "success": False, 
+            "detail": friendly_msg,
+            "errors": exc.errors()
+        }
+    )
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request, exc: IntegrityError):

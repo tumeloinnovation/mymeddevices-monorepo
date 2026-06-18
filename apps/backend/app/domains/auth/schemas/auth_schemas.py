@@ -144,3 +144,21 @@ class VendorRegisterResponse(BaseModel):
     is_verified: bool = Field(..., description="Email verification status")
     message: str = Field(..., description="Success/instructions text message")
     next_steps: list[str] = Field(..., description="Ordered list of setup actions for the vendor")
+
+class RegisterInitiateRequest(BaseModel):
+    email: EmailStr = Field(..., description="User's email address")
+    role: str = Field("customer", description="The role to register as (customer or vendor)")
+
+class RegisterCompleteRequest(BaseModel):
+    email: EmailStr = Field(..., description="User's verified email address")
+    password: str = Field(..., min_length=8, description="User's secure password")
+    first_name: Optional[str] = Field(None, max_length=100)
+    last_name: Optional[str] = Field(None, max_length=100)
+    phone: Optional[str] = Field(None, max_length=20)
+    company_name: Optional[str] = Field(None, max_length=255) # For vendors
+
+    @field_validator('password')
+    @classmethod
+    def validate_password(cls, v: str) -> str:
+        validate_password_field(v)
+        return v

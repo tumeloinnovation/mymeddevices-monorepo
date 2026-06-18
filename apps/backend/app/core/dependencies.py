@@ -140,6 +140,10 @@ def require_role(*roles: str):
     async def role_checker(
         current_user: Annotated[User, Depends(get_current_user)]
     ) -> User:
+        # Admin has superuser access to everything
+        if current_user.role == "admin":
+            return current_user
+            
         if current_user.role not in roles:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
