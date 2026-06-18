@@ -18,14 +18,14 @@ router = APIRouter(prefix="/otp", tags=["OTP Verification"])
 class SendOTPRequest(BaseModel):
     """Request to send OTP code"""
     email: EmailStr
-    purpose: Literal["verification", "reset_password", "login"] = "verification"
+    purpose: Literal["verification", "reset_password", "login", "email_change"] = "verification"
 
 
 class VerifyOTPRequest(BaseModel):
     """Request to verify OTP code"""
     email: EmailStr
     code: str
-    purpose: Literal["verification", "reset_password", "login"] = "verification"
+    purpose: Literal["verification", "reset_password", "login", "email_change"] = "verification"
 
 
 @router.post("/send", dependencies=[Depends(RateLimiterDependency("otp"))])
@@ -58,7 +58,7 @@ async def send_otp(
     await otp_service.send_otp_email(user.email, code, request.purpose)
 
     return success_response({
-        "message": "Verification code generated. Please check your email inbox.",
+        "message": "Verification code sent to your email!",
         "expires_in_minutes": 15
     })
 
@@ -101,7 +101,7 @@ async def verify_otp(
         logger.info(f"User {user.email} verified successfully")
 
     return success_response({
-        "message": "Verification successful",
+        "message": "Email verified successfully!",
         "is_verified": user.is_verified
     })
 

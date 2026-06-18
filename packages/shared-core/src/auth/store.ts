@@ -227,6 +227,10 @@ export const useAuthStore = create<AuthState>()(
           // Handle potentially wrapped response {"success": true, "data": {...}}
           const responseData = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
 
+          if (responseData.message) {
+            toast.success(responseData.message);
+          }
+
           console.log('✅ [AuthStore] Login API response received:', {
             user: responseData.user?.email,
             hasAccessToken: !!responseData.access_token,
@@ -286,6 +290,10 @@ export const useAuthStore = create<AuthState>()(
           // Handle potentially wrapped response {"success": true, "data": {...}}
           const responseData = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
 
+          if (responseData.message) {
+            toast.success(responseData.message);
+          }
+
           const expiresIn = (responseData.expires_in || 1800) * 1000;
           const tokenExpiry = Date.now() + expiresIn;
 
@@ -316,8 +324,12 @@ export const useAuthStore = create<AuthState>()(
       sendLoginOTP: async (email) => {
         set({ isLoading: true, error: null });
         try {
-          await apiClient.post('/otp/send', { email, purpose: 'login' });
+          const result = await apiClient.post<any>('/otp/send', { email, purpose: 'login' });
+          const responseData = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
           set({ isLoading: false });
+          if (responseData.message) {
+            toast.success(responseData.message);
+          }
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -354,8 +366,12 @@ export const useAuthStore = create<AuthState>()(
           if (data.companyName) payload.company_name = data.companyName;
           if (data.vatNumber) payload.vat_number = data.vatNumber;
 
-          await apiClient.post('/auth/register', payload);
+          const result = await apiClient.post<any>('/auth/register', payload);
+          const responseData = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
           set({ isLoading: false });
+          if (responseData.message) {
+            toast.success(responseData.message);
+          }
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -377,9 +393,12 @@ export const useAuthStore = create<AuthState>()(
       forgotPassword: async (email) => {
         set({ isLoading: true, error: null });
         try {
-          await apiClient.post('/auth/forgot-password', { email });
+          const result = await apiClient.post<any>('/auth/forgot-password', { email });
+          const responseData = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
           set({ isLoading: false });
-          toast.success('Password reset instructions sent to your email!');
+          if (responseData.message) {
+            toast.success(responseData.message);
+          }
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -389,9 +408,12 @@ export const useAuthStore = create<AuthState>()(
       resetPassword: async (code, password, email) => {
         set({ isLoading: true, error: null });
         try {
-          await apiClient.post('/auth/reset-password', { code, new_password: password, email });
+          const result = await apiClient.post<any>('/auth/reset-password', { code, new_password: password, email });
+          const responseData = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
           set({ isLoading: false });
-          toast.success('Password reset successful! Please login with your new password.');
+          if (responseData.message) {
+            toast.success(responseData.message);
+          }
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -401,9 +423,13 @@ export const useAuthStore = create<AuthState>()(
       verifyOTP: async (email, code, purpose) => {
         set({ isLoading: true, error: null });
         try {
-          const response = await apiClient.post('/otp/verify', { email, code, purpose });
+          const result = await apiClient.post<any>('/otp/verify', { email, code, purpose });
+          const responseData = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
           set({ isLoading: false });
-          return response;
+          if (responseData.message) {
+            toast.success(responseData.message);
+          }
+          return responseData;
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -740,8 +766,12 @@ export const useAuthStore = create<AuthState>()(
       initiateRegistration: async (data) => {
         set({ isLoading: true, error: null });
         try {
-          await apiClient.post('/auth/register/initiate', data);
+          const result = await apiClient.post<any>('/auth/register/initiate', data);
+          const responseData = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
           set({ isLoading: false });
+          if (responseData.message) {
+            toast.success(responseData.message);
+          }
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -751,8 +781,12 @@ export const useAuthStore = create<AuthState>()(
       completeRegistration: async (data) => {
         set({ isLoading: true, error: null });
         try {
-          await apiClient.post('/auth/register/complete', data);
+          const result = await apiClient.post<any>('/auth/register/complete', data);
+          const responseData = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
           set({ isLoading: false });
+          if (responseData.message) {
+            toast.success(responseData.message);
+          }
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;

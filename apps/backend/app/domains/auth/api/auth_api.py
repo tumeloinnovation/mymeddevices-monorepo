@@ -33,13 +33,14 @@ async def register_initiate(
     auth_service = AuthService(db)
     try:
         user = await auth_service.initiate_registration(data)
-        return success_response(UserRegisterResponse(
-            id=str(user.id),
-            email=user.email,
-            role=user.role,
-            is_active=user.is_active,
-            is_verified=user.is_verified
-        ))
+        return success_response({
+            "id": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "is_active": user.is_active,
+            "is_verified": user.is_verified,
+            "message": "Verification code sent to your email!"
+        })
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -55,7 +56,12 @@ async def register_complete(
     auth_service = AuthService(db)
     try:
         user = await auth_service.complete_registration(data)
-        return success_response(user)
+        return success_response({
+            "id": str(user.id),
+            "email": user.email,
+            "role": user.role,
+            "message": "Account created successfully!" if user.role == 'customer' else "Application submitted! Our team will review it."
+        })
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -73,6 +79,7 @@ async def register(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
         "phone": user.phone,
         "is_active": user.is_active,
         "is_verified": user.is_verified,
+        "message": "Registration successful!"
     })
 
 
@@ -90,9 +97,20 @@ async def register_vendor(vendor_in: VendorUserCreate, db: AsyncSession = Depend
     6. Start selling
     """
     auth_service = AuthService(db)
-    try:
+    try {
         vendor = await auth_service.register_vendor(vendor_in)
+        return success_response({
+            "id": str(vendor.id),
+            "email": vendor.email,
+            "role": vendor.role,
+            "company_name": vendor.company_name,
+            "phone": vendor.phone,
+            "is_verified": vendor.is_verified,
+            "message": "Vendor application submitted successfully!",
+            "next_steps": ["Verify email", "Wait for admin approval"]
+        })
     except ValueError as e:
+
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
@@ -130,7 +148,10 @@ async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
         )
-    return success_response(await auth_service.create_tokens(user, refresh_token))
+    
+    token_data = await auth_service.create_tokens(user, refresh_token)
+    token_data["message"] = f"Welcome back, {user.first_name or user.email}!"
+    return success_response(token_data)
 
 @router.post("/login/otp", dependencies=[Depends(RateLimiterDependency("login"))])
 async def login_otp(login_data: OTPLoginRequest, db: AsyncSession = Depends(get_db)):
@@ -393,7 +414,7 @@ async def forgot_password(
     await otp_service.send_otp_email(user.email, code, purpose="reset_password")
 
     return success_response({
-        "message": "Password reset code generated. Please check your email inbox.",
+        "message": "Verification code sent to your email!",
         "expires_in_minutes": 15
     })
 
@@ -426,7 +447,7 @@ async def reset_password(
         )
 
     return success_response({
-        "message": "Password has been reset successfully"
+        "message": "Password reset successful! You can now log in with your new password."
     })
 
 

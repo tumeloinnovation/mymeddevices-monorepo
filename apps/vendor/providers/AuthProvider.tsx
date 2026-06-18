@@ -14,6 +14,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   forceLogout: (expired?: boolean) => void;
   register: (data: { email: string; password: string; phone: string; company_name: string; vat_number?: string }) => Promise<any>;
+  initiateRegistration: (data: { email: string; role: string }) => Promise<void>;
+  completeRegistration: (data: any) => Promise<void>;
   verifyOtp: (data: { userId: string; code: string; purpose: string }) => Promise<any>;
   forgotPassword: (email: string) => Promise<any>;
 }
@@ -72,6 +74,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const initiateRegistration = async (data: { email: string; role: string }) => {
+    return store.initiateRegistration(data);
+  };
+
+  const completeRegistration = async (data: any) => {
+    return store.completeRegistration(data);
+  };
+
   const verifyOtp = async (data: { userId: string; code: string; purpose: string }) => {
     return store.verifyOTP(data.userId, data.code, data.purpose);
   };
@@ -95,6 +105,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     logout,
     forceLogout,
     register,
+    initiateRegistration,
+    completeRegistration,
     verifyOtp,
     forgotPassword,
   };

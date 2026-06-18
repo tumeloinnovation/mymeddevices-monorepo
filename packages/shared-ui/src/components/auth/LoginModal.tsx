@@ -133,11 +133,8 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
 
         try {
             const { verifyOTP } = useAuthStore.getState();
-            await verifyOTP(registerEmail, otp, 'registration');
+            await verifyOTP(registerEmail, otp, 'verification');
             setRegistrationStep('profile');
-            // Success toast is fine here as it's not in store's verifyOTP?
-            // Checking store... verifyOTP does NOT have a toast.
-            toast.success('Email verified successfully!');
         } catch (err: any) {
             const msg = err?.response?.data?.detail || err?.message || 'Invalid verification code.';
             setError(msg);

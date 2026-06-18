@@ -38,8 +38,8 @@ function AuthFlow({
   password, 
   setPassword 
 }: { 
-  mode: 'login' | 'register' | 'otp' | 'forgot-password';
-  setMode: (mode: 'login' | 'register' | 'otp' | 'forgot-password') => void;
+  mode: 'login' | 'register' | 'otp' | 'profile' | 'success' | 'forgot-password';
+  setMode: (mode: 'login' | 'register' | 'otp' | 'profile' | 'success' | 'forgot-password') => void;
   email: string;
   setEmail: (val: string) => void;
   password: string;
@@ -47,13 +47,15 @@ function AuthFlow({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login, register, verifyOtp, forgotPassword, isAuthenticated } = useAuth();
+  const { login, register, initiateRegistration, completeRegistration, verifyOtp, forgotPassword, isAuthenticated } = useAuth();
   
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   
   // Register fields
+  const [regFirstName, setRegFirstName] = useState('');
+  const [regLastName, setRegLastName] = useState('');
   const [regEmail, setRegEmail] = useState('');
   const [regPassword, setRegPassword] = useState('');
   const [regCompany, setRegCompany] = useState('');
@@ -93,7 +95,6 @@ function AuthFlow({
 
     try {
       await login({ email, password });
-      toast.success('Welcome back!');
       router.replace(redirectPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
@@ -109,34 +110,14 @@ function AuthFlow({
     setError('');
     setIsLoading(true);
 
-    if (!regCompany) {
-      setError('Company name is required for vendor registration.');
-      setIsLoading(false);
-      return;
-    }
-
     try {
-      if (!register) {
-        throw new Error('Register method not available on AuthProvider');
-      }
-      const response = await register({
+      await initiateRegistration({
         email: regEmail,
-        password: regPassword,
-        phone: regPhone || '+254700000000',
-        company_name: regCompany,
-        vat_number: regVat || undefined
+        role: 'vendor'
       });
-      
-      const user = response.data?.user;
-      if (user?.id) {
-        setTempUserId(user.id);
-        setMode('otp');
-        toast.success('Registration successful! Verification code sent.');
-      } else {
-        throw new Error('Could not retrieve user details after registration.');
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Registration failed. Please try again.';
+      setMode('otp');
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err?.message || 'Registration failed. Please try again.';
       setError(message);
       toast.error(message);
     } finally {
@@ -150,19 +131,43 @@ function AuthFlow({
     setIsLoading(true);
 
     try {
-      if (!verifyOtp) {
-        throw new Error('OTP verification method not available on AuthProvider');
-      }
       await verifyOtp({
-        userId: tempUserId,
+        userId: regEmail,
         code: otpCode,
-        purpose: 'registration'
+        purpose: 'verification'
+      });
+      setMode('profile');
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err?.message || 'Verification failed. Please try again.';
+      setError(message);
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setIsLoading(true);
+
+    if (!regCompany) {
+      setError('Company name is required.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      await completeRegistration({
+        email: regEmail,
+        password: regPassword,
+        phone: regPhone || undefined,
+        company_name: regCompany,
+        first_name: regFirstName || undefined,
+        last_name: regLastName || undefined,
       });
       
-      toast.success('Account verified successfully! You can now log in.');
-      setEmail(regEmail);
-      setPassword(regPassword);
-      setMode('login');
+      setMode('success');
       // Reset registration form
       setRegEmail('');
       setRegPassword('');
@@ -170,8 +175,10 @@ function AuthFlow({
       setRegPhone('');
       setRegVat('');
       setOtpCode('');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Verification failed. Please try again.';
+      setRegFirstName('');
+      setRegLastName('');
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err?.message || 'Profile completion failed.';
       setError(message);
       toast.error(message);
     } finally {
@@ -200,6 +207,30 @@ function AuthFlow({
       setIsLoading(false);
     }
   };
+
+  if (mode === 'success') {
+    return (
+      <Card className="border-none shadow-none bg-transparent">
+        <CardContent className="p-0 text-center space-y-6">
+          <div className="mx-auto w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center">
+            <Package className="h-10 w-10 text-emerald-600" />
+          </div>
+          <div className="space-y-2">
+            <h3 className="text-2xl font-bold text-foreground">Application Received!</h3>
+            <p className="text-muted-foreground leading-relaxed">
+              Thank you for applying to be a vendor. Our team will review your application and get back to you within 24-48 hours.
+            </p>
+          </div>
+          <Button
+            onClick={() => setMode('login')}
+            className="w-full h-12 rounded-xl text-base font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+          >
+            Back to Sign In
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (mode === 'forgot-password') {
     return (
@@ -270,6 +301,79 @@ function AuthFlow({
             )}
 
             <div className="space-y-1.5">
+              <Label htmlFor="regEmail" className="text-sm font-medium">Business Email Address *</Label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/75" />
+                <Input
+                  id="regEmail"
+                  type="email"
+                  placeholder="sales@company.com"
+                  value={regEmail}
+                  onChange={(e) => setRegEmail(e.target.value)}
+                  className="pl-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20"
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+
+            <Button
+              type="submit"
+              className="w-full h-12 rounded-xl text-base font-semibold shadow-lg shadow-emerald-600/25 bg-emerald-600 hover:bg-emerald-700 text-white transition-all active:scale-[0.98]"
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                  Sending code...
+                </>
+              ) : (
+                'Continue to Verification'
+              )}
+            </Button>
+
+            <div className="text-center pt-2">
+              <p className="text-sm text-muted-foreground">
+                Already have a vendor account?{' '}
+                <button
+                  type="button"
+                  onClick={() => setMode('login')}
+                  className="text-emerald-600 hover:text-emerald-700 font-semibold hover:underline"
+                  disabled={isLoading}
+                >
+                  Sign In
+                </button>
+              </p>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (mode === 'profile') {
+    return (
+      <Card className="border-none shadow-none bg-transparent">
+        <CardContent className="p-0">
+          <form onSubmit={handleProfileSubmit} className="space-y-4">
+            {error && (
+              <Alert variant="destructive" className="py-3 rounded-xl">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                    <Label htmlFor="regFirstName" className="text-sm font-medium">First Name</Label>
+                    <Input id="regFirstName" value={regFirstName} onChange={e => setRegFirstName(e.target.value)} className="h-12 rounded-xl" required />
+                </div>
+                <div className="space-y-1.5">
+                    <Label htmlFor="regLastName" className="text-sm font-medium">Last Name</Label>
+                    <Input id="regLastName" value={regLastName} onChange={e => setRegLastName(e.target.value)} className="h-12 rounded-xl" required />
+                </div>
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="regCompany" className="text-sm font-medium">Company Name *</Label>
               <div className="relative">
                 <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/75" />
@@ -279,23 +383,6 @@ function AuthFlow({
                   placeholder="MediTech Solutions"
                   value={regCompany}
                   onChange={(e) => setRegCompany(e.target.value)}
-                  className="pl-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="regEmail" className="text-sm font-medium">Email Address *</Label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/75" />
-                <Input
-                  id="regEmail"
-                  type="email"
-                  placeholder="vendor@example.com"
-                  value={regEmail}
-                  onChange={(e) => setRegEmail(e.target.value)}
                   className="pl-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20"
                   required
                   disabled={isLoading}
@@ -321,7 +408,7 @@ function AuthFlow({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="regPassword" className="text-sm font-medium">Password *</Label>
+              <Label htmlFor="regPassword" className="text-sm font-medium">Create Password *</Label>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/75" />
                 <Input
@@ -337,7 +424,7 @@ function AuthFlow({
                 <button
                   type="button"
                   onClick={() => setShowRegPassword(!showRegPassword)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/75 hover:text-foreground transition-colors"
+                  className="absolute right-3.5 top-0 h-full flex items-center text-muted-foreground/75 hover:text-foreground transition-colors z-10"
                 >
                   {showRegPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -345,22 +432,6 @@ function AuthFlow({
                     <Eye className="h-5 w-5" />
                   )}
                 </button>
-              </div>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label htmlFor="regVat" className="text-sm font-medium">VAT/Tax Number (Optional)</Label>
-              <div className="relative">
-                <ClipboardList className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/75" />
-                <Input
-                  id="regVat"
-                  type="text"
-                  placeholder="VAT12345678"
-                  value={regVat}
-                  onChange={(e) => setRegVat(e.target.value)}
-                  className="pl-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20"
-                  disabled={isLoading}
-                />
               </div>
             </div>
 
@@ -372,26 +443,12 @@ function AuthFlow({
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Registering...
+                  Submitting Application...
                 </>
               ) : (
-                'Register Vendor'
+                'Submit Vendor Application'
               )}
             </Button>
-
-            <div className="text-center pt-2">
-              <p className="text-sm text-muted-foreground">
-                Already have a vendor account?{' '}
-                <button
-                  type="button"
-                  onClick={() => setMode('login')}
-                  className="text-emerald-600 hover:text-emerald-700 font-semibold hover:underline"
-                  disabled={isLoading}
-                >
-                  Sign In
-                </button>
-              </p>
-            </div>
           </form>
         </CardContent>
       </Card>
