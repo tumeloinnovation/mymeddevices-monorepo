@@ -12,7 +12,15 @@ from app.domains.auth.schemas.auth_schemas import (
     ConfirmEmailChangeRequest, DeleteAccountRequest, ForgotPasswordRequest, ResetPasswordRequest,
     UserRegisterResponse, VendorRegisterResponse, RegisterInitiateRequest, RegisterCompleteRequest
 )
-...
+from app.domains.auth.services.auth_service import AuthService
+from app.domains.auth.models.user import User
+from app.domains.auth.models.token_device import RefreshToken
+from app.core.logging import logger
+from app.core.rate_limiting import RateLimiterDependency
+from app.core.dependencies import get_current_user, security
+
+router = APIRouter(tags=["Authentication"])
+
 @router.post("/register/initiate", response_model=ApiSuccessResponse[UserRegisterResponse])
 async def register_initiate(
     data: RegisterInitiateRequest,
@@ -50,14 +58,6 @@ async def register_complete(
         return success_response(user)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-from app.domains.auth.services.auth_service import AuthService
-from app.domains.auth.models.user import User
-from app.domains.auth.models.token_device import RefreshToken
-from app.core.logging import logger
-from app.core.rate_limiting import RateLimiterDependency
-from app.core.dependencies import get_current_user, security
-
-router = APIRouter(tags=["Authentication"])
 
 
 @router.post("/register", response_model=ApiSuccessResponse[UserRegisterResponse], dependencies=[Depends(RateLimiterDependency("register"))])
