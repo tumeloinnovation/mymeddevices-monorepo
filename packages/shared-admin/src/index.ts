@@ -1,10 +1,12 @@
 // Components
 export { default as DashboardLayout } from "./components/dashboard-layout"
 export type { NavItem } from "./components/dashboard-layout"
+export { SidebarLogo } from "./components/logo"
 export { LoginForm } from "./components/login-form"
 export type { DashboardTheme } from "./components/login-form"
 export { LoginBackground } from "./components/login-background"
 export { ForgotPasswordForm } from "./components/forgot-password-form"
+export { ResetPasswordForm } from "./components/reset-password-form"
 export { RegisterForm } from "./components/register-form"
 export { SettingsForm } from "./components/settings-form"
 export { Providers } from "./components/providers"

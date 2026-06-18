@@ -17,7 +17,7 @@ from app.domains.auth.models.user import User
 from app.domains.auth.models.token_device import RefreshToken
 from app.core.logging import logger
 from app.core.rate_limiting import RateLimiterDependency
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, security
 
 router = APIRouter(tags=["Authentication"])
 
@@ -383,4 +383,76 @@ async def reset_password(
     return success_response({
         "message": "Password has been reset successfully"
     })
+
+
+@router.get("/devices")
+async def get_user_devices(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Get all active devices for the current user.
+    """
+    auth_service = AuthService(db)
+    devices = await auth_service.get_devices(current_user)
+    
+    current_device_id = None
+    if credentials:
+        payload = verify_access_token(credentials.credentials)
+        if payload:
+            current_device_id = payload.get("device_id")
+            
+    return success_response([
+        {
+            "id": device.device_id,
+            "name": device.device_name,
+            "last_active": device.updated_at.isoformat() if device.updated_at else None,
+            "is_current": device.device_id == current_device_id if current_device_id else False
+        } for device in devices
+    ])
+
+@router.delete("/devices/{device_id}")
+async def delete_user_device(
+    device_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Remove a device session.
+    """
+    auth_service = AuthService(db)
+    success = await auth_service.delete_device(current_user, device_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found"
+        )
+    return success_response({"message": "Device removed successfully"})
+
+
+@router.post("/devices/delete-all")
+async def delete_all_other_devices(
+    request: dict, # Expecting {"current_device_id": "..."}
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Remove all device sessions except the current one.
+    """
+    device_id = request.get("current_device_id")
+    if not device_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="current_device_id is required"
+        )
+        
+    auth_service = AuthService(db)
+    success = await auth_service.delete_all_other_devices(current_user, device_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to remove devices"
+        )
+    return success_response({"message": "All other devices removed successfully"})
 

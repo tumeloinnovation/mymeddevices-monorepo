@@ -1,0 +1,214 @@
+import uuid
+import secrets
+from datetime import datetime, timedelta, timezone
+from typing import Optional, List, Tuple
+from sqlalchemy import select, and_, delete, func
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.domains.shopping.models.cart import Cart, CartItem
+from app.domains.shopping.models.cart_merge import CartMergeLog
+from app.domains.catalog.models.product import Product
+
+
+class CartService:
+    """Service for shopping cart operations."""
+
+    MAX_ITEMS_PER_CART = 100
+    MAX_QUANTITY_PER_ITEM = 99
+
+    def __init__(self, db: AsyncSession):
+        self.db = db
+
+    async def get_or_create_cart(
+        self,
+        user_id: Optional[uuid.UUID] = None,
+        session_id: Optional[str] = None,
+        cart_token: Optional[str] = None
+    ) -> Cart:
+        """Get existing cart or create new one."""
+        # 1. Try by token
+        if cart_token:
+            stmt = select(Cart).where(
+                and_(
+                    Cart.cart_token == cart_token,
+                    Cart.is_active == True
+                )
+            )
+            result = await self.db.execute(stmt)
+            cart = result.scalar_one_or_none()
+            if cart:
+                if cart.expires_at and cart.expires_at < datetime.now(timezone.utc):
+                    cart.is_active = False
+                    await self.db.commit()
+                else:
+                    return cart
+
+        # 2. Try user cart
+        if user_id:
+            stmt = select(Cart).where(
+                and_(
+                    Cart.user_id == user_id,
+                    Cart.cart_type == "persistent",
+                    Cart.is_active == True
+                )
+            ).order_by(Cart.created_at.desc())
+            result = await self.db.execute(stmt)
+            cart = result.scalar_one_or_none()
+            if cart:
+                return cart
+
+        # 3. Try session-based guest cart
+        if session_id:
+            stmt = select(Cart).where(
+                and_(
+                    Cart.session_id == session_id,
+                    Cart.cart_type == "guest",
+                    Cart.is_active == True
+                )
+            )
+            result = await self.db.execute(stmt)
+            cart = result.scalar_one_or_none()
+            if cart:
+                if not cart.expires_at or cart.expires_at >= datetime.now(timezone.utc):
+                    return cart
+
+        # 4. Create new cart
+        cart = Cart(
+            user_id=user_id,
+            session_id=session_id or secrets.token_hex(16) if not user_id else None,
+            cart_token=secrets.token_urlsafe(32) if not user_id else None,
+            expires_at=datetime.now(timezone.utc) + timedelta(hours=48) if not user_id else None,
+            is_active=True,
+            cart_type="guest" if not user_id else "persistent"
+        )
+
+        self.db.add(cart)
+        await self.db.commit()
+        await self.db.refresh(cart)
+        return cart
+
+    async def get_by_id(self, cart_id: uuid.UUID) -> Optional[Cart]:
+        """Get cart by ID with items loaded."""
+        stmt = select(Cart).where(
+            and_(
+                Cart.id == cart_id,
+                Cart.is_active == True
+            )
+        ).options(selectinload(Cart.items).selectinload(CartItem.product))
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def add_item(
+        self,
+        cart_id: uuid.UUID,
+        product_id: uuid.UUID,
+        quantity: int = 1,
+        notes: Optional[str] = None,
+        substitution_allowed: bool = True,
+        unit_price: Optional[float] = None
+    ) -> CartItem:
+        """Add item to cart or update quantity if already exists."""
+        # Verify product exists and is available
+        prod_stmt = select(Product).where(Product.id == product_id)
+        prod_result = await self.db.execute(prod_stmt)
+        product = prod_result.scalar_one_or_none()
+        if not product:
+            raise ValueError("Product not found")
+        if product.status != "published":
+            raise ValueError("Product is not available for purchase")
+
+        # Check existing item
+        item_stmt = select(CartItem).where(
+            and_(CartItem.cart_id == cart_id, CartItem.product_id == product_id)
+        )
+        item_result = await self.db.execute(item_stmt)
+        item = item_result.scalar_one_or_none()
+
+        if item:
+            item.quantity += quantity
+            if item.quantity > self.MAX_QUANTITY_PER_ITEM:
+                item.quantity = self.MAX_QUANTITY_PER_ITEM
+            if notes:
+                item.notes = notes
+            item.substitution_allowed = substitution_allowed
+            if unit_price:
+                item.unit_price = unit_price
+        else:
+            item = CartItem(
+                cart_id=cart_id,
+                product_id=product_id,
+                quantity=min(quantity, self.MAX_QUANTITY_PER_ITEM),
+                notes=notes,
+                substitution_allowed=substitution_allowed,
+                unit_price=unit_price
+            )
+            self.db.add(item)
+
+        await self.db.commit()
+        await self.db.refresh(item)
+        return item
+
+    async def merge_guest_cart(
+        self,
+        guest_cart_token: str,
+        user_id: uuid.UUID,
+        merge_method: str = "merge"
+    ) -> Tuple[Cart, CartMergeLog]:
+        """Merge guest cart into user cart."""
+        # Get guest cart
+        stmt = select(Cart).where(
+            and_(Cart.cart_token == guest_cart_token, Cart.is_active == True)
+        ).options(selectinload(Cart.items))
+        result = await self.db.execute(stmt)
+        guest_cart = result.scalar_one_or_none()
+        
+        if not guest_cart:
+            raise ValueError("Guest cart not found or expired")
+
+        # Get or create user cart
+        target_cart = await self.get_or_create_cart(user_id=user_id)
+        await self.db.refresh(target_cart, ["items"])
+
+        source_count = len(guest_cart.items)
+        target_count_before = len(target_cart.items)
+
+        merge_log = CartMergeLog(
+            source_cart_id=guest_cart.id,
+            target_cart_id=target_cart.id,
+            user_id=user_id,
+            merge_method=merge_method,
+            source_item_count=source_count,
+            target_item_count_before=target_count_before,
+            target_item_count_after=target_count_before
+        )
+
+        if merge_method == "replace":
+            # Clear target items
+            await self.db.execute(delete(CartItem).where(CartItem.cart_id == target_cart.id))
+            for item in guest_cart.items:
+                item.cart_id = target_cart.id
+            merge_log.target_item_count_after = source_count
+        elif merge_method == "merge":
+            for item in guest_cart.items:
+                try:
+                    await self.add_item(
+                        target_cart.id,
+                        item.product_id,
+                        item.quantity,
+                        item.notes,
+                        item.substitution_allowed,
+                        item.unit_price
+                    )
+                except ValueError:
+                    pass
+            
+            recount_stmt = select(func.count(CartItem.id)).where(CartItem.cart_id == target_cart.id)
+            recount_res = await self.db.execute(recount_stmt)
+            merge_log.target_item_count_after = recount_res.scalar() or 0
+
+        guest_cart.is_active = False
+        self.db.add(merge_log)
+        await self.db.commit()
+        await self.db.refresh(target_cart)
+        return target_cart, merge_log

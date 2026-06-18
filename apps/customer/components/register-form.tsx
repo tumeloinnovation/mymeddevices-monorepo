@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { useState } from "react"
+import { validatePassword, getPasswordRequirements } from "@/lib/utils/password-validator"
+import { CheckCircle, XCircle } from "lucide-react"
 
 const registerSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
@@ -28,6 +30,11 @@ export function RegisterForm() {
   const { register: registerUser, isLoading, error } = useAuthStore()
   const router = useRouter()
   const [success, setSuccess] = useState(false)
+  const [password, setPassword] = useState("")
+
+  const passwordValidation = validatePassword(password);
+  const requirements = getPasswordRequirements();
+
   const {
     register,
     handleSubmit,
@@ -56,9 +63,12 @@ export function RegisterForm() {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Account created</CardTitle>
-          <CardDescription>
-            Your account has been created successfully. You can now log in.
+          <div className="mx-auto w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mb-4">
+            <CheckCircle className="w-8 h-8 text-green-600" />
+          </div>
+          <CardTitle className="text-center">Verify your email</CardTitle>
+          <CardDescription className="text-center">
+            We've sent a verification link to your email address. Please click the link to verify your account and continue.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -102,8 +112,41 @@ export function RegisterForm() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Password</Label>
-            <Input id="password" type="password" {...register("password")} />
+            <Input 
+              id="password" 
+              type="password" 
+              {...register("password")} 
+              onChange={(e) => {
+                register("password").onChange(e);
+                setPassword(e.target.value);
+              }}
+            />
             {errors.password && <p className="text-sm text-destructive">{errors.password.message}</p>}
+            
+            {/* Password Requirements Indicator */}
+            {password && (
+              <div className="mt-2 space-y-1">
+                {requirements.map((reqObj, index) => {
+                  const req = reqObj.label;
+                  const isValid = !passwordValidation.errors.includes(req);
+                  return (
+                    <div
+                      key={index}
+                      className={`flex items-center gap-2 text-[10px] ${
+                        isValid ? "text-green-600 font-medium" : "text-muted-foreground"
+                      }`}
+                    >
+                      {isValid ? (
+                        <CheckCircle className="h-2.5 w-2.5" />
+                      ) : (
+                        <XCircle className="h-2.5 w-2.5" />
+                      )}
+                      {req}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
           <div className="space-y-2">
             <Label htmlFor="confirmPassword">Confirm password</Label>

@@ -141,42 +141,56 @@ class OrderService:
 
     async def get_order(self, order_id: uuid.UUID) -> Optional[Order]:
         stmt = select(Order).where(Order.id == order_id).options(
-            selectinload(Order.items),
+            selectinload(Order.items).selectinload(OrderItem.product),
             selectinload(Order.user)
         )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def list_orders(
-        self, 
-        user_id: Optional[uuid.UUID] = None, 
+        self,
+        user_id: Optional[uuid.UUID] = None,
         vendor_id: Optional[uuid.UUID] = None,
         status: Optional[str] = None,
         offset: int = 0,
         limit: int = 20
     ) -> Tuple[List[Order], int]:
-        stmt = select(Order).options(selectinload(Order.items))
-        
+        # Build base query conditions
+        conditions = []
+
         if user_id:
-            stmt = stmt.where(Order.user_id == user_id)
-        
+            conditions.append(Order.user_id == user_id)
+
         if vendor_id:
-            # Join with OrderItem to filter by vendor
-            stmt = stmt.join(OrderItem).where(OrderItem.vendor_id == vendor_id).distinct()
+            # Use subquery to avoid DISTINCT issues with JSON columns
+            vendor_order_subquery = select(OrderItem.order_id).where(
+                OrderItem.vendor_id == vendor_id
+            )
+            conditions.append(Order.id.in_(vendor_order_subquery))
 
         if status:
-            stmt = stmt.where(Order.status == status)
+            conditions.append(Order.status == status)
 
-        # Count total
-        count_stmt = select(func.count()).select_from(stmt.subquery())
+        # Build count query
+        count_stmt = select(func.count(Order.id))
+        for condition in conditions:
+            count_stmt = count_stmt.where(condition)
+
         total_result = await self.db.execute(count_stmt)
         total = total_result.scalar_one()
+
+        stmt = select(Order).options(
+            selectinload(Order.items).selectinload(OrderItem.product)
+        )
+
+        for condition in conditions:
+            stmt = stmt.where(condition)
 
         # Paginate
         stmt = stmt.order_by(Order.created_at.desc()).offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         orders = result.scalars().all()
-        
+
         return orders, total
 
     async def update_order_status(self, order_id: uuid.UUID, new_status: str) -> Order:

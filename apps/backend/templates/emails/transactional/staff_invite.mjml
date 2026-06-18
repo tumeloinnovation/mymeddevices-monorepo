@@ -1,0 +1,37 @@
+<mjml>
+  <mj-head>
+    <mj-include path="../components/head.mjml" />
+  </mj-head>
+  <mj-body background-color="#f4f6f8">
+    <mj-include path="../components/header.mjml" />
+    
+    <mj-section padding="36px 32px 12px" background-color="#ffffff">
+      <mj-column>
+        <mj-text mj-class="h1">Invitation to Join MyMedDevices</mj-text>
+        <mj-text>Hi {{ first_name }},</mj-text>
+        <mj-text>You have been invited to join the MyMedDevices platform as a <strong>{{ role }}</strong>.</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="0 32px" background-color="#ffffff">
+      <mj-column background-color="#f8fafc" border="1px solid #e2e8f0" border-radius="8px" padding="20px">
+        <mj-text padding="0 0 10px">Your temporary login credentials:</mj-text>
+        <mj-text padding="0"><span style="font-weight: 600; color: #053D7A;">Email:</span> {{ email }}</mj-text>
+        <mj-text padding="0"><span style="font-weight: 600; color: #053D7A;">Temporary Password:</span> {{ temp_password }}</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="24px 32px 24px" background-color="#ffffff">
+      <mj-column>
+        <mj-text padding="0 0 24px">
+          Please log in using the button below. You will be prompted to change your password upon your first login.
+        </mj-text>
+        <mj-button href="{{ login_url }}">
+          Log In Now
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-include path="../components/footer.mjml" />
+  </mj-body>
+</mjml>

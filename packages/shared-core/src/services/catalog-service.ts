@@ -12,7 +12,15 @@ import {
   CategoryTree,
   AIAssistRequest,
   AIAssistResponse,
-  ProductCompleteness
+  ProductCompleteness,
+  Brand,
+  BrandCreate,
+  BrandUpdate,
+  BrandListResponse,
+  Tag,
+  TagCreate,
+  TagUpdate,
+  TagListResponse,
 } from '../types/catalog';
 
 export const catalogService = {
@@ -50,6 +58,10 @@ export const catalogService = {
 
   async publishProduct(id: string): Promise<Product> {
     return apiClient.post<Product>(`/catalog/products/${id}/publish`, {});
+  },
+
+  async rejectProduct(id: string, reason: string): Promise<Product> {
+    return apiClient.post<Product>(`/catalog/products/${id}/reject`, { reason });
   },
 
   async archiveProduct(id: string): Promise<Product> {
@@ -107,6 +119,56 @@ export const catalogService = {
 
   async deleteCategory(id: string): Promise<void> {
     return apiClient.delete(`/catalog/products/categories/${id}`);
+  },
+
+  // Brands
+  async getBrands(params?: {
+    active_only?: boolean;
+    page?: number;
+    page_size?: number;
+  }): Promise<BrandListResponse> {
+    return apiClient.get<BrandListResponse>('/catalog/products/brands', { params });
+  },
+
+  async getBrand(id: string): Promise<Brand> {
+    return apiClient.get<Brand>(`/catalog/products/brands/${id}`);
+  },
+
+  async createBrand(data: BrandCreate): Promise<Brand> {
+    return apiClient.post<Brand>('/catalog/products/brands', data);
+  },
+
+  async updateBrand(id: string, data: BrandUpdate): Promise<Brand> {
+    return apiClient.patch<Brand>(`/catalog/products/brands/${id}`, data);
+  },
+
+  async deleteBrand(id: string): Promise<void> {
+    return apiClient.delete(`/catalog/products/brands/${id}`);
+  },
+
+  // Tags
+  async getTags(params?: {
+    active_only?: boolean;
+    page?: number;
+    page_size?: number;
+  }): Promise<TagListResponse> {
+    return apiClient.get<TagListResponse>('/catalog/products/tags', { params });
+  },
+
+  async getTag(id: string): Promise<Tag> {
+    return apiClient.get<Tag>(`/catalog/products/tags/${id}`);
+  },
+
+  async createTag(data: TagCreate): Promise<Tag> {
+    return apiClient.post<Tag>('/catalog/products/tags', data);
+  },
+
+  async updateTag(id: string, data: TagUpdate): Promise<Tag> {
+    return apiClient.patch<Tag>(`/catalog/products/tags/${id}`, data);
+  },
+
+  async deleteTag(id: string): Promise<void> {
+    return apiClient.delete(`/catalog/products/tags/${id}`);
   },
 
   // Storefront APIs

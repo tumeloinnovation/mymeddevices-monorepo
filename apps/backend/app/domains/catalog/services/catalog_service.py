@@ -8,6 +8,8 @@ from sqlalchemy.orm import selectinload
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.product_image import ProductImage
 from app.domains.catalog.models.category import Category
+from app.domains.catalog.models.brand import Brand
+from app.domains.catalog.models.tag import Tag
 from app.domains.vendor.models.vendor_profile import VendorProfile
 from app.core.logging import logger
 from app.domains.catalog.config import settings as catalog_settings
@@ -233,6 +235,24 @@ class CatalogService:
         logger.info(f"Product published: {product_id}")
         return product
 
+    async def reject_product(self, vendor_id: str | None, product_id: str, reason: str) -> Product:
+        """Reject a product under review with a reason."""
+        product = await self._get_vendor_product(vendor_id, product_id)
+
+        if product.status != "pending_review":
+            raise ValueError(f"Only products in 'pending_review' status can be rejected. Current status: {product.status}")
+
+        product.status = "draft"
+        product.is_verified = False
+        product.verified_at = None
+        product.rejection_reason = reason
+
+        await self.db.commit()
+        product = await self._get_vendor_product(vendor_id, product_id)
+
+        logger.info(f"Product rejected: {product_id}. Reason: {reason}")
+        return product
+
     async def archive_product(self, vendor_id: str, product_id: str) -> Product:
         """Archive a product (removes from storefront)."""
         product = await self._get_vendor_product(vendor_id, product_id)
@@ -309,7 +329,20 @@ class CatalogService:
             )
 
         # Count total
-        count_query = select(func.count()).select_from(query.subquery())
+        count_query = select(func.count(Product.id)).where(*conditions)
+        if status_filter:
+            count_query = count_query.where(Product.status == status_filter)
+        if category_id:
+            count_query = count_query.where(Product.category_id == category_id)
+        if search:
+            search_term = f"%{search}%"
+            count_query = count_query.where(
+                or_(
+                    Product.name.ilike(search_term),
+                    Product.sku.ilike(search_term),
+                    Product.brand.ilike(search_term),
+                )
+            )
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
@@ -394,7 +427,36 @@ class CatalogService:
             query = query.where(Product.stock_quantity > 0)
 
         # Count total
-        count_query = select(func.count()).select_from(query.subquery())
+        count_query = select(func.count(Product.id)).where(
+            Product.status == "published",
+            Product.is_verified == True,
+            Product.is_deleted == False
+        )
+        if category_id:
+            count_query = count_query.where(Product.category_id == category_id)
+        if category_slug:
+            subq = select(Category.id).where(Category.slug == category_slug)
+            count_query = count_query.where(Product.category_id.in_(subq))
+        if search:
+            search_term = f"%{search}%"
+            count_query = count_query.where(
+                or_(
+                    Product.name.ilike(search_term),
+                    Product.brand.ilike(search_term),
+                    Product.short_description.ilike(search_term),
+                )
+            )
+        if price_min is not None:
+            count_query = count_query.where(Product.price >= price_min)
+        if price_max is not None:
+            count_query = count_query.where(Product.price <= price_max)
+        if is_featured is not None:
+            count_query = count_query.where(Product.is_featured == is_featured)
+        if is_on_sale is not None:
+            count_query = count_query.where(Product.is_on_sale == is_on_sale)
+        if in_stock is True:
+            count_query = count_query.where(Product.stock_quantity > 0)
+
         total_result = await self.db.execute(count_query)
         total = total_result.scalar() or 0
 
@@ -664,6 +726,209 @@ class CatalogService:
         category.is_deleted = True
         await self.db.commit()
         logger.info(f"Category deleted: {category_id}")
+
+    # ========================================================================
+    # BRANDS
+    # ========================================================================
+
+    async def get_brands(
+        self,
+        active_only: bool = True,
+        page: int = 1,
+        page_size: int = 20
+    ) -> Tuple[List[Brand], int]:
+        """Get brands with pagination."""
+        query = select(Brand).where(Brand.is_deleted == False)
+        if active_only:
+            query = query.where(Brand.is_active == True)
+
+        # Get total count
+        count_query = select(func.count(Brand.id)).where(Brand.is_deleted == False)
+        if active_only:
+            count_query = count_query.where(Brand.is_active == True)
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+
+        # Get paginated results
+        query = query.order_by(Brand.sort_order, Brand.name)
+        query = query.offset((page - 1) * page_size).limit(page_size)
+        result = await self.db.execute(query)
+        brands = list(result.scalars().all())
+
+        return brands, total
+
+    async def get_brand_by_id(self, brand_id: str) -> Optional[Brand]:
+        """Get a brand by ID."""
+        result = await self.db.execute(
+            select(Brand).where(Brand.id == brand_id, Brand.is_deleted == False)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_brand_by_slug(self, slug: str) -> Optional[Brand]:
+        """Get a brand by slug."""
+        result = await self.db.execute(
+            select(Brand).where(Brand.slug == slug, Brand.is_deleted == False)
+        )
+        return result.scalar_one_or_none()
+
+    async def create_brand(self, **kwargs) -> Brand:
+        """Create a new brand (admin only)."""
+        # Generate slug if not provided
+        if "slug" not in kwargs or not kwargs["slug"]:
+            slug = re.sub(r'[^a-z0-9]+', '-', kwargs["name"].lower()).strip('-')
+            kwargs["slug"] = slug
+
+        # Check slug uniqueness
+        existing = await self.db.execute(
+            select(Brand).where(Brand.slug == kwargs["slug"])
+        )
+        if existing.scalar_one_or_none():
+            raise ValueError(f"Brand with slug '{kwargs['slug']}' already exists")
+
+        brand = Brand(**kwargs)
+        self.db.add(brand)
+        await self.db.commit()
+        await self.db.refresh(brand)
+
+        logger.info(f"Brand created: {brand.id} - {brand.name}")
+        return brand
+
+    async def update_brand(self, brand_id: str, **kwargs) -> Brand:
+        """Update a brand (admin only)."""
+        result = await self.db.execute(
+            select(Brand).where(Brand.id == brand_id)
+        )
+        brand = result.scalar_one_or_none()
+        if not brand:
+            raise ValueError("Brand not found")
+
+        for key, value in kwargs.items():
+            if value is not None and hasattr(brand, key):
+                setattr(brand, key, value)
+
+        await self.db.commit()
+        await self.db.refresh(brand)
+
+        logger.info(f"Brand updated: {brand_id}")
+        return brand
+
+    async def delete_brand(self, brand_id: str) -> None:
+        """Soft delete a brand. Fails if products are assigned."""
+        result = await self.db.execute(
+            select(Brand).where(Brand.id == brand_id)
+        )
+        brand = result.scalar_one_or_none()
+        if not brand:
+            raise ValueError("Brand not found")
+
+        # Check for products
+        product_count = await self.db.execute(
+            select(func.count(Product.id)).where(Product.brand_id == brand_id, Product.is_deleted == False)
+        )
+        if product_count.scalar() > 0:
+            raise ValueError("Cannot delete brand with assigned products. Reassign or delete products first.")
+
+        brand.is_deleted = True
+        await self.db.commit()
+        logger.info(f"Brand deleted: {brand_id}")
+
+    # ========================================================================
+    # TAGS
+    # ========================================================================
+
+    async def get_tags(
+        self,
+        active_only: bool = True,
+        page: int = 1,
+        page_size: int = 20
+    ) -> Tuple[List[Tag], int]:
+        """Get tags with pagination."""
+        query = select(Tag).where(Tag.is_deleted == False)
+        if active_only:
+            query = query.where(Tag.is_active == True)
+
+        # Get total count
+        count_query = select(func.count(Tag.id)).where(Tag.is_deleted == False)
+        if active_only:
+            count_query = count_query.where(Tag.is_active == True)
+        total_result = await self.db.execute(count_query)
+        total = total_result.scalar()
+
+        # Get paginated results
+        query = query.order_by(Tag.sort_order, Tag.name)
+        query = query.offset((page - 1) * page_size).limit(page_size)
+        result = await self.db.execute(query)
+        tags = list(result.scalars().all())
+
+        return tags, total
+
+    async def get_tag_by_id(self, tag_id: str) -> Optional[Tag]:
+        """Get a tag by ID."""
+        result = await self.db.execute(
+            select(Tag).where(Tag.id == tag_id, Tag.is_deleted == False)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_tag_by_slug(self, slug: str) -> Optional[Tag]:
+        """Get a tag by slug."""
+        result = await self.db.execute(
+            select(Tag).where(Tag.slug == slug, Tag.is_deleted == False)
+        )
+        return result.scalar_one_or_none()
+
+    async def create_tag(self, **kwargs) -> Tag:
+        """Create a new tag (admin only)."""
+        # Generate slug if not provided
+        if "slug" not in kwargs or not kwargs["slug"]:
+            slug = re.sub(r'[^a-z0-9]+', '-', kwargs["name"].lower()).strip('-')
+            kwargs["slug"] = slug
+
+        # Check slug uniqueness
+        existing = await self.db.execute(
+            select(Tag).where(Tag.slug == kwargs["slug"])
+        )
+        if existing.scalar_one_or_none():
+            raise ValueError(f"Tag with slug '{kwargs['slug']}' already exists")
+
+        tag = Tag(**kwargs)
+        self.db.add(tag)
+        await self.db.commit()
+        await self.db.refresh(tag)
+
+        logger.info(f"Tag created: {tag.id} - {tag.name}")
+        return tag
+
+    async def update_tag(self, tag_id: str, **kwargs) -> Tag:
+        """Update a tag (admin only)."""
+        result = await self.db.execute(
+            select(Tag).where(Tag.id == tag_id)
+        )
+        tag = result.scalar_one_or_none()
+        if not tag:
+            raise ValueError("Tag not found")
+
+        for key, value in kwargs.items():
+            if value is not None and hasattr(tag, key):
+                setattr(tag, key, value)
+
+        await self.db.commit()
+        await self.db.refresh(tag)
+
+        logger.info(f"Tag updated: {tag_id}")
+        return tag
+
+    async def delete_tag(self, tag_id: str) -> None:
+        """Soft delete a tag. Products can remain untagged."""
+        result = await self.db.execute(
+            select(Tag).where(Tag.id == tag_id)
+        )
+        tag = result.scalar_one_or_none()
+        if not tag:
+            raise ValueError("Tag not found")
+
+        tag.is_deleted = True
+        await self.db.commit()
+        logger.info(f"Tag deleted: {tag_id}")
 
     # ========================================================================
     # COMPLETENESS SCORING

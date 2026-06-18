@@ -1,0 +1,10 @@
+<svg width="400" height="200" viewBox="0 0 400 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <path d="M0 100 Q100 50 200 100 T400 100 V200 H0 Z" fill="url(#gradient1)" opacity="0.1"/>
+  <defs>
+    <linearGradient id="gradient1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#2c29de" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#de7429" stop-opacity="0.2"/>
+    </linearGradient>
+  </defs>
+</svg></content>
+<parameter name="filePath">/home/nozel/Developer/company/MyMedDevices/mymeddevices_web/public/svgs/newsletter-bg-1.svg

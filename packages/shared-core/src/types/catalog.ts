@@ -1,4 +1,5 @@
 export type ProductStatus = 'draft' | 'pending_review' | 'published' | 'archived';
+export type PPBClassification = 'Class A' | 'Class B' | 'Class C' | 'Class D' | 'Unclassified';
 
 export interface ProductImage {
   id: string;
@@ -39,6 +40,7 @@ export interface Product {
   status: ProductStatus;
   is_verified: boolean;
   verified_at?: string;
+  rejection_reason?: string;
   is_featured: boolean;
   is_on_sale: boolean;
   popularity_score: number;
@@ -51,7 +53,7 @@ export interface Product {
   specifications?: Record<string, any>;
   certifications?: string[];
   kmpdb_registration_number?: string;
-  ppb_classification?: string;
+  ppb_classification?: PPBClassification;
   ce_marking_or_fda_clearance?: string;
   warranty_info?: string;
   meta_title?: string;
@@ -86,7 +88,7 @@ export interface ProductCreate {
   specifications?: Record<string, any>;
   certifications?: string[];
   kmpdb_registration_number?: string;
-  ppb_classification?: string;
+  ppb_classification?: PPBClassification;
   ce_marking_or_fda_clearance?: string;
   warranty_info?: string;
   meta_title?: string;
@@ -164,4 +166,68 @@ export interface ProductCompleteness {
   is_ready_to_verify: boolean;
   items: CompletenessItem[];
   missing_required: string[];
+}
+
+export interface Brand {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  logo_url?: string;
+  website_url?: string;
+  sort_order: number;
+  is_active: boolean;
+  product_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BrandCreate {
+  name: string;
+  slug?: string;
+  description?: string;
+  logo_url?: string;
+  website_url?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export interface BrandUpdate extends Partial<BrandCreate> {}
+
+export interface BrandListResponse {
+  brands: Brand[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface Tag {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  color?: string;
+  sort_order: number;
+  is_active: boolean;
+  product_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TagCreate {
+  name: string;
+  slug?: string;
+  description?: string;
+  color?: string;
+  sort_order?: number;
+  is_active?: boolean;
+}
+
+export interface TagUpdate extends Partial<TagCreate> {}
+
+export interface TagListResponse {
+  tags: Tag[];
+  total: number;
+  page: number;
+  page_size: number;
 }

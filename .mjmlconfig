@@ -1,0 +1,6 @@
+{
+  "allowIncludes": true,
+  "validationLevel": "skip",
+  "packages": [],
+  "includePath": ["apps/backend/templates/emails"]
+}

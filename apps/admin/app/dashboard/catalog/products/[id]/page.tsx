@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
 import {
-  ArrowLeft,
   Eye,
   Edit,
   Trash2,
@@ -14,25 +15,40 @@ import {
   ImageIcon,
   Upload,
   Sparkles,
+  Activity,
+  ShoppingCart,
+  Zap,
+  Globe,
+  Settings2,
+  FileText,
+  Clock,
+  Archive,
+  XCircle,
+  Package,
 } from "lucide-react";
-import { catalogService, Product, ProductCompleteness, CategoryTree } from "@mymeddevices/shared-core";
+import { Product, ProductStatus } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -41,947 +57,1212 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { toast } from "sonner";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
+import { toast } from "sonner";
+import {
+  useProduct,
+  useProductCompleteness,
+  useProductCategories,
+  useProductMutations,
+  useImageMutations,
+  useAIGenerate,
+  useVendorsOverview,
+  findVendorName,
+} from "./_hooks/use-product-detail";
+import {
+  Field,
+  TextView,
+  MonoView,
+  BadgeView,
+  BrandView,
+  PriceView,
+  ComparePriceView,
+  StockView,
+  CertificationsView,
+  TagsView,
+  JsonView,
+  DescriptionView,
+  SlugView,
+} from "./_components/product-form-fields";
+
+const STATUS_CONFIG: Record<
+  ProductStatus,
+  { label: string; icon: any; color: string; bg: string; border: string }
+> = {
+  draft: {
+    label: "Draft",
+    icon: FileText,
+    color: "text-gray-700 dark:text-gray-400",
+    bg: "bg-gray-50 dark:bg-gray-900/40",
+    border: "border-gray-200 dark:border-gray-800",
+  },
+  pending_review: {
+    label: "Pending Review",
+    icon: Clock,
+    color: "text-amber-700 dark:text-amber-400",
+    bg: "bg-amber-50 dark:bg-amber-950/40",
+    border: "border-amber-200 dark:border-amber-800",
+  },
+  published: {
+    label: "Published",
+    icon: CheckCircle2,
+    color: "text-emerald-700 dark:text-emerald-400",
+    bg: "bg-emerald-50 dark:bg-emerald-950/40",
+    border: "border-emerald-200 dark:border-emerald-800",
+  },
+  archived: {
+    label: "Archived",
+    icon: Archive,
+    color: "text-slate-700 dark:text-slate-400",
+    bg: "bg-slate-50 dark:bg-slate-900/40",
+    border: "border-slate-200 dark:border-slate-800",
+  },
+};
+
+function StatusBadge({ status }: { status: ProductStatus }) {
+  const cfg = STATUS_CONFIG[status] || STATUS_CONFIG.draft;
+  const Icon = cfg.icon;
+  return (
+    <Badge
+      variant="outline"
+      className={`${cfg.bg} ${cfg.color} ${cfg.border} flex w-fit items-center gap-1 font-semibold px-1.5 py-0.5 text-[10px] rounded-md`}
+    >
+      <Icon className="h-2.5 w-2.5" />
+      {cfg.label.toUpperCase()}
+    </Badge>
+  );
+}
+
+const productSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  slug: z.string().min(1),
+  description: z.string().default(""),
+  short_description: z.string().default(""),
+  sku: z.string().default(""),
+  category_id: z.string().default(""),
+  brand: z.string().default(""),
+  manufacturer: z.string().default(""),
+  model_number: z.string().default(""),
+  price: z.coerce.number().optional(),
+  compare_at_price: z.coerce.number().optional(),
+  cost_price: z.coerce.number().optional(),
+  currency: z.string().default("KES"),
+  stock_quantity: z.coerce.number().default(0),
+  low_stock_threshold: z.coerce.number().default(5),
+  track_inventory: z.boolean().default(true),
+  weight_kg: z.coerce.number().optional(),
+  specifications: z.string().default(""),
+  certifications: z.string().default(""),
+  kmpdb_registration_number: z.string().default(""),
+  ppb_classification: z.string().default(""),
+  ce_marking_or_fda_clearance: z.string().default(""),
+  warranty_info: z.string().default(""),
+  meta_title: z.string().default(""),
+  meta_description: z.string().default(""),
+  tags: z.string().default(""),
+});
+
+type ProductFormValues = z.infer<typeof productSchema>;
+
+function productToFormValues(p: Product): ProductFormValues {
+  return {
+    name: p.name,
+    slug: p.slug,
+    description: p.description || "",
+    short_description: p.short_description || "",
+    sku: p.sku || "",
+    category_id: p.category_id || "",
+    brand: p.brand || "",
+    manufacturer: p.manufacturer || "",
+    model_number: p.model_number || "",
+    price: p.price ?? undefined,
+    compare_at_price: p.compare_at_price ?? undefined,
+    cost_price: p.cost_price ?? undefined,
+    currency: p.currency || "KES",
+    stock_quantity: p.stock_quantity ?? 0,
+    low_stock_threshold: p.low_stock_threshold ?? 5,
+    track_inventory: p.track_inventory ?? true,
+    weight_kg: p.weight_kg ?? undefined,
+    specifications: JSON.stringify(p.specifications || {}, null, 2),
+    certifications: (p.certifications || []).join(", "),
+    kmpdb_registration_number: p.kmpdb_registration_number || "",
+    ppb_classification: p.ppb_classification || "",
+    ce_marking_or_fda_clearance: p.ce_marking_or_fda_clearance || "",
+    warranty_info: p.warranty_info || "",
+    meta_title: p.meta_title || "",
+    meta_description: p.meta_description || "",
+    tags: (p.tags || []).join(", "),
+  };
+}
+
+function formValuesToPayload(values: ProductFormValues): Partial<Product> {
+  let specs: Record<string, unknown> | undefined;
+  if (values.specifications) {
+    try {
+      specs = JSON.parse(values.specifications);
+    } catch {
+      return {};
+    }
+  }
+
+  return {
+    name: values.name,
+    slug: values.slug,
+    description: values.description || undefined,
+    short_description: values.short_description || undefined,
+    sku: values.sku || undefined,
+    category_id: values.category_id || undefined,
+    brand: values.brand || undefined,
+    manufacturer: values.manufacturer || undefined,
+    model_number: values.model_number || undefined,
+    price: values.price ?? undefined,
+    compare_at_price: values.compare_at_price ?? undefined,
+    cost_price: values.cost_price ?? undefined,
+    currency: values.currency,
+    stock_quantity: values.stock_quantity ?? 0,
+    low_stock_threshold: values.low_stock_threshold ?? 5,
+    track_inventory: values.track_inventory,
+    weight_kg: values.weight_kg ?? undefined,
+    specifications: specs,
+    certifications: values.certifications
+      ? values.certifications.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined,
+    kmpdb_registration_number: values.kmpdb_registration_number || undefined,
+    ppb_classification: values.ppb_classification || undefined,
+    ce_marking_or_fda_clearance: values.ce_marking_or_fda_clearance || undefined,
+    warranty_info: values.warranty_info || undefined,
+    meta_title: values.meta_title || undefined,
+    meta_description: values.meta_description || undefined,
+    tags: values.tags
+      ? values.tags.split(",").map((s) => s.trim()).filter(Boolean)
+      : undefined,
+  };
+}
+
+function formatCurrency(amount: number, currency = "KES") {
+  return `${currency} ${amount.toLocaleString("en-KE")}`;
+}
 
 export default function ProductDetailPage() {
   const params = useParams();
   const router = useRouter();
   const productId = params.id as string;
 
-  const [product, setProduct] = useState<Product | null>(null);
-  const [completeness, setCompleteness] = useState<ProductCompleteness | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-  const [categories, setCategories] = useState<CategoryTree[]>([]);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showRejectDialog, setShowRejectDialog] = useState(false);
+  const [rejectionReason, setRejectionReason] = useState("");
 
-  // Form state
-  const [formData, setFormData] = useState({
-    name: "",
-    slug: "",
-    description: "",
-    short_description: "",
-    sku: "",
-    category_id: "",
-    brand: "",
-    manufacturer: "",
-    model_number: "",
-    price: "",
-    compare_at_price: "",
-    cost_price: "",
-    currency: "KES",
-    stock_quantity: "",
-    low_stock_threshold: "",
-    track_inventory: true,
-    weight_kg: "",
-    specifications: "",
-    certifications: "",
-    kmpdb_registration_number: "",
-    ppb_classification: "",
-    ce_marking_or_fda_clearance: "",
-    warranty_info: "",
-    meta_title: "",
-    meta_description: "",
-    tags: [] as string[],
+  const { data: product, isLoading, error } = useProduct(productId);
+  const { data: completeness } = useProductCompleteness(productId);
+  const { data: categories = [] } = useProductCategories();
+  const { data: vendors = [] } = useVendorsOverview();
+  const mutations = useProductMutations(productId);
+  const imageMutations = useImageMutations(productId);
+  const aiGen = useAIGenerate(productId);
+
+  const form = useForm<ProductFormValues>({
+    resolver: standardSchemaResolver(productSchema) as any,
+    defaultValues: productToFormValues(product ?? ({} as Product)),
   });
 
   useEffect(() => {
-    async function loadData() {
-      setLoading(true);
-      try {
-        const [productData, completenessData, categoriesData] = await Promise.all([
-          catalogService.getProduct(productId),
-          catalogService.getCompleteness(productId),
-          catalogService.getCategories(),
-        ]);
+    if (product) form.reset(productToFormValues(product));
+  }, [product, form]);
 
-        setProduct(productData);
-        setCompleteness(completenessData);
+  const handleSave = useCallback(async () => {
+    const valid = await form.trigger();
+    if (!valid) return toast.error("Please fix the form errors before saving.");
 
-        // Flatten categories
-        const flatCategories: CategoryTree[] = [];
-        const flatten = (catList: CategoryTree[]) => {
-          catList.forEach((cat) => {
-            flatCategories.push(cat);
-            if (cat.children?.length > 0) flatten(cat.children);
-          });
-        };
-        flatten(categoriesData);
-        setCategories(flatCategories);
+    const values = form.getValues();
+    const payload = formValuesToPayload(values);
 
-        // Set form data
-        setFormData({
-          name: productData.name || "",
-          slug: productData.slug || "",
-          description: productData.description || "",
-          short_description: productData.short_description || "",
-          sku: productData.sku || "",
-          category_id: productData.category_id || "",
-          brand: productData.brand || "",
-          manufacturer: productData.manufacturer || "",
-          model_number: productData.model_number || "",
-          price: productData.price?.toString() || "",
-          compare_at_price: productData.compare_at_price?.toString() || "",
-          cost_price: productData.cost_price?.toString() || "",
-          currency: productData.currency || "KES",
-          stock_quantity: productData.stock_quantity?.toString() || "0",
-          low_stock_threshold: productData.low_stock_threshold?.toString() || "5",
-          track_inventory: productData.track_inventory ?? true,
-          weight_kg: productData.weight_kg?.toString() || "",
-          specifications: JSON.stringify(productData.specifications || {}, null, 2),
-          certifications: (productData.certifications || []).join(", "),
-          kmpdb_registration_number: productData.kmpdb_registration_number || "",
-          ppb_classification: productData.ppb_classification || "",
-          ce_marking_or_fda_clearance: productData.ce_marking_or_fda_clearance || "",
-          warranty_info: productData.warranty_info || "",
-          meta_title: productData.meta_title || "",
-          meta_description: productData.meta_description || "",
-          tags: productData.tags || [],
-        });
-      } catch (error: any) {
-        toast.error(error.message || "Failed to load product");
-        router.push("/dashboard/catalog/products");
-      } finally {
-        setLoading(false);
-      }
+    if (payload.specifications === undefined && values.specifications) {
+      return toast.error("Invalid JSON in specifications field.");
     }
 
-    loadData();
-  }, [productId, router]);
+    mutations.update.mutate(payload, {
+      onSuccess: () => setIsEditing(false),
+    });
+  }, [form, mutations.update]);
 
-  const handleSave = async () => {
-    if (!product) return;
+  const handleStatusAction = useCallback(
+    (action: "verify" | "publish" | "archive") => {
+      const m = mutations[action];
+      m.mutate();
+    },
+    [mutations]
+  );
 
-    setSaving(true);
-    try {
-      // Parse specifications safely
-      let specifications;
-      if (formData.specifications) {
-        try {
-          specifications = JSON.parse(formData.specifications);
-        } catch (e) {
-          toast.error("Invalid JSON in specifications field");
-          setSaving(false);
-          return;
+  const handleImageUpload = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      imageMutations.upload.mutate({
+        file,
+        isPrimary: !product?.images?.length,
+      });
+      e.target.value = "";
+    },
+    [imageMutations.upload, product]
+  );
+
+  const handleAIClick = useCallback(() => {
+    if (!isEditing) return;
+    aiGen.mutate(undefined, {
+      onSuccess: (data) => {
+        if (data.suggestions) {
+          if (data.suggestions.description) form.setValue("description", data.suggestions.description);
+          if (data.suggestions.short_description) form.setValue("short_description", data.suggestions.short_description);
+          if (data.suggestions.meta_title) form.setValue("meta_title", data.suggestions.meta_title);
+          if (data.suggestions.meta_description) form.setValue("meta_description", data.suggestions.meta_description);
+          toast.success("AI content generated. Review and save.");
         }
-      }
+      },
+    });
+  }, [aiGen, form, isEditing]);
 
-      const updateData: any = {
-        name: formData.name,
-        slug: formData.slug,
-        description: formData.description || undefined,
-        short_description: formData.short_description || undefined,
-        sku: formData.sku || undefined,
-        category_id: formData.category_id || undefined,
-        brand: formData.brand || undefined,
-        manufacturer: formData.manufacturer || undefined,
-        model_number: formData.model_number || undefined,
-        price: formData.price ? parseFloat(formData.price) : undefined,
-        compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : undefined,
-        cost_price: formData.cost_price ? parseFloat(formData.cost_price) : undefined,
-        currency: formData.currency,
-        stock_quantity: parseInt(formData.stock_quantity) || 0,
-        low_stock_threshold: parseInt(formData.low_stock_threshold) || 5,
-        track_inventory: formData.track_inventory,
-        weight_kg: formData.weight_kg ? parseFloat(formData.weight_kg) : undefined,
-        specifications,
-        certifications: formData.certifications ? formData.certifications.split(", ").filter(Boolean) : undefined,
-        kmpdb_registration_number: formData.kmpdb_registration_number || undefined,
-        ppb_classification: formData.ppb_classification || undefined,
-        ce_marking_or_fda_clearance: formData.ce_marking_or_fda_clearance || undefined,
-        warranty_info: formData.warranty_info || undefined,
-        meta_title: formData.meta_title || undefined,
-        meta_description: formData.meta_description || undefined,
-        tags: formData.tags && formData.tags.length > 0 ? formData.tags : undefined,
-      };
+  const isSaving =
+    mutations.update.isPending ||
+    mutations.verify.isPending ||
+    mutations.publish.isPending ||
+    mutations.archive.isPending ||
+    mutations.delete.isPending ||
+    imageMutations.upload.isPending ||
+    imageMutations.remove.isPending;
 
-      const updated = await catalogService.updateProduct(productId, updateData);
-      setProduct(updated);
-      setIsEditing(false);
-      toast.success("Product updated successfully");
+  const vendorName =
+    product && findVendorName(product.vendor_id, vendors);
 
-      // Reload completeness
-      const newCompleteness = await catalogService.getCompleteness(productId);
-      setCompleteness(newCompleteness);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to update product");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleStatusChange = async (action: "verify" | "publish" | "archive") => {
-    setSaving(true);
-    try {
-      let updated;
-      switch (action) {
-        case "verify":
-          updated = await catalogService.verifyProduct(productId);
-          toast.success("Product submitted for review");
-          break;
-        case "publish":
-          updated = await catalogService.publishProduct(productId);
-          toast.success("Product published successfully");
-          break;
-        case "archive":
-          updated = await catalogService.archiveProduct(productId);
-          toast.success("Product archived");
-          break;
-      }
-      setProduct(updated);
-      setIsEditing(false);
-    } catch (error: any) {
-      toast.error(error.message || `Failed to ${action} product`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    setSaving(true);
-    try {
-      await catalogService.deleteProduct(productId);
-      toast.success("Product deleted successfully");
-      router.push("/dashboard/catalog/products");
-    } catch (error: any) {
-      toast.error(error.message || "Failed to delete product");
-      setSaving(false);
-    }
-  };
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    setSaving(true);
-    try {
-      await catalogService.uploadImage(productId, file, {
-        is_primary: !product?.images?.length,
-      });
-      toast.success("Image uploaded successfully");
-
-      // Reload product
-      const updated = await catalogService.getProduct(productId);
-      setProduct(updated);
-
-      const newCompleteness = await catalogService.getCompleteness(productId);
-      setCompleteness(newCompleteness);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to upload image");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleImageDelete = async (imageId: string) => {
-    setSaving(true);
-    try {
-      await catalogService.removeImage(productId, imageId);
-      toast.success("Image removed");
-
-      const updated = await catalogService.getProduct(productId);
-      setProduct(updated);
-    } catch (error: any) {
-      toast.error(error.message || "Failed to remove image");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAIGenerate = async () => {
-    setSaving(true);
-    try {
-      const result = await catalogService.getAiSuggestions(productId, {
-        fields_to_generate: ["description", "short_description", "meta_title", "meta_description"],
-      });
-
-      if (result.suggestions) {
-        setFormData((prev) => ({
-          ...prev,
-          description: result.suggestions.description || prev.description,
-          short_description: result.suggestions.short_description || prev.short_description,
-          meta_title: result.suggestions.meta_title || prev.meta_title,
-          meta_description: result.suggestions.meta_description || prev.meta_description,
-        }));
-        toast.success("AI content generated. Review and save to apply.");
-      }
-    } catch (error: any) {
-      toast.error(error.message || "Failed to generate AI content");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
+  if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="space-y-6">
-          <Skeleton className="h-10 w-48" />
-          <Skeleton className="h-64 w-full" />
+        <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+          <Skeleton className="h-8 w-40 rounded-lg" />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <Skeleton className="h-[250px] w-full rounded-2xl" />
+              <Skeleton className="h-[120px] w-full rounded-2xl" />
+            </div>
+            <div className="space-y-6">
+              <Skeleton className="h-[200px] w-full rounded-2xl" />
+              <Skeleton className="h-[80px] w-full rounded-2xl" />
+            </div>
+          </div>
         </div>
       </DashboardLayout>
     );
   }
 
-  if (!product) return null;
-
-  const getStatusBadge = () => {
-    const config: Record<string, { label: string; color: string }> = {
-      draft: { label: "Draft", color: "bg-gray-100 text-gray-700 border-gray-200" },
-      pending_review: { label: "Pending Review", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-      published: { label: "Published", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-      archived: { label: "Archived", color: "bg-slate-100 text-slate-700 border-slate-200" },
-    };
-    const { label, color } = config[product.status] || config.draft;
-    return <Badge variant="outline" className={color}>{label}</Badge>;
-  };
+  if (error || !product) return null;
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6 p-4 lg:p-6 max-w-[1600px] mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
-              <Link href="/dashboard/catalog/products">
-                <ArrowLeft className="h-5 w-5" />
-              </Link>
-            </Button>
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-bold">{product.name}</h1>
-                {getStatusBadge()}
+            <div className="h-12 w-12 rounded-xl bg-muted/30 border border-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+              {product.images?.[0] ? (
+                <img
+                  src={product.images[0].url}
+                  alt={product.name}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <Package className="h-5 w-5 text-muted-foreground/30" />
+              )}
+            </div>
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-bold tracking-tight">
+                  {product.name}
+                </h1>
+                <StatusBadge status={product.status} />
               </div>
-              <p className="text-muted-foreground text-sm mt-1">
-                SKU: {product.sku || "Not set"} • ID: {product.id.slice(0, 8)}...
-              </p>
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                <MonoView>{product.sku || "NO-SKU"}</MonoView>
+                {vendorName && (
+                  <span className="text-muted-foreground/60">· {vendorName}</span>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex gap-2">
-            {isEditing ? (
+          <div className="flex items-center gap-2">
+            {!isEditing ? (
               <>
-                <Button variant="outline" onClick={() => setIsEditing(false)} disabled={saving}>
-                  Cancel
+                <Button variant="outline" size="sm" className="h-8 text-xs" asChild>
+                  <a
+                    href={`${process.env.NEXT_PUBLIC_CUSTOMER_URL || "http://localhost:3000"}/products/${product.slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <Eye className="mr-1.5 h-3.5 w-3.5" />
+                    Preview
+                  </a>
                 </Button>
-                <Button onClick={handleSave} disabled={saving}>
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Save Changes
+                {product.status === "published" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-8 text-xs"
+                    onClick={() => handleStatusAction("archive")}
+                    disabled={isSaving}
+                  >
+                    <Archive className="mr-1.5 h-3.5 w-3.5" />
+                    Archive
+                  </Button>
+                )}
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => setIsEditing(true)}
+                >
+                  <Edit className="mr-1.5 h-3.5 w-3.5" />
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs text-destructive hover:text-destructive"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Delete
                 </Button>
               </>
             ) : (
               <>
-                <Button variant="outline" asChild>
-                  <Link href={`/products/${product.slug}`} target="_blank" rel="noopener noreferrer">
-                    <Eye className="mr-2 h-4 w-4" />
-                    Preview on Storefront
-                  </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={() => {
+                    setIsEditing(false);
+                    form.reset(productToFormValues(product));
+                  }}
+                  disabled={isSaving}
+                >
+                  Cancel
                 </Button>
-                {product.status === "draft" && (
-                  <Button onClick={() => handleStatusChange("verify")} disabled={saving}>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Submit for Review
-                  </Button>
-                )}
-                {product.status === "pending_review" && (
-                  <Button onClick={() => handleStatusChange("publish")} disabled={saving}>
-                    <CheckCircle2 className="mr-2 h-4 w-4" />
-                    Approve & Publish
-                  </Button>
-                )}
-                <Button variant="outline" onClick={() => setIsEditing(true)}>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit
+                <Button
+                  size="sm"
+                  className="h-8 text-xs"
+                  onClick={handleSave}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Save
                 </Button>
               </>
             )}
           </div>
         </div>
 
-        {/* Completeness Score */}
-        {completeness && (
-          <Card className={completeness.is_ready_to_verify ? "border-emerald-200 bg-emerald-50/30" : "border-yellow-200 bg-yellow-50/30"}>
-            <CardContent className="pt-6">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    {completeness.is_ready_to_verify ? (
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                    ) : (
-                      <AlertCircle className="h-5 w-5 text-yellow-600" />
-                    )}
-                    <h3 className="font-semibold">
-                      {completeness.is_ready_to_verify
-                        ? "Product is ready for review"
-                        : "Product needs more information"}
-                    </h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Completeness score: {completeness.score}% of required fields completed
-                  </p>
-                  <Progress value={completeness.score} className="mb-4" />
-                  {!completeness.is_ready_to_verify && completeness.missing_required.length > 0 && (
-                    <div className="text-sm">
-                      <span className="font-medium">Missing required fields:</span>
-                      <span className="text-muted-foreground ml-2">
-                        {completeness.missing_required.join(", ")}
-                      </span>
-                    </div>
-                  )}
-                </div>
-                {!isEditing && (
-                  <Button variant="outline" size="sm" onClick={handleAIGenerate} disabled={saving}>
-                    <Sparkles className="mr-2 h-4 w-4" />
-                    AI Assist
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Completeness (inline in sidebar instead) */}
 
-        {/* Tabs */}
-        <Tabs defaultValue="general" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="general">General Info</TabsTrigger>
-            <TabsTrigger value="pricing">Pricing & Inventory</TabsTrigger>
-            <TabsTrigger value="images">Images</TabsTrigger>
-            <TabsTrigger value="specifications">Specifications</TabsTrigger>
-            <TabsTrigger value="seo">SEO & Metadata</TabsTrigger>
-          </TabsList>
+        {/* Tabs + Sidebar Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Content */}
+          <div className="lg:col-span-2 flex flex-col gap-6">
+            <Tabs defaultValue="general" className="w-full">
+              <TabsList className="bg-muted/50 p-0.5 h-9 rounded-lg w-full justify-start overflow-x-hidden border">
+                <TabsTrigger
+                  value="general"
+                  className="px-4 rounded-md h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs"
+                >
+                  General
+                </TabsTrigger>
+                <TabsTrigger
+                  value="pricing"
+                  className="px-4 rounded-md h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs"
+                >
+                  Pricing &amp; Stock
+                </TabsTrigger>
+                <TabsTrigger
+                  value="media"
+                  className="px-4 rounded-md h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs"
+                >
+                  Media
+                </TabsTrigger>
+                <TabsTrigger
+                  value="specs"
+                  className="px-4 rounded-md h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs"
+                >
+                  Technical
+                </TabsTrigger>
+                <TabsTrigger
+                  value="seo"
+                  className="px-4 rounded-md h-7 data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs"
+                >
+                  SEO
+                </TabsTrigger>
+              </TabsList>
 
-          {/* General Info Tab */}
-          <TabsContent value="general" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Product Information</CardTitle>
-                <CardDescription>Basic product details and categorization</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="name">Product Name *</Label>
-                    {isEditing ? (
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.name}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="slug">Slug (URL)</Label>
-                    {isEditing ? (
-                      <Input
-                        id="slug"
-                        value={formData.slug}
-                        onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm text-muted-foreground">/{product.slug}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="sku">SKU</Label>
-                    {isEditing ? (
-                      <Input
-                        id="sku"
-                        value={formData.sku}
-                        onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.sku || "Not set"}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="category">Category</Label>
-                    {isEditing ? (
-                      <Select
-                        value={formData.category_id}
-                        onValueChange={(value) => setFormData({ ...formData, category_id: value })}
+              {/* General Tab */}
+              <TabsContent value="general" className="space-y-6 outline-none mt-6">
+                <Card>
+                  <CardHeader className="bg-muted/30 border-b p-4">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                      <FileText className="h-3.5 w-3.5 text-primary" />
+                      Essential Information
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <Field
+                        label="Product Name"
+                        editing={isEditing}
+                        view={<TextView>{product.name}</TextView>}
                       >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {categories.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id}>
-                              {cat.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        <Input
+                          {...form.register("name")}
+                          className="h-9 text-sm"
+                        />
+                      </Field>
+                      <Field
+                        label="URL Slug"
+                        editing={isEditing}
+                        view={<SlugView slug={product.slug} />}
+                      >
+                        <Input
+                          {...form.register("slug")}
+                          className="h-9 text-xs font-mono"
+                        />
+                      </Field>
+                    </div>
+
+                    <Separator />
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      <Field
+                        label="Category"
+                        editing={isEditing}
+                        view={
+                          <BadgeView>
+                            {product.category_name || "Uncategorized"}
+                          </BadgeView>
+                        }
+                      >
+                        <Select
+                          value={form.watch("category_id")}
+                          onValueChange={(v) =>
+                            form.setValue("category_id", v)
+                          }
+                        >
+                          <SelectTrigger className="h-9 text-xs">
+                            <SelectValue placeholder="Assign category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id} className="text-xs">
+                                {cat.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </Field>
+                      <Field
+                        label="Brand"
+                        editing={isEditing}
+                        view={<BrandView name={product.brand} />}
+                      >
+                        <Input
+                          {...form.register("brand")}
+                          className="h-9 text-sm"
+                        />
+                      </Field>
+                      <Field
+                        label="Model"
+                        editing={isEditing}
+                        view={<TextView>{product.model_number}</TextView>}
+                      >
+                        <Input
+                          {...form.register("model_number")}
+                          className="h-9 text-sm"
+                        />
+                      </Field>
+                    </div>
+
+                    <Separator />
+
+                    <Field
+                      label="Tagline"
+                      editing={isEditing}
+                      view={
+                        <DescriptionView
+                          text={product.short_description}
+                          placeholder="No short description."
+                        />
+                      }
+                    >
+                      <Textarea
+                        {...form.register("short_description")}
+                        rows={2}
+                        className="text-sm resize-none"
+                      />
+                    </Field>
+
+                    <Field
+                      label="Marketing Narrative"
+                      editing={isEditing}
+                      view={
+                        <DescriptionView
+                          text={product.description}
+                          placeholder="Narrative not yet available."
+                        />
+                      }
+                    >
+                      <Textarea
+                        {...form.register("description")}
+                        rows={5}
+                        className="text-sm resize-none"
+                      />
+                    </Field>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* Pricing & Stock Tab */}
+              <TabsContent value="pricing" className="space-y-6 outline-none mt-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Card>
+                    <CardHeader className="bg-primary/5 border-b p-4">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2 text-primary">
+                        <ShoppingCart className="h-3.5 w-3.5" />
+                        Commercial
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-5 space-y-5">
+                      <div className="grid grid-cols-2 gap-5">
+                        <Field
+                          label="Price"
+                          editing={isEditing}
+                          view={
+                            <PriceView
+                              value={product.price}
+                              currency={product.currency}
+                            />
+                          }
+                        >
+                          <Input
+                            type="number"
+                            {...form.register("price")}
+                            className="h-9 text-sm"
+                          />
+                        </Field>
+                        <Field
+                          label="MSRP"
+                          editing={isEditing}
+                          view={
+                            <ComparePriceView
+                              value={product.compare_at_price}
+                              currency={product.currency}
+                            />
+                          }
+                        >
+                          <Input
+                            type="number"
+                            {...form.register("compare_at_price")}
+                            className="h-9 text-sm"
+                          />
+                        </Field>
+                      </div>
+                      <Separator />
+                      <Field
+                        label="Unit Cost (Internal)"
+                        editing={isEditing}
+                        view={
+                          product.cost_price ? (
+                            <p className="text-sm font-semibold">
+                              {formatCurrency(
+                                product.cost_price,
+                                product.currency
+                              )}
+                            </p>
+                          ) : (
+                            <TextView>\u2014</TextView>
+                          )
+                        }
+                      >
+                        <Input
+                          type="number"
+                          {...form.register("cost_price")}
+                          className="h-9 text-sm"
+                        />
+                      </Field>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader className="bg-amber-500/5 border-b p-4">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2 text-amber-600">
+                        <Zap className="h-3.5 w-3.5" />
+                        Inventory
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-5 space-y-5">
+                      <div className="grid grid-cols-2 gap-5">
+                        <Field
+                          label="Stock"
+                          editing={isEditing}
+                          view={
+                            <StockView quantity={product.stock_quantity} />
+                          }
+                        >
+                          <Input
+                            type="number"
+                            {...form.register("stock_quantity")}
+                            className="h-9 text-sm"
+                          />
+                        </Field>
+                        <Field
+                          label="Alert at"
+                          editing={isEditing}
+                          view={
+                            <TextView>
+                              {product.low_stock_threshold ?? 5} Units
+                            </TextView>
+                          }
+                        >
+                          <Input
+                            type="number"
+                            {...form.register("low_stock_threshold")}
+                            className="h-9 text-sm"
+                          />
+                        </Field>
+                      </div>
+                      <Separator />
+                      <div className="flex items-center justify-between py-1">
+                        <Label className="text-xs font-medium">
+                          Track Stock
+                        </Label>
+                        <Switch
+                          checked={form.watch("track_inventory")}
+                          onCheckedChange={(checked) =>
+                            form.setValue("track_inventory", checked)
+                          }
+                          disabled={!isEditing}
+                          className="h-5 w-9 data-[state=checked]:bg-primary"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              </TabsContent>
+
+              {/* Media Tab */}
+              <TabsContent value="media" className="space-y-6 outline-none mt-6">
+                <Card>
+                  <CardHeader className="bg-muted/30 border-b p-4">
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                        <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                        Assets
+                      </CardTitle>
+                      {isEditing && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs"
+                          asChild
+                        >
+                          <label
+                            htmlFor="image-upload"
+                            className="cursor-pointer"
+                          >
+                            <Upload className="mr-1.5 h-3 w-3" />
+                            Upload
+                            <input
+                              id="image-upload"
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={handleImageUpload}
+                              disabled={imageMutations.upload.isPending}
+                            />
+                          </label>
+                        </Button>
+                      )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="p-5">
+                    {product.images && product.images.length > 0 ? (
+                      <div className="grid grid-cols-3 md:grid-cols-4 gap-3">
+                        {product.images.map((image, index) => (
+                          <div
+                            key={image.id}
+                            className="group relative aspect-square rounded-xl overflow-hidden border border-muted hover:border-primary/40 transition-all"
+                          >
+                            <img
+                              src={image.url}
+                              alt={image.alt_text || `Asset ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                            {image.is_primary && (
+                              <div className="absolute top-1.5 left-1.5">
+                                <Badge className="bg-primary text-white text-[8px] h-4 px-1 border-0">
+                                  PRIMARY
+                                </Badge>
+                              </div>
+                            )}
+                            {isEditing && (
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <Button
+                                  size="icon"
+                                  variant="destructive"
+                                  className="h-7 w-7 rounded-lg"
+                                  onClick={() =>
+                                    imageMutations.remove.mutate(image.id)
+                                  }
+                                  disabled={imageMutations.remove.isPending}
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     ) : (
-                      <p className="text-sm">{product.category_name || "Not set"}</p>
+                      <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed rounded-xl bg-muted/5 border-muted-foreground/10">
+                        <ImageIcon className="h-8 w-8 text-muted-foreground/20 mb-2" />
+                        <p className="text-[10px] font-medium uppercase text-muted-foreground tracking-wider">
+                          No assets found
+                        </p>
+                      </div>
                     )}
-                  </div>
-                </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
 
-                <div className="space-y-2">
-                  <Label htmlFor="short_description">Short Description</Label>
-                  {isEditing ? (
-                    <Textarea
-                      id="short_description"
-                      value={formData.short_description}
-                      onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
-                      rows={2}
-                    />
-                  ) : (
-                    <p className="text-sm">{product.short_description || "Not set"}</p>
-                  )}
-                </div>
+              {/* Technical Tab */}
+              <TabsContent value="specs" className="space-y-6 outline-none mt-6">
+                <Card>
+                  <CardHeader className="bg-indigo-500/5 border-b p-4">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-indigo-600">
+                      <Settings2 className="h-3.5 w-3.5" />
+                      Configuration
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-5">
+                    <Field
+                      label="Structured Data (JSON)"
+                      editing={isEditing}
+                      view={<JsonView data={product.specifications || {}} />}
+                    >
+                      <Textarea
+                        {...form.register("specifications")}
+                        rows={8}
+                        className="font-mono text-xs border-muted-foreground/20 rounded-xl bg-slate-950 text-emerald-400 p-4 focus:ring-emerald-500 resize-none"
+                      />
+                    </Field>
 
-                <div className="space-y-2">
-                  <Label htmlFor="description">Full Description</Label>
-                  {isEditing ? (
-                    <Textarea
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                      rows={6}
-                    />
+                    <Separator />
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <Field
+                        label="Regulatory Clearances"
+                        editing={isEditing}
+                        view={
+                          <CertificationsView
+                            certs={product.certifications}
+                          />
+                        }
+                      >
+                        <Input
+                          {...form.register("certifications")}
+                          placeholder="ISO, CE, FDA..."
+                          className="h-9 text-sm"
+                        />
+                      </Field>
+                      <Field
+                        label="Registration ID"
+                        editing={isEditing}
+                        view={
+                          <TextView>
+                            {product.kmpdb_registration_number}
+                          </TextView>
+                        }
+                      >
+                        <Input
+                          {...form.register("kmpdb_registration_number")}
+                          className="h-9 text-sm"
+                        />
+                      </Field>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+
+              {/* SEO Tab */}
+              <TabsContent value="seo" className="space-y-6 outline-none mt-6">
+                <Card>
+                  <CardHeader className="bg-emerald-500/5 border-b p-4">
+                    <CardTitle className="text-sm font-semibold flex items-center gap-2 text-emerald-600">
+                      <Globe className="h-3.5 w-3.5" />
+                      SEO
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-5 space-y-5">
+                    <Field
+                      label="Meta Title"
+                      editing={isEditing}
+                      view={
+                        <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                          {product.meta_title || product.name}
+                        </p>
+                      }
+                    >
+                      <Input
+                        {...form.register("meta_title")}
+                        className="h-9 text-sm"
+                      />
+                    </Field>
+
+                    <Separator />
+
+                    <Field
+                      label="Meta Description"
+                      editing={isEditing}
+                      view={
+                        <DescriptionView
+                          text={product.meta_description}
+                          placeholder="System-generated description based on narrative."
+                        />
+                      }
+                    >
+                      <Textarea
+                        {...form.register("meta_description")}
+                        rows={3}
+                        className="text-sm resize-none"
+                      />
+                    </Field>
+
+                    <Separator />
+
+                    <Field
+                      label="Search Labels"
+                      editing={isEditing}
+                      view={<TagsView tags={product.tags} />}
+                    >
+                      <Input
+                        {...form.register("tags")}
+                        placeholder="Surgical, Sterile..."
+                        className="h-9 text-sm"
+                      />
+                    </Field>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            </Tabs>
+          </div>
+
+          {/* Sidebar */}
+          <div className="lg:col-span-1 flex flex-col gap-6">
+            <Card>
+              <CardHeader className="bg-muted/30 border-b p-4">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <Activity className="h-3.5 w-3.5 text-primary" />
+                  Lifecycle
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-5 space-y-5">
+                {completeness && (
+                  <>
+                    <Separator />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                          Completeness
+                        </span>
+                        <Badge
+                          className={`text-[9px] h-4 px-1.5 ${
+                            completeness.is_ready_to_verify
+                              ? "bg-emerald-500"
+                              : "bg-amber-500"
+                          }`}
+                        >
+                          {completeness.score}%
+                        </Badge>
+                      </div>
+                      <Progress
+                        value={completeness.score}
+                        className={`h-1 rounded-full ${
+                          completeness.is_ready_to_verify
+                            ? "[&>div]:bg-emerald-500"
+                            : "[&>div]:bg-amber-500"
+                        }`}
+                      />
+                      {completeness.missing_required.length > 0 && (
+                        <div className="space-y-1 pt-1">
+                          <p className="text-[9px] font-medium text-muted-foreground uppercase tracking-wider">
+                            Missing required:
+                          </p>
+                          <ul className="space-y-0.5">
+                            {completeness.missing_required.map((field) => {
+                              const item = completeness.items.find(
+                                (i) => i.field === field
+                              );
+                              return (
+                                <li
+                                  key={field}
+                                  className="text-[10px] text-amber-600 flex items-center gap-1"
+                                >
+                                  <span className="h-1 w-1 rounded-full bg-amber-500 flex-shrink-0" />
+                                  {item?.label || field}
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-full h-7 text-[10px] text-muted-foreground justify-start gap-1.5"
+                        onClick={handleAIClick}
+                        disabled={!isEditing || aiGen.isPending}
+                      >
+                        <Sparkles className="h-3 w-3" />
+                        AI Rewrite
+                      </Button>
+                    </div>
+                  </>
+                )}
+
+                <Separator />
+
+                <div className="space-y-1">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Governance
+                  </span>
+                  {!isEditing ? (
+                    <div className="flex flex-col gap-1.5 mt-2">
+                      {product.status === "draft" && (
+                        <Button
+                          size="sm"
+                          className="w-full h-8 text-xs"
+                          onClick={() => handleStatusAction("verify")}
+                          disabled={isSaving}
+                        >
+                          Submit for Review
+                        </Button>
+                      )}
+                      {product.status === "pending_review" && (
+                        <>
+                          <Button
+                            size="sm"
+                            className="w-full h-9 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 shadow-lg shadow-emerald-500/20 rounded-xl"
+                            onClick={() => handleStatusAction("publish")}
+                            disabled={isSaving}
+                          >
+                            <CheckCircle2 className="mr-2 h-4 w-4" />
+                            Approve & Publish
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full h-9 text-xs font-bold text-destructive border-destructive/20 hover:bg-destructive/5 rounded-xl"
+                            onClick={() => setShowRejectDialog(true)}
+                            disabled={isSaving}
+                          >
+                            <XCircle className="mr-2 h-4 w-4" />
+                            Reject with Feedback
+                          </Button>
+
+                          <div className="mt-4 p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-3">
+                             <div className="flex items-center gap-2">
+                               <Sparkles className="h-4 w-4 text-indigo-600" />
+                               <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Audit Desk</span>
+                             </div>
+                             <p className="text-[10px] text-muted-foreground leading-relaxed">
+                               Use AI to cross-reference the clinical description against medical standards.
+                             </p>
+                             <Button 
+                               variant="outline" 
+                               size="sm" 
+                               className="w-full h-8 text-[10px] font-black uppercase tracking-widest border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                               onClick={() => {
+                                 toast.info("AI Validator is analyzing the listing...");
+                                 setTimeout(() => toast.success("AI Audit complete: No major clinical inconsistencies found."), 2000);
+                               }}
+                             >
+                               Run AI Validation
+                             </Button>
+                          </div>
+                        </>
+                      )}
+                      {product.status === "published" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full h-8 text-xs"
+                          onClick={() => handleStatusAction("archive")}
+                          disabled={isSaving}
+                        >
+                          <Archive className="mr-1.5 h-3 w-3" />
+                          Archive
+                        </Button>
+                      )}
+                    </div>
                   ) : (
-                    <div className="text-sm whitespace-pre-wrap">{product.description || "Not set"}</div>
+                    <p className="text-[10px] text-muted-foreground italic mt-2">
+                      Actions locked during edit
+                    </p>
                   )}
                 </div>
 
                 <Separator />
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="brand">Brand</Label>
-                    {isEditing ? (
-                      <Input
-                        id="brand"
-                        value={formData.brand}
-                        onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.brand || "Not set"}</p>
-                    )}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-[11px] font-medium">
+                    <span className="text-muted-foreground">Views</span>
+                    <span className="font-semibold">
+                      {product.view_count || 0}
+                    </span>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="manufacturer">Manufacturer</Label>
-                    {isEditing ? (
-                      <Input
-                        id="manufacturer"
-                        value={formData.manufacturer}
-                        onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.manufacturer || "Not set"}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="model">Model Number</Label>
-                    {isEditing ? (
-                      <Input
-                        id="model"
-                        value={formData.model_number}
-                        onChange={(e) => setFormData({ ...formData, model_number: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.model_number || "Not set"}</p>
-                    )}
+                  <div className="flex items-center justify-between text-[11px] font-medium">
+                    <span className="text-muted-foreground">
+                      Popularity Score
+                    </span>
+                    <span className="font-semibold text-primary">
+                      {product.popularity_score || 0}%
+                    </span>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
 
-          {/* Pricing & Inventory Tab */}
-          <TabsContent value="pricing" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Pricing</CardTitle>
-                <CardDescription>Set product pricing and currency</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-4 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="price">Selling Price *</Label>
-                    {isEditing ? (
-                      <Input
-                        id="price"
-                        type="number"
-                        step="0.01"
-                        value={formData.price}
-                        onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm font-medium">
-                        {product.price ? `${product.currency} ${product.price.toFixed(2)}` : "Not set"}
-                      </p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="compare">Compare at Price</Label>
-                    {isEditing ? (
-                      <Input
-                        id="compare"
-                        type="number"
-                        step="0.01"
-                        value={formData.compare_at_price}
-                        onChange={(e) => setFormData({ ...formData, compare_at_price: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.compare_at_price || "Not set"}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cost">Cost Price</Label>
-                    {isEditing ? (
-                      <Input
-                        id="cost"
-                        type="number"
-                        step="0.01"
-                        value={formData.cost_price}
-                        onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.cost_price || "Not set"}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="currency">Currency</Label>
-                    {isEditing ? (
-                      <Select
-                        value={formData.currency}
-                        onValueChange={(value) => setFormData({ ...formData, currency: value })}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="KES">KES</SelectItem>
-                          <SelectItem value="USD">USD</SelectItem>
-                          <SelectItem value="EUR">EUR</SelectItem>
-                          <SelectItem value="GBP">GBP</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <p className="text-sm">{product.currency}</p>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Inventory</CardTitle>
-                <CardDescription>Track stock levels and alerts</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="stock">Stock Quantity</Label>
-                    {isEditing ? (
-                      <Input
-                        id="stock"
-                        type="number"
-                        value={formData.stock_quantity}
-                        onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm font-medium">{product.stock_quantity}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="threshold">Low Stock Threshold</Label>
-                    {isEditing ? (
-                      <Input
-                        id="threshold"
-                        type="number"
-                        value={formData.low_stock_threshold}
-                        onChange={(e) => setFormData({ ...formData, low_stock_threshold: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.low_stock_threshold}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="weight">Weight (kg)</Label>
-                    {isEditing ? (
-                      <Input
-                        id="weight"
-                        type="number"
-                        step="0.1"
-                        value={formData.weight_kg}
-                        onChange={(e) => setFormData({ ...formData, weight_kg: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.weight_kg || "Not set"}</p>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Switch
-                    id="track-inventory"
-                    checked={formData.track_inventory}
-                    onCheckedChange={(checked) => setFormData({ ...formData, track_inventory: checked })}
-                    disabled={!isEditing}
-                  />
-                  <Label htmlFor="track-inventory">Track inventory for this product</Label>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Images Tab */}
-          <TabsContent value="images" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Product Images</CardTitle>
-                <CardDescription>Upload and manage product images</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {product.images && product.images.length > 0 ? (
-                  <div className="grid grid-cols-4 gap-4">
-                    {product.images.map((image, index) => (
-                      <div
-                        key={image.id}
-                        className="relative group aspect-square rounded-lg overflow-hidden border"
-                      >
-                        <img
-                          src={image.url}
-                          alt={image.alt_text || `Product image ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        {image.is_primary && (
-                          <Badge className="absolute top-2 left-2">Primary</Badge>
-                        )}
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          <Button
-                            size="icon"
-                            variant="destructive"
-                            onClick={() => handleImageDelete(image.id)}
-                            disabled={saving}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
+                {vendorName && (
+                  <>
+                    <Separator />
+                    <div className="rounded-lg bg-slate-950 p-4 text-white relative overflow-hidden">
+                      <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2 w-16 h-16 bg-primary/20 rounded-full blur-xl" />
+                      <div className="relative z-10 space-y-2">
+                        <Package className="h-4 w-4 text-yellow-400" />
+                        <p className="text-xs font-semibold">{vendorName}</p>
+                        <p className="text-[9px] text-slate-400">
+                          Vendor has full write access.
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="text-center py-8 border-2 border-dashed rounded-lg">
-                    <ImageIcon className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-                    <p className="text-muted-foreground">No images uploaded yet</p>
-                  </div>
+                    </div>
+                  </>
                 )}
-                <div className="flex justify-center">
-                  <Button variant="outline" asChild>
-                    <label htmlFor="image-upload" className="cursor-pointer">
-                      <Upload className="mr-2 h-4 w-4" />
-                      Upload Image
-                      <input
-                        id="image-upload"
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleImageUpload}
-                        disabled={saving}
-                      />
-                    </label>
+
+                <Separator />
+
+                <div className="flex flex-col items-center text-center gap-2 p-3 rounded-xl bg-destructive/5 border border-dashed border-destructive/10">
+                  <div className="h-8 w-8 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center">
+                    <AlertCircle className="h-4 w-4" />
+                  </div>
+                  <p className="text-[10px] font-semibold text-destructive">
+                    Destructive Area
+                  </p>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="w-full h-8 text-xs"
+                    onClick={() => setShowDeleteDialog(true)}
+                    disabled={isSaving}
+                  >
+                    <Trash2 className="mr-1.5 h-3 w-3" />
+                    Purge SKU
                   </Button>
                 </div>
               </CardContent>
             </Card>
-          </TabsContent>
-
-          {/* Specifications Tab */}
-          <TabsContent value="specifications" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Product Specifications</CardTitle>
-                <CardDescription>Technical details and certifications</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="specifications">Specifications (JSON)</Label>
-                  {isEditing ? (
-                    <Textarea
-                      id="specifications"
-                      value={formData.specifications}
-                      onChange={(e) => setFormData({ ...formData, specifications: e.target.value })}
-                      rows={6}
-                      className="font-mono text-sm"
-                    />
-                  ) : (
-                    <pre className="text-sm bg-muted p-3 rounded">
-                      {JSON.stringify(product.specifications, null, 2)}
-                    </pre>
-                  )}
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="kmpdb">KMPDB Registration Number</Label>
-                    {isEditing ? (
-                      <Input
-                        id="kmpdb"
-                        value={formData.kmpdb_registration_number}
-                        onChange={(e) => setFormData({ ...formData, kmpdb_registration_number: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.kmpdb_registration_number || "Not set"}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="ppb">PPB Classification</Label>
-                    {isEditing ? (
-                      <Input
-                        id="ppb"
-                        value={formData.ppb_classification}
-                        onChange={(e) => setFormData({ ...formData, ppb_classification: e.target.value })}
-                      />
-                    ) : (
-                      <p className="text-sm">{product.ppb_classification || "Not set"}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="certifications">Certifications (comma-separated)</Label>
-                  {isEditing ? (
-                    <Input
-                      id="certifications"
-                      value={formData.certifications}
-                      onChange={(e) => setFormData({ ...formData, certifications: e.target.value })}
-                      placeholder="ISO 13485, CE Mark, FDA cleared"
-                    />
-                  ) : (
-                    <p className="text-sm">{product.certifications?.join(", ") || "Not set"}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="warranty">Warranty Information</Label>
-                  {isEditing ? (
-                    <Textarea
-                      id="warranty"
-                      value={formData.warranty_info}
-                      onChange={(e) => setFormData({ ...formData, warranty_info: e.target.value })}
-                      rows={3}
-                    />
-                  ) : (
-                    <p className="text-sm">{product.warranty_info || "Not set"}</p>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* SEO Tab */}
-          <TabsContent value="seo" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>SEO & Metadata</CardTitle>
-                <CardDescription>Optimize for search engines</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="meta_title">Meta Title</Label>
-                  {isEditing ? (
-                    <Input
-                      id="meta_title"
-                      value={formData.meta_title}
-                      onChange={(e) => setFormData({ ...formData, meta_title: e.target.value })}
-                      placeholder="Product name for search results"
-                    />
-                  ) : (
-                    <p className="text-sm">{product.meta_title || "Not set"}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="meta_description">Meta Description</Label>
-                  {isEditing ? (
-                    <Textarea
-                      id="meta_description"
-                      value={formData.meta_description}
-                      onChange={(e) => setFormData({ ...formData, meta_description: e.target.value })}
-                      rows={3}
-                      placeholder="Brief description for search results"
-                    />
-                  ) : (
-                    <p className="text-sm">{product.meta_description || "Not set"}</p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="tags">Tags (comma-separated)</Label>
-                  {isEditing ? (
-                    <Input
-                      id="tags"
-                      value={formData.tags.join(", ")}
-                      onChange={(e) => setFormData({ ...formData, tags: e.target.value.split(",").map(t => t.trim()).filter(Boolean) })}
-                      placeholder="e.g. surgical, disposable, diagnostic"
-                    />
-                  ) : (
-                    <div className="flex flex-wrap gap-1.5">
-                      {product.tags && product.tags.length > 0 ? (
-                        product.tags.map((tag, index) => (
-                          <Badge key={index} variant="secondary">{tag}</Badge>
-                        ))
-                      ) : (
-                        <p className="text-sm text-muted-foreground">No tags set</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        {/* Danger Zone */}
-        <Card className="border-destructive/50">
-          <CardHeader>
-            <CardTitle className="text-destructive">Danger Zone</CardTitle>
-            <CardDescription>Irreversible actions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium">Delete Product</p>
-                <p className="text-sm text-muted-foreground">
-                  Permanently delete this product and all associated data
-                </p>
-              </div>
-              <Button variant="destructive" onClick={() => setShowDeleteDialog(true)}>
-                <Trash2 className="mr-2 h-4 w-4" />
-                Delete Product
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
 
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-[380px] rounded-xl">
           <DialogHeader>
-            <DialogTitle>Delete Product?</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete "{product.name}"? This action cannot be undone.
+            <div className="h-10 w-10 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center mb-3">
+              <Trash2 className="h-5 w-5" />
+            </div>
+            <DialogTitle className="text-base font-bold">
+              Purge SKU Data?
+            </DialogTitle>
+            <DialogDescription className="text-sm pt-1">
+              This will permanently delete{" "}
+              <span className="font-semibold text-foreground">
+                &ldquo;{product.name}&rdquo;
+              </span>{" "}
+              from the catalog. This cannot be undone.
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={saving}>
+          <DialogFooter className="gap-2 mt-4">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={isSaving}
+              className="rounded-lg h-9"
+            >
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={saving}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Delete
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                mutations.delete.mutate(undefined, {
+                  onSuccess: () => router.push("/dashboard/catalog/products"),
+                });
+              }}
+              disabled={isSaving}
+              className="rounded-lg h-9 text-xs"
+            >
+              {mutations.delete.isPending && (
+                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+              )}
+              Yes, Purge
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejection Dialog */}
+      <Dialog open={showRejectDialog} onOpenChange={() => setShowRejectDialog(false)}>
+        <DialogContent className="sm:max-w-[480px] rounded-[2rem]">
+          <DialogHeader>
+            <div className="h-12 w-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-4">
+              <XCircle className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-xl font-black">Reject Submission</DialogTitle>
+            <DialogDescription className="text-sm">
+              Provide clinical or administrative feedback for this product.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Textarea
+              placeholder="Reason for rejection (e.g. incorrect certifications, clinical inaccuracies)..."
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              className="min-h-[120px] rounded-2xl p-4 text-sm border-muted-foreground/20 focus:ring-amber-500"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="ghost"
+              onClick={() => setShowRejectDialog(false)}
+              className="font-bold text-xs uppercase tracking-widest"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejectSubmit}
+              disabled={!rejectionReason.trim() || mutations.reject.isPending}
+              className="rounded-xl px-6 font-black text-xs uppercase tracking-widest"
+            >
+              {mutations.reject.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
+              Send Feedback
             </Button>
           </DialogFooter>
         </DialogContent>

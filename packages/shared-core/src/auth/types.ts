@@ -101,7 +101,9 @@ export interface ConfirmEmailChangeData {
 }
 
 export interface DeleteAccountData {
-  confirmation: string;
+  password?: string;
+  confirm?: boolean;
+  confirmation?: string;
 }
 
 export interface VendorRegisterRequest {

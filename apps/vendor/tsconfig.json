@@ -1,7 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "types": [
+      "vitest/globals",
+      "google.maps"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,7 +27,29 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/components/*": [
+        "./components/*",
+        "../../packages/shared-ui/src/components/*"
+      ],
+      "@/providers/*": [
+        "./providers/*",
+        "../../packages/shared-ui/src/providers/*"
+      ],
+      "@/lib/*": [
+        "./lib/*",
+        "../../packages/shared-core/src/lib/*"
+      ],
+      "@/hooks/*": [
+        "./hooks/*",
+        "../../packages/shared-core/src/lib/hooks/*"
+      ],
+      "@/types/*": [
+        "./types/*",
+        "../../packages/shared-core/src/lib/data/types.ts"
+      ],
+      "@/*": [
+        "./*"
+      ]
     }
   },
   "include": [
@@ -27,8 +57,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }

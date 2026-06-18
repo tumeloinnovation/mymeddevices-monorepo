@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-1.5-pro"
     UPLOAD_DIR: str = "static/uploads/products"
+    AVATAR_UPLOAD_DIR: str = "static/uploads/avatars"
 
     # Typesense Settings
     TYPESENSE_HOST: str = "localhost"
@@ -81,11 +82,17 @@ class Settings(BaseSettings):
     TYPESENSE_PROTOCOL: str = "http"
     TYPESENSE_API_KEY: str = ""
 
+    # Google Maps API Settings
+    GOOGLE_MAPS_API_KEY: Optional[str] = None
+
     # Redis (Rate Limiting)
     REDIS_URL: Optional[str] = "redis://localhost:6379/0"
 
     # Request size limits (Default: 10MB)
     MAX_CONTENT_LENGTH: int = 10 * 1024 * 1024
+
+    # Site URL (for email templates, etc.)
+    SITE_URL: Optional[str] = None
 
     model_config = {
         "env_file": env_file,

@@ -20,7 +20,8 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { ChevronsUpDownIcon, SparklesIcon, BadgeCheckIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import { ChevronsUpDownIcon, UserIcon, SettingsIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
+import Link from "next/link"
 
 export function NavUser({
   user,
@@ -33,6 +34,37 @@ export function NavUser({
 }) {
   const { isMobile } = useSidebar()
 
+  const listItems = [
+    {
+      icon: <UserIcon />,
+      property: "Profile",
+      href: "/account/profile",
+    },
+    {
+      icon: <SettingsIcon />,
+      property: "Settings",
+      href: "/account/settings",
+    },
+    {
+      icon: <CreditCardIcon />,
+      property: "Billing",
+      href: "/account/billing",
+    },
+    {
+      icon: <BellIcon />,
+      property: "Notifications",
+      href: "/account/notifications",
+    },
+    {
+      icon: <LogOutIcon />,
+      property: "Sign Out",
+      href: "#",
+      onClick: () => {
+        // Handle sign out logic here
+      },
+    },
+  ]
+
   return (
     <SidebarMenu>
       <SidebarMenuItem>
@@ -44,7 +76,7 @@ export function NavUser({
             >
               <Avatar className="h-8 w-8 rounded-lg">
                 <AvatarImage src={user.avatar} alt={user.name} />
-                <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                <AvatarFallback className="rounded-lg">{user.name?.charAt(0).toUpperCase()}</AvatarFallback>
               </Avatar>
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <span className="truncate font-medium">{user.name}</span>
@@ -63,7 +95,7 @@ export function NavUser({
               <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
                 <Avatar className="h-8 w-8 rounded-lg">
                   <AvatarImage src={user.avatar} alt={user.name} />
-                  <AvatarFallback className="rounded-lg">CN</AvatarFallback>
+                  <AvatarFallback className="rounded-lg">{user.name?.charAt(0).toUpperCase()}</AvatarFallback>
                 </Avatar>
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">{user.name}</span>
@@ -73,36 +105,26 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <SparklesIcon
-                />
-                Upgrade to Pro
-              </DropdownMenuItem>
+              {listItems.map((item, index) => (
+                <DropdownMenuItem
+                  key={index}
+                  className="*:[svg]:text-muted-foreground"
+                  onClick={item.onClick}
+                >
+                  {item.href !== "#" ? (
+                    <Link href={item.href} className="flex items-center gap-2 w-full">
+                      {item.icon}
+                      <span className="text-popover-foreground">{item.property}</span>
+                    </Link>
+                  ) : (
+                    <>
+                      {item.icon}
+                      <span className="text-popover-foreground">{item.property}</span>
+                    </>
+                  )}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <BadgeCheckIcon
-                />
-                Account
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <CreditCardIcon
-                />
-                Billing
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <BellIcon
-                />
-                Notifications
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <LogOutIcon
-              />
-              Log out
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </SidebarMenuItem>

@@ -1,0 +1,76 @@
+<mjml>
+  <mj-head>
+    <mj-include path="../components/head.mjml" />
+    <mj-style inline="inline">
+      .order-table th {
+        font-size: 13px;
+        font-weight: 600;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        text-align: left;
+        padding: 10px 8px;
+        border-bottom: 1px solid #e2e8f0;
+      }
+      .order-table td {
+        font-size: 15px;
+        color: #475569;
+        padding: 10px 8px;
+        border-bottom: 1px solid #f1f5f9;
+      }
+    </mj-style>
+  </mj-head>
+  <mj-body background-color="#f4f6f8">
+    <mj-wrapper padding="32px 16px">
+      <mj-include path="../components/header.mjml" />
+      
+      <mj-section padding="36px 32px 12px">
+        <mj-column>
+          <mj-text mj-class="h1">Order Confirmed</mj-text>
+          <mj-text>Hi {{ user_name }}, thank you for your order. Your medical devices have been confirmed and are being processed.</mj-text>
+        </mj-column>
+      </mj-section>
+
+      <mj-section padding="0 32px">
+        <mj-column background-color="#f8fafc" border="1px solid #e2e8f0" border-radius="8px" padding="20px">
+          <mj-text padding="0 0 6px"><span style="font-weight: 600; color: #053D7A;">Order ID:</span> {{ order_id }}</mj-text>
+          <mj-text padding="0 0 6px"><span style="font-weight: 600; color: #053D7A;">Order Date:</span> {{ order_date }}</mj-text>
+          <mj-text padding="0"><span style="font-weight: 600; color: #053D7A;">Estimated Delivery:</span> {{ estimated_delivery }}</mj-text>
+        </mj-column>
+      </mj-section>
+
+      <mj-section padding="20px 32px 0">
+        <mj-column>
+          <mj-table css-class="order-table" padding="0">
+            <thead>
+              <tr>
+                <th style="text-align: left;">Item</th>
+                <th style="text-align: left;">Qty</th>
+                <th style="text-align: right;">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in items %}
+              <tr>
+                <td style="text-align: left;">{{ item.name }}</td>
+                <td style="text-align: left;">{{ item.qty }}</td>
+                <td style="text-align: right;">{{ item.price }}</td>
+              </tr>
+              {% endfor %}
+              <tr>
+                <td colspan="2" style="font-weight: 700; color: #053D7A; border-bottom: none; padding-top: 12px; font-size: 16px; text-align: left;">Total</td>
+                <td style="font-weight: 700; color: #053D7A; border-bottom: none; padding-top: 12px; font-size: 16px; text-align: right;">{{ total }}</td>
+              </tr>
+            </tbody>
+          </mj-table>
+
+          <mj-button href="{{ track_url }}" padding-top="24px">
+            Track Order
+          </mj-button>
+        </mj-column>
+      </mj-section>
+
+      <mj-include path="../components/footer.mjml" />
+    </mj-wrapper>
+  </mj-body>
+</mjml>

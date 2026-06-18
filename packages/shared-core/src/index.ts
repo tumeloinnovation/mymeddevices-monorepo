@@ -1,3 +1,4 @@
+export { ShopFiltersProvider } from './lib/context/ShopFiltersContext';
 export * from './auth/types';
 export * from './auth/store';
 export * from './auth/guards';
@@ -5,6 +6,11 @@ export * from './types/catalog';
 export * from './services/api-client';
 export * from './services/catalog-service';
 export * from './services/vendor-service';
+export * from './services/shopping-service';
+export * from './services/users-service';
+export * from './types/users';
 export { ErrorBoundary } from './error-boundary';
 export * from './loading';
 export { SkipNav } from './skip-nav';
+export * from './lib/utils/utils';
+export { useCheckoutAuthStore } from './lib/store/useAuthStore';

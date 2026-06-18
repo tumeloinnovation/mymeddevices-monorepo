@@ -9,9 +9,14 @@ import time
 import sys
 import uuid
 from collections import defaultdict, deque
-from fastapi import Request, HTTPException, status
+from typing import Optional, TYPE_CHECKING
+from fastapi import Request, HTTPException, status, Depends
 from app.core.logging import logger
 from app.core.config import settings
+from app.core.database import get_db
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 class RateLimiter:
     """
@@ -24,13 +29,16 @@ class RateLimiter:
         # Store for in-memory fallback: {identifier: deque of (timestamp, count)}
         self._requests: defaultdict[str, deque[tuple[float, int]]] = defaultdict(deque)
         # Configuration: {endpoint_key: (max_requests, window_seconds)}
-        self._limits = {
+        self._default_limits = {
             "login": (5, 300),  # 5 requests per 5 minutes
             "register": (3, 3600),  # 3 requests per hour
             "otp": (5, 300),  # 5 OTP requests per 5 minutes
             "password_reset": (3, 3600),  # 3 password resets per hour
             "guest_login": (10, 3600),  # 10 guest logins per hour
         }
+        self._limits = self._default_limits.copy()
+        self._last_refresh = 0
+        self._refresh_interval = 60  # Refresh limits from DB every 60 seconds
         self.redis_client = None
 
         # Check if running under test
@@ -54,6 +62,29 @@ class RateLimiter:
                 logger.info("Redis rate limiting storage initialized.")
             except Exception as e:
                 logger.warning(f"Failed to initialize Redis for rate limiting: {e}. Falling back to in-memory.")
+
+    async def refresh_if_needed(self, db: Optional["AsyncSession"] = None) -> None:
+        """Refresh limits from database if interval has passed."""
+        if db is None:
+            return
+
+        current_time = time.time()
+        if current_time - self._last_refresh < self._refresh_interval:
+            return
+
+        try:
+            from app.domains.admin.services import SystemSettingService
+            db_limits = await SystemSettingService.get_setting(db, "rate_limits")
+            if db_limits:
+                # Convert list [max, window] to tuple (max, window)
+                self._limits = {k: tuple(v) for k, v in db_limits.items()}
+                self._last_refresh = current_time
+                logger.debug("Rate limits refreshed from database.")
+        except Exception as e:
+            logger.error(f"Failed to refresh rate limits from DB: {e}")
+            # Fallback to defaults if something goes wrong and we have no limits
+            if not self._limits:
+                self._limits = self._default_limits.copy()
 
     def _clean_old_requests(self, identifier: str, window_seconds: int, current_time: float) -> None:
         """Remove requests outside the time window (In-Memory fallback only)"""
@@ -211,7 +242,8 @@ async def get_identifier(request: Request, endpoint_type: str) -> str:
 async def check_rate_limit(
     request: Request,
     endpoint_type: str,
-    identifier: str | None = None
+    identifier: str | None = None,
+    db: Optional["AsyncSession"] = None
 ) -> None:
     """
     Check rate limit and raise exception if exceeded.
@@ -220,12 +252,13 @@ async def check_rate_limit(
         request: FastAPI request
         endpoint_type: Type of endpoint (login, register, etc.)
         identifier: Optional custom identifier (overrides automatic detection)
-
-    Raises:
-        HTTPException 429 if rate limit exceeded
+        db: Optional database session for refreshing limits
     """
     if identifier is None:
         identifier = await get_identifier(request, endpoint_type)
+
+    # Refresh limits if needed
+    await rate_limiter.refresh_if_needed(db)
 
     allowed, info = await rate_limiter.is_allowed(identifier, endpoint_type)
 
@@ -255,5 +288,5 @@ class RateLimiterDependency:
     def __init__(self, endpoint_type: str):
         self.endpoint_type = endpoint_type
 
-    async def __call__(self, request: Request) -> None:
-        await check_rate_limit(request, self.endpoint_type)
+    async def __call__(self, request: Request, db: "AsyncSession" = Depends(get_db)) -> None:
+        await check_rate_limit(request, self.endpoint_type, db=db)

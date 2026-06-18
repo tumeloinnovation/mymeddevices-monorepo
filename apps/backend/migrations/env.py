@@ -18,7 +18,14 @@ if config.config_file_name is not None:
 from app.core.database import Base
 from app.domains.auth.models import User, RefreshToken, UserDevice, OTP
 from app.domains.vendor.models import VendorProfile
-from app.domains.catalog.models import Category, Product, ProductImage, ProductVariant
+from app.domains.customers.models import CustomerProfile, Address, WishlistItem, Review
+from app.domains.catalog.models import Category, Product, ProductImage, ProductVariant, Brand, Tag
+from app.domains.shopping.models import Cart, CartItem, Coupon, CartDiscount, CartMergeLog, CartShare, SavedCart
+from app.domains.admin.models import SystemSetting
+from app.domains.payments.models import Transaction, PaymentCallback, PaymentMethod, Refund, SavedPaymentMethod
+from app.domains.tickets.models import Ticket, TicketReply
+from app.domains.returns.models import ReturnRequest
+from app.domains.customers.models.loyalty_ledger import LoyaltyLedger
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:

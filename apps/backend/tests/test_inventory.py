@@ -95,3 +95,50 @@ async def test_checkout_deducts_stock_and_updates_status(
     await db.refresh(published_product)
     assert published_product.stock_quantity == 0
     assert published_product.stock_status == "outofstock"
+
+@pytest.mark.asyncio
+async def test_cumulative_stock_deduction(
+    client: AsyncClient, 
+    customer_token: str, 
+    published_product: Product,
+    db: AsyncSession
+):
+    # Set stock to 10
+    published_product.stock_quantity = 10
+    published_product.stock_status = "instock"
+    await db.commit()
+    
+    headers = {"Authorization": f"Bearer {customer_token}"}
+    
+    # Place 3 orders of 2 items each
+    for i in range(3):
+        # 1. Get or create cart
+        response = await client.get("/api/v1/shopping/cart/my", headers=headers)
+        assert response.status_code == 200
+        cart_id = response.json()["data"]["id"]
+        
+        # 2. Add 2 items
+        add_payload = {
+            "product_id": str(published_product.id),
+            "quantity": 2
+        }
+        add_resp = await client.post("/api/v1/shopping/cart/items", json=add_payload, headers=headers)
+        assert add_resp.status_code == 200
+        
+        # 3. Perform Checkout
+        checkout_payload = {
+            "cart_id": cart_id,
+            "shipping_address": {
+                "full_name": "Test Customer",
+                "address_line1": "123 Medical Way",
+                "city": "Nairobi",
+                "country": "Kenya"
+            }
+        }
+        checkout_resp = await client.post("/api/v1/shopping/checkout", json=checkout_payload, headers=headers)
+        assert checkout_resp.status_code == 201
+
+    # 4. Verify stock is reduced by 6 (3 * 2)
+    await db.refresh(published_product)
+    assert published_product.stock_quantity == 4
+    assert published_product.stock_status == "instock"

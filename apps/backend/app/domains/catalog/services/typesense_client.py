@@ -191,6 +191,8 @@ class TypesenseClient:
                 {"name": "dimensions", "type": "string", "optional": True},
                 {"name": "specifications", "type": "string", "optional": True},
                 {"name": "certifications", "type": "string", "optional": True},
+                {"name": "status", "type": "string", "facet": True},
+                {"name": "is_deleted", "type": "bool", "facet": True},
                 {"name": "created_at", "type": "int64"}
             ],
             "default_sorting_field": "popularity_score"
@@ -257,6 +259,8 @@ class TypesenseClient:
             "dimensions": json.dumps(product.dimensions) if product.dimensions else None,
             "specifications": json.dumps(product.specifications) if product.specifications else None,
             "certifications": json.dumps(product.certifications) if product.certifications else None,
+            "status": product.status,
+            "is_deleted": bool(product.is_deleted),
             "created_at": int(product.created_at.timestamp()) if product.created_at else int(datetime.utcnow().timestamp())
         }
 
@@ -297,7 +301,7 @@ class TypesenseClient:
             return [], 0
 
         # Construct filters
-        filter_parts = []
+        filter_parts = ["status:=published", "is_deleted:=false"]
         if category_id:
             filter_parts.append(f"category_id:={category_id}")
         if category_slug:

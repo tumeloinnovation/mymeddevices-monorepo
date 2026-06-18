@@ -1,0 +1,10 @@
+<mj-section padding="28px 32px 12px" background-color="#ffffff">
+  <mj-column>
+    <mj-image src="{{ logo_url }}" alt="MyMedDevices" width="180px" href="{{ site_url }}" />
+  </mj-column>
+</mj-section>
+<mj-section padding="0">
+  <mj-column>
+    <mj-divider border-width="4px" border-color="#EF6C24" padding="0" />
+  </mj-column>
+</mj-section>

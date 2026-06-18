@@ -1,0 +1,874 @@
+# Instructions
+
+- Following Playwright test failed.
+- Explain why, be concise, respect Playwright best practices.
+- Provide a snippet of code with the fix, if possible.
+
+# Test info
+
+- Name: navbar.spec.ts >> Navbar User Dropdown >> should show enhanced dropdown menu when authenticated
+- Location: e2e/navbar.spec.ts:4:7
+
+# Error details
+
+```
+Test timeout of 30000ms exceeded.
+```
+
+```
+Error: page.click: Test timeout of 30000ms exceeded.
+Call log:
+  - waiting for locator('button[type="submit"]')
+    - locator resolved to 2 elements. Proceeding with the first one: <button type="submit" data-slot="button" data-size="default" data-variant="default" class="group/button inline-flex shrink-0 items-center justify-center rounded-lg border border-transparent bg-clip-padding text-sm font-medium whitespace-nowrap outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 active:not-aria-[haspopup]:translate-y-px disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-de…>Subscribe</button>
+  - attempting click action
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div data-state="open" aria-hidden="true" data-aria-hidden="true" data-slot="dialog-overlay" class="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50"></div> intercepts pointer events
+    - retrying click action
+    - waiting 20ms
+    2 × waiting for element to be visible, enabled and stable
+      - element is visible, enabled and stable
+      - scrolling into view if needed
+      - done scrolling
+      - <div data-state="open" aria-hidden="true" data-aria-hidden="true" data-slot="dialog-overlay" class="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50"></div> intercepts pointer events
+    - retrying click action
+      - waiting 100ms
+    22 × waiting for element to be visible, enabled and stable
+       - element is visible, enabled and stable
+       - scrolling into view if needed
+       - done scrolling
+       - <div data-state="open" aria-hidden="true" data-aria-hidden="true" data-slot="dialog-overlay" class="data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 fixed inset-0 z-50 bg-black/50"></div> intercepts pointer events
+     - retrying click action
+       - waiting 500ms
+    - waiting for element to be visible, enabled and stable
+
+```
+
+# Page snapshot
+
+```yaml
+- generic:
+  - main:
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - link:
+              - /url: /about-us
+              - text: About Us
+            - link:
+              - /url: /offers
+              - text: Offers
+            - link:
+              - /url: /return-policy
+              - text: Returns & Refunds
+            - link:
+              - /url: /contact-us
+              - text: Contact Us
+          - generic:
+            - link:
+              - /url: https://www.instagram.com/mymedevices/
+              - img
+            - link:
+              - /url: https://www.facebook.com/profile.php?id=61581546818170
+              - img
+            - link:
+              - /url: https://twitter.com/mymeddevicesltd
+              - img
+            - link:
+              - /url: https://vm.tiktok.com/ZMA3sMq5S/
+              - img
+            - link:
+              - /url: https://api.whatsapp.com/send?phone=254735239696&text=MyMedDevices%0AHello!%20I'm%20interested%20in%20your%20medical%20devices.%20Can%20you%20help%20me%3F
+              - img
+            - link:
+              - /url: https://www.linkedin.com/company/my-med-device-ltd/
+              - img
+            - link:
+              - /url: https://www.youtube.com/@mymeddevices
+              - img
+            - button:
+              - img
+      - generic:
+        - generic:
+          - link:
+            - /url: /
+            - img
+          - link:
+            - /url: tel:+254734585958
+            - img
+            - generic:
+              - paragraph: Call us
+              - paragraph: +254 707 757 088
+        - generic:
+          - generic:
+            - generic:
+              - textbox:
+                - /placeholder: Search for Medicines and Health Products
+              - generic:
+                - button:
+                  - img
+        - generic:
+          - generic:
+            - generic:
+              - img
+              - generic: Compare
+            - generic:
+              - img
+              - generic: Wishlist
+            - generic:
+              - img
+              - generic: Cart
+            - generic:
+              - img
+              - generic: Login
+      - generic:
+        - generic:
+          - generic:
+            - navigation:
+              - generic:
+                - list:
+                  - listitem:
+                    - button:
+                      - text: Shop by Category
+                      - img
+                  - listitem:
+                    - button:
+                      - text: Featured Products
+                      - img
+                  - listitem:
+                    - button:
+                      - text: New Arrivals
+                      - img
+                  - listitem:
+                    - link:
+                      - /url: /products
+                      - text: Shop
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic: BEST SELLER
+              - paragraph: Foldable and durable design
+              - img
+            - heading [level=1]: Pediatric Wheelchair
+            - paragraph: BT973-35/BA021
+            - paragraph: Starts from
+            - paragraph: KSh 13,000
+            - link:
+              - /url: /products/wheelchair-peadiatric-bt973-35-ba021
+              - text: SHOP NOW
+          - generic:
+            - generic:
+              - img
+          - generic:
+            - button
+            - button
+            - button
+        - generic:
+          - generic:
+            - generic:
+              - heading [level=3]: Mobility Solutions
+              - link:
+                - /url: /categories/mobility-rehabilitation-aids
+                - text: View more
+                - img
+            - generic:
+              - img
+          - generic:
+            - generic:
+              - heading [level=3]: Diagnostic Equipment
+              - paragraph: Up to 20% Discount
+              - link:
+                - /url: /categories/diagnostic-devices
+                - text: View more
+                - img
+            - generic:
+              - img
+    - main:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - heading [level=2]: Special Offers
+                - generic:
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - paragraph: Discover exclusive deals and discounts on our top products. Limited-time offers you don't want to miss!
+          - generic:
+            - img
+            - paragraph: No products found.
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - heading [level=2]: Trending Now
+                - generic:
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - paragraph: Discover what other healthcare professionals are buying right now.
+          - generic:
+            - img
+            - paragraph: No products found.
+      - generic:
+        - generic:
+          - generic:
+            - heading [level=1]: Medical devices for care teams and home patients.
+            - paragraph: Browse certified devices, compare specs, and get same-day shipping on select items. Trusted by clinics and caregivers across the region.
+            - generic:
+              - generic: Search devices
+              - generic:
+                - generic:
+                  - img
+                  - textbox:
+                    - /placeholder: Search devices, e.g. blood pressure monitor
+              - generic:
+                - button: Shop Now
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                - generic:
+                  - generic: Express delivery
+                  - generic: Same day if ordered by 7pm
+              - generic:
+                - generic:
+                  - img
+                - generic:
+                  - generic: Customer Support
+                  - generic: 7 days a week
+              - generic:
+                - generic:
+                  - img
+                - generic:
+                  - generic: Genuine Products
+                  - generic: 100% certified
+              - generic:
+                - generic:
+                  - img
+                - generic:
+                  - generic: Easy Payments
+                  - generic: M-Pesa, Visa, MasterCard
+          - generic:
+            - generic:
+              - img
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - heading [level=2]: Featured Products
+                - generic:
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - paragraph: Hand-picked medical devices and equipment curated for quality and reliability.
+          - generic:
+            - img
+            - paragraph: No products found.
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - heading [level=2]: New Arrivals
+                - generic:
+                  - button:
+                    - img
+                  - button:
+                    - img
+              - paragraph: Be the first to explore our latest medical technology and equipment.
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: SMART WATCH MONITOR
+                  - generic:
+                    - paragraph: Ksh. 12,800
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: INFRA RED THERMOMETER JA 11S
+                  - generic:
+                    - paragraph: Ksh. 1,920
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: Glucose meter AC303
+                  - generic:
+                    - paragraph: Ksh. 1,999.36
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: INFRA RED THERMOMETER JA 11C
+                  - generic:
+                    - paragraph: Ksh. 1,920
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: CLINICAL ELECTRONIC THERMOMETER FLEXIBLE TIP JA-12A
+                  - generic:
+                    - paragraph: Ksh. 208
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: CLINICAL ELECTRONIC THERMOMETER FIRM TIP JA-12A
+                  - generic:
+                    - paragraph: Ksh. 208
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: Digital Personal Weighing Scale
+                  - generic:
+                    - paragraph: Ksh. 3,200
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: YASEE TYPE BLOOD PRESSURE MONITOR JN-163B
+                  - generic:
+                    - paragraph: Ksh. 6,144
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: TEMPERATURE AND HUMIDITY DATA LOGGER
+                  - generic:
+                    - paragraph: Ksh. 15,000
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                  - generic:
+                    - generic: ★
+                    - generic: "4.5"
+                    - generic: (24)
+                  - generic:
+                    - button:
+                      - img
+                    - button:
+                      - img
+                    - button:
+                      - img
+                - generic:
+                  - generic:
+                    - heading [level=3]: Wrist & Forearm Brace - Universal
+                  - generic:
+                    - paragraph: Ksh. 1,920
+                  - generic:
+                    - generic:
+                      - generic:
+                        - button:
+                          - img
+                          - text: Add to cart
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - heading [level=2]: Shop By Categories
+              - generic:
+                - button:
+                  - img
+                - button:
+                  - img
+            - paragraph: Check out all the feature categories for simple product discovery.
+          - generic:
+            - link:
+              - /url: /categories/monitoring-devices
+              - generic:
+                - img
+              - heading [level=3]: Monitoring Devices
+              - generic: 24 items
+            - link:
+              - /url: /categories/mobility-rehabilitation-aids
+              - generic:
+                - img
+              - heading [level=3]: Mobility & Rehabilitation Aids
+              - generic: 18 items
+            - link:
+              - /url: /categories/respiratory-equipment
+              - generic:
+                - img
+              - heading [level=3]: Respiratory Equipment
+              - generic: 12 items
+            - link:
+              - /url: /categories/diagnostic-devices
+              - generic:
+                - img
+              - heading [level=3]: Diagnostic Devices
+              - generic: 15 items
+            - link:
+              - /url: /categories/home-care-equipment
+              - generic:
+                - img
+              - heading [level=3]: Home Care Equipment
+              - generic: 10 items
+            - link:
+              - /url: /categories/orthotics-braces
+              - generic:
+                - img
+              - heading [level=3]: Orthotics & Braces
+              - generic: 14 items
+            - link:
+              - /url: /categories/blood-pressure-monitors
+              - generic:
+                - img
+              - heading [level=3]: Blood Pressure Monitors
+              - generic: 8 items
+            - link:
+              - /url: /categories/glucose-monitors
+              - generic:
+                - img
+              - heading [level=3]: Glucose Monitors
+              - generic: 6 items
+            - link:
+              - /url: /categories/pulse-oximeters
+              - generic:
+                - img
+              - heading [level=3]: Pulse Oximeters
+              - generic: 5 items
+            - link:
+              - /url: /categories/thermometers
+              - generic:
+                - img
+              - heading [level=3]: Thermometers
+              - generic: 5 items
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - img
+            - generic: Newsletter
+          - heading [level=2]: Stay in the Loop
+          - paragraph: Subscribe to receive new arrivals, special offers, and updates directly in your inbox.
+        - generic:
+          - generic:
+            - textbox:
+              - /placeholder: Enter your email
+            - button: Subscribe
+          - paragraph: We respect your privacy. Unsubscribe anytime.
+    - generic:
+      - generic:
+        - generic:
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - img
+                - paragraph: Your trusted pharmaceutical partner, providing quality health solutions for everyone.
+                - generic:
+                  - link:
+                    - /url: https://www.instagram.com/mymedevices/
+                    - img
+                  - link:
+                    - /url: https://www.facebook.com/profile.php?id=61581546818170
+                    - img
+                  - link:
+                    - /url: https://twitter.com/mymeddevicesltd
+                    - img
+                  - link:
+                    - /url: https://vm.tiktok.com/ZMA3sMq5S/
+                    - img
+                  - link:
+                    - /url: https://api.whatsapp.com/send?phone=254735239696&text=MyMedDevices%0AHello!%20I'm%20interested%20in%20your%20medical%20devices.%20Can%20you%20help%20me%3F
+                    - img
+                  - link:
+                    - /url: https://www.linkedin.com/company/my-med-device-ltd/
+                    - img
+                  - link:
+                    - /url: https://www.youtube.com/@mymeddevices
+                    - img
+              - generic:
+                - generic:
+                  - heading [level=4]: Company
+                  - list:
+                    - listitem:
+                      - link:
+                        - /url: /about-us
+                        - text: About Us
+                    - listitem:
+                      - link:
+                        - /url: /contact-us
+                        - text: Contact Us
+                - generic:
+                  - heading [level=4]: Policies
+                  - list:
+                    - listitem:
+                      - link:
+                        - /url: /privacy-policy
+                        - text: Privacy Policy
+                    - listitem:
+                      - link:
+                        - /url: /terms-and-conditions
+                        - text: Terms & Conditions
+                    - listitem:
+                      - link:
+                        - /url: /shipping-policy
+                        - text: Shipping Policy
+                    - listitem:
+                      - link:
+                        - /url: /return-policy
+                        - text: Return Policy
+                - generic:
+                  - heading [level=4]: Shop
+                  - list:
+                    - listitem:
+                      - link:
+                        - /url: /products
+                        - text: All Products
+                    - listitem:
+                      - link:
+                        - /url: /offers
+                        - text: Offers
+                    - listitem:
+                      - link:
+                        - /url: /best-sellers
+                        - text: Best Sellers
+                    - listitem:
+                      - link:
+                        - /url: /new-arrivals
+                        - text: New Arrivals
+                - generic:
+                  - heading [level=4]: Quick Links
+                  - list:
+                    - listitem:
+                      - link:
+                        - /url: /checkout
+                        - text: Checkout
+                    - listitem:
+                      - link:
+                        - /url: /wishlist
+                        - text: My Wishlist
+                    - listitem:
+                      - link:
+                        - /url: /compare
+                        - text: Compare Products
+          - generic:
+            - generic:
+              - generic:
+                - generic:
+                  - generic:
+                    - heading [level=4]: Download Our App
+                    - generic:
+                      - link:
+                        - /url: https://apps.apple.com/
+                        - img
+                      - link:
+                        - /url: https://play.google.com/store/apps/details?id=com.tumeloinnovations.my_med_devices&hl=en
+                        - img
+                - generic:
+                  - heading [level=4]: Shop on The Go
+                  - generic:
+                    - generic:
+                      - generic:
+                        - img
+                      - generic:
+                        - paragraph: Email Support
+                        - paragraph: support@mymeddevices.co.ke
+                    - generic:
+                      - generic:
+                        - img
+                      - generic:
+                        - paragraph: Phone Support
+                        - paragraph: +254 707 757 088
+                    - generic:
+                      - generic:
+                        - img
+                      - generic:
+                        - paragraph: Customer Service
+                        - paragraph: 24/7 dedicated support
+                    - generic:
+                      - generic:
+                        - img
+                      - generic:
+                        - paragraph: Head Office
+                        - paragraph: Muchai Drive 47, Ngong RD
+        - generic:
+          - paragraph: © 2026 MyMedDevices Kenya. All Rights Reserved.
+          - generic:
+            - generic:
+              - img
+    - button:
+      - img
+  - region "Notifications alt+T"
+  - button:
+    - img
+  - generic [ref=e5] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e6]:
+      - img [ref=e7]
+    - generic [ref=e10]:
+      - button "Open issues overlay" [ref=e11]:
+        - generic [ref=e12]:
+          - generic [ref=e13]: "0"
+          - generic [ref=e14]: "1"
+        - generic [ref=e15]: Issue
+      - button "Collapse issues badge" [ref=e16]:
+        - img [ref=e17]
+  - alert
+  - dialog "Login to your account" [ref=e20]:
+    - heading "Login to your account" [level=2] [ref=e21]
+    - paragraph [ref=e22]: Enter your email and password to access your account
+    - generic [ref=e23]:
+      - generic [ref=e26]:
+        - generic [ref=e27]:
+          - img [ref=e29]
+          - generic [ref=e32]: MyMedDevices
+        - heading "Welcome Back" [level=2] [ref=e33]
+        - paragraph [ref=e34]: Access your account and orders
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - button "Login" [ref=e37]
+          - button "Register" [ref=e38]
+        - generic [ref=e39]:
+          - generic [ref=e40]:
+            - generic [ref=e41]: Email Address
+            - generic [ref=e42]:
+              - img [ref=e43]
+              - textbox "Email Address" [ref=e46]:
+                - /placeholder: you@example.com
+                - text: customer@meddevices.com
+          - generic [ref=e47]:
+            - generic [ref=e48]:
+              - generic [ref=e49]: Password
+              - button "Forgot Password?" [ref=e50]
+            - generic [ref=e51]:
+              - img [ref=e52]
+              - textbox "Password" [active] [ref=e55]:
+                - /placeholder: ••••••••
+                - text: password123
+              - button [ref=e56]:
+                - img [ref=e57]
+          - button "Login to Account" [ref=e60]
+    - button "Close" [ref=e61]:
+      - img [ref=e62]
+      - generic [ref=e65]: Close
+```
+
+# Test source
+
+```ts
+  1  | import { test, expect } from '@playwright/test';
+  2  | 
+  3  | test.describe('Navbar User Dropdown', () => {
+  4  |   test('should show enhanced dropdown menu when authenticated', async ({ page }) => {
+  5  |     // 1. Login
+  6  |     await page.goto('/login');
+  7  |     await page.fill('#login-email', 'customer@meddevices.com');
+  8  |     await page.fill('#login-password', 'password123');
+> 9  |     await page.click('button[type="submit"]');
+     |                ^ Error: page.click: Test timeout of 30000ms exceeded.
+  10 |     
+  11 |     // Wait for navigation to dashboard after login
+  12 |     await page.waitForURL('**/dashboard');
+  13 | 
+  14 |     // 2. Click on the user avatar in the navbar (which should be visible now)
+  15 |     // The trigger is a button with an avatar inside
+  16 |     const userDropdownTrigger = page.locator('button.rounded-full.h-8.w-8');
+  17 |     await userDropdownTrigger.click();
+  18 | 
+  19 |     // 3. Verify dropdown content according to the new spec
+  20 |     // Label with name and email
+  21 |     await expect(page.getByText('John Doe')).toBeVisible();
+  22 |     await expect(page.getByText('customer@meddevices.com')).toBeVisible();
+  23 |     
+  24 |     // Menu items
+  25 |     await expect(page.getByRole('menuitem', { name: 'Profile' })).toBeVisible();
+  26 |     await expect(page.getByRole('menuitem', { name: 'My Orders' })).toBeVisible();
+  27 |     await expect(page.getByRole('menuitem', { name: 'Wishlist' })).toBeVisible();
+  28 |     await expect(page.getByRole('menuitem', { name: 'Addresses' })).toBeVisible();
+  29 |     await expect(page.getByRole('menuitem', { name: 'Settings' })).toBeVisible();
+  30 |     
+  31 |     // Log out button
+  32 |     await expect(page.getByRole('menuitem', { name: 'Log out' })).toBeVisible();
+  33 |   });
+  34 | });
+  35 | 
+```

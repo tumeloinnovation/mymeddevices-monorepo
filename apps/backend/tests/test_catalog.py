@@ -136,7 +136,7 @@ async def test_admin_manage_categories(client: AsyncClient, admin_token: str, db
         "sort_order": 1,
         "is_active": True
     }
-    response = await client.post("/api/v1/catalog/products/categories", json=payload, headers=headers)
+    response = await client.post("/api/v1/catalog/categories", json=payload, headers=headers)
     assert response.status_code == 201
     cat_data = response.json()
     assert cat_data["name"] == "Surgical Instruments"
@@ -150,7 +150,7 @@ async def test_admin_manage_categories(client: AsyncClient, admin_token: str, db
         "sort_order": 1,
         "is_active": True
     }
-    sub_resp = await client.post("/api/v1/catalog/products/categories", json=sub_payload, headers=headers)
+    sub_resp = await client.post("/api/v1/catalog/categories", json=sub_payload, headers=headers)
     assert sub_resp.status_code == 201
     sub_data = sub_resp.json()
     assert sub_data["parent_id"] == cat_data["id"]

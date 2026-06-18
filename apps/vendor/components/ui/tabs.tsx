@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { Tabs as TabsPrimitive } from "radix-ui"
+import * as TabsPrimitive from "@radix-ui/react-tabs"
 
 import { cn } from "@/lib/utils"
 
@@ -15,6 +15,8 @@ function Tabs({
     <TabsPrimitive.Root
       data-slot="tabs"
       data-orientation={orientation}
+      data-horizontal={orientation === "horizontal" || undefined}
+      data-vertical={orientation === "vertical" || undefined}
       className={cn(
         "group/tabs flex gap-2 data-horizontal:flex-col",
         className

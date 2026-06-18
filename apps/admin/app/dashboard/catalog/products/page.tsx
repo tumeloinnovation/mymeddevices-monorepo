@@ -1,64 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import {
-  Search,
-  Plus,
-  Edit,
-  Trash2,
-  Eye,
-  MoreVertical,
-  CheckCircle2,
-  Clock,
-  Archive,
-  FileText,
-  Package,
-  ImageIcon,
-  Loader2,
-} from "lucide-react";
-import {
-  catalogService,
-  Product,
-  ProductStatus,
-  CategoryTree,
-} from "@mymeddevices/shared-core";
+import { Plus, Download, Trash2, XCircle, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { Product } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
-import { toast } from "sonner";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
@@ -67,543 +18,345 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  useProducts,
+  useCategories,
+  useVendors,
+  useProductMutations,
+} from "./_hooks/use-products-query";
+import { ProductsFilters } from "./_components/products-filters";
+import { ProductsTable } from "./_components/products-table";
 
-const STATUS_CONFIG: Record<
-  ProductStatus,
-  { label: string; icon: React.ReactNode; color: string }
-> = {
-  draft: {
-    label: "Draft",
-    icon: <FileText className="h-3 w-3" />,
-    color: "bg-gray-100 text-gray-700 border-gray-200",
-  },
-  pending_review: {
-    label: "Pending Review",
-    icon: <Clock className="h-3 w-3" />,
-    color: "bg-yellow-100 text-yellow-700 border-yellow-200",
-  },
-  published: {
-    label: "Published",
-    icon: <CheckCircle2 className="h-3 w-3" />,
-    color: "bg-emerald-100 text-emerald-700 border-emerald-200",
-  },
-  archived: {
-    label: "Archived",
-    icon: <Archive className="h-3 w-3" />,
-    color: "bg-slate-100 text-slate-700 border-slate-200",
-  },
-};
+function useDebounce<T>(value: T, delay: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay]);
+  return debounced;
+}
 
-const statusOrder: ProductStatus[] = [
-  "pending_review",
-  "published",
-  "draft",
-  "archived",
-];
-
-export default function ProductsPage() {
+function ProductsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const initialMounted = useRef(false);
 
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
-  const [categories, setCategories] = useState<CategoryTree[]>([]);
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: 20,
-    total: 0,
+  const [page, setPage] = useState(1);
+
+  const debouncedSearch = useDebounce(search, 300);
+  const pageSize = 15;
+
+  const { data: productsData, isLoading } = useProducts({
+    page,
+    pageSize,
+    search: debouncedSearch,
+    status: statusFilter,
+    categoryId: categoryFilter,
   });
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [deleteDialog, setDeleteDialog] = useState<{ id: string; name: string } | null>(null);
+  const { data: categories = [] } = useCategories();
+  const { data: vendorMap } = useVendors();
+  const mutations = useProductMutations();
 
-  const fetchProducts = async (
-    page = 1,
-    searchQuery = search,
-    status = statusFilter,
-    category = categoryFilter
-  ) => {
-    setLoading(true);
-    try {
-      const params: any = {
-        page,
-        page_size: pagination.pageSize,
-      };
-
-      if (searchQuery) params.search = searchQuery;
-      if (status !== "all") params.status_filter = status;
-      if (category !== "all") params.category_id = category;
-
-      const data = await catalogService.getVendorProducts(params);
-      setProducts(data.products);
-      setPagination({
-        page: data.page,
-        pageSize: data.page_size,
-        total: data.total,
-      });
-    } catch (error) {
-      console.error("Failed to load products:", error);
-      toast.error("Failed to load products");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchCategories = async () => {
-    try {
-      const cats = await catalogService.getCategories();
-      // Flatten the category tree
-      const flatCategories: CategoryTree[] = [];
-      const flatten = (catList: CategoryTree[]) => {
-        catList.forEach((cat) => {
-          flatCategories.push(cat);
-          if (cat.children?.length > 0) {
-            flatten(cat.children);
-          }
-        });
-      };
-      flatten(cats);
-      setCategories(flatCategories);
-    } catch (error) {
-      console.error("Failed to load categories:", error);
-      toast.error("Failed to load categories");
-    }
-  };
+  const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
+  const [rejectTarget, setRejectTarget] = useState<Product | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const [pendingProductId, setPendingProductId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check URL params for initial filter
-    const initialStatus = searchParams.get("status");
-    if (initialStatus && ["draft", "pending_review", "published", "archived"].includes(initialStatus)) {
-      setStatusFilter(initialStatus);
+    if (!initialMounted.current) {
+      initialMounted.current = true;
+      const initialStatus = searchParams.get("status");
+      if (
+        initialStatus &&
+        ["draft", "pending_review", "published", "archived"].includes(initialStatus)
+      ) {
+        setStatusFilter(initialStatus);
+      }
     }
+  }, [searchParams]);
 
-    fetchCategories();
-    if (initialStatus) {
-      fetchProducts(1, "", initialStatus, "all");
-    } else {
-      fetchProducts();
-    }
+  const handleStatusChange = useCallback(
+    (value: string) => {
+      setStatusFilter(value);
+      setPage(1);
+      const params = new URLSearchParams(searchParams.toString());
+      if (value === "all") {
+        params.delete("status");
+      } else {
+        params.set("status", value);
+      }
+      router.push(`/dashboard/catalog/products?${params.toString()}`, {
+        scroll: false,
+      });
+    },
+    [router, searchParams]
+  );
+
+  const handlePageChange = useCallback((newPage: number) => {
+    setPage(newPage);
   }, []);
 
-  const handleStatusChange = (newStatus: string) => {
-    setStatusFilter(newStatus);
-    fetchProducts(1, search, newStatus, categoryFilter);
-  };
+  const handleCategoryChange = useCallback((value: string) => {
+    setCategoryFilter(value);
+    setPage(1);
+  }, []);
 
-  const handleSearch = (value: string) => {
-    setSearch(value);
-    fetchProducts(1, value, statusFilter, categoryFilter);
-  };
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setStatusFilter("all");
+    setCategoryFilter("all");
+    setPage(1);
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("status");
+    router.push(`/dashboard/catalog/products?${params.toString()}`, {
+      scroll: false,
+    });
+  }, [router, searchParams]);
 
-  const handleDelete = async () => {
-    if (!deleteDialog) return;
+  const hasActiveFilters =
+    search !== "" || statusFilter !== "all" || categoryFilter !== "all";
 
-    setActionLoading(deleteDialog.id);
-    try {
-      await catalogService.deleteProduct(deleteDialog.id);
-      toast.success("Product deleted successfully");
-      setDeleteDialog(null);
-      fetchProducts();
-    } catch (error: any) {
-      toast.error(error.message || "Failed to delete product");
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const handleQuickAction = async (
-    id: string,
-    action: "verify" | "publish" | "archive" | "unarchive"
-  ) => {
-    setActionLoading(id);
-    try {
-      switch (action) {
-        case "verify":
-          await catalogService.verifyProduct(id);
-          toast.success("Product submitted for review");
-          break;
-        case "publish":
-          await catalogService.publishProduct(id);
-          toast.success("Product published successfully");
-          break;
-        case "archive":
-          await catalogService.archiveProduct(id);
-          toast.success("Product archived");
-          break;
-        case "unarchive":
-          await catalogService.unarchiveProduct(id);
-          toast.success("Product unarchived");
-          break;
+  const handleQuickAction = useCallback(
+    (id: string, action: "verify" | "publish" | "archive" | "unarchive" | "reject") => {
+      if (action === "reject") {
+        const product = productsData?.products.find((p) => p.id === id);
+        if (product) {
+          setRejectTarget(product);
+          setRejectionReason("");
+        }
+        return;
       }
-      fetchProducts();
-    } catch (error: any) {
-      toast.error(error.message || `Failed to ${action} product`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
 
-  const getStatusBadge = (status: ProductStatus) => {
-    const config = STATUS_CONFIG[status];
-    return (
-      <Badge variant="outline" className={config.color}>
-        <span className="mr-1">{config.icon}</span>
-        {config.label}
-      </Badge>
+      setPendingProductId(id);
+
+      const mutationMap = {
+        verify: mutations.verify,
+        publish: mutations.publish,
+        archive: mutations.archive,
+        unarchive: mutations.unarchive,
+      } as const;
+
+      const mutation = mutationMap[action];
+      mutation.mutate(id, {
+        onSuccess: () => toast.success("Product updated successfully"),
+        onError: (err: any) => toast.error(err.message || `Failed to ${action} product`),
+        onSettled: () => setPendingProductId(null),
+      });
+    },
+    [mutations, productsData]
+  );
+
+  const handleDelete = useCallback(() => {
+    if (!deleteTarget) return;
+    setPendingProductId(deleteTarget.id);
+    mutations.delete.mutate(deleteTarget.id, {
+      onSuccess: () => {
+        toast.success("Product deleted successfully");
+        setDeleteTarget(null);
+      },
+      onError: (err: any) => toast.error(err.message || "Failed to delete product"),
+      onSettled: () => setPendingProductId(null),
+    });
+  }, [deleteTarget, mutations.delete]);
+
+  const handleReject = useCallback(() => {
+    if (!rejectTarget || !rejectionReason.trim()) return;
+    setPendingProductId(rejectTarget.id);
+    mutations.reject.mutate(
+      { id: rejectTarget.id, reason: rejectionReason },
+      {
+        onSuccess: () => {
+          toast.success("Product rejected with feedback");
+          setRejectTarget(null);
+          setRejectionReason("");
+        },
+        onError: (err: any) => toast.error(err.message || "Failed to reject product"),
+        onSettled: () => setPendingProductId(null),
+      }
     );
-  };
+  }, [rejectTarget, rejectionReason, mutations.reject]);
+
+  const actionLoadingId = pendingProductId;
+
+  const products = productsData?.products ?? [];
+  const total = productsData?.total ?? 0;
+
+  const productsWithVendors = vendorMap
+    ? products.map((p) => ({
+        ...p,
+        vendor_name: vendorMap.get(p.vendor_id),
+      }))
+    : products;
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="flex flex-col gap-6 p-4 lg:p-6 max-w-[1600px] mx-auto">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Products</h1>
-            <p className="text-muted-foreground">
-              Manage product listings, inventory, and pricing.
+            <h1 className="text-2xl font-bold tracking-tight">Products</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              Browse and manage your product catalog.
             </p>
           </div>
-          <Button asChild>
-            <Link href="/dashboard/catalog/products/new">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Product
-            </Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-8 text-xs">
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Export
+            </Button>
+            <Button size="sm" className="h-8 text-xs" asChild>
+              <Link href="/dashboard/catalog/products/new">
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Product
+              </Link>
+            </Button>
+          </div>
         </div>
 
-        {/* Filters */}
-        <Card>
-          <CardContent className="pt-6">
-            <div className="flex flex-col md:flex-row gap-4">
-              {/* Search */}
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name, SKU, or brand..."
-                  value={search}
-                  onChange={(e) => handleSearch(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-
-              {/* Status Filter */}
-              <Select
-                value={statusFilter}
-                onValueChange={(value) => handleStatusChange(value)}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  {statusOrder.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {STATUS_CONFIG[status].label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {/* Category Filter */}
-              <Select
-                value={categoryFilter}
-                onValueChange={(value) => {
-                  setCategoryFilter(value);
-                  fetchProducts(1, search, statusFilter, value);
-                }}
-              >
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by category" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+        <Card className="shadow-sm border-muted/50">
+          <CardContent className="p-4">
+            <ProductsFilters
+              search={search}
+              onSearchChange={(v) => {
+                setSearch(v);
+                setPage(1);
+              }}
+              statusFilter={statusFilter}
+              onStatusChange={handleStatusChange}
+              categoryFilter={categoryFilter}
+              onCategoryChange={handleCategoryChange}
+              categories={categories}
+              hasActiveFilters={hasActiveFilters}
+              onClearFilters={clearFilters}
+            />
           </CardContent>
         </Card>
 
-        {/* Products Table */}
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Products
-              <span className="ml-2 text-sm font-normal text-muted-foreground">
-                ({pagination.total} total)
-              </span>
-            </CardTitle>
-            <CardDescription>
-              View and manage all product listings in the catalog.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-4">
-                {[...Array(5)].map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full" />
-                ))}
-              </div>
-            ) : products.length === 0 ? (
-              <div className="text-center py-12 border-2 border-dashed rounded-lg">
-                <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                <h3 className="text-lg font-semibold mb-2">No products found</h3>
-                <p className="text-muted-foreground mb-4">
-                  {search || statusFilter !== "all" || categoryFilter !== "all"
-                    ? "Try adjusting your filters"
-                    : "Get started by creating your first product"}
-                </p>
-                {!search && statusFilter === "all" && categoryFilter === "all" && (
-                  <Button asChild>
-                    <Link href="/dashboard/catalog/products/new">
-                      <Plus className="mr-2 h-4 w-4" />
-                      Add Product
-                    </Link>
-                  </Button>
-                )}
-              </div>
-            ) : (
-              <div className="rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[300px]">Product</TableHead>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Tags</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {products.map((product) => (
-                      <TableRow key={product.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            {product.images?.[0] ? (
-                              <img
-                                src={product.images[0].url}
-                                alt={product.name}
-                                className="h-10 w-10 rounded object-cover"
-                              />
-                            ) : (
-                              <div className="h-10 w-10 rounded bg-muted flex items-center justify-center">
-                                <ImageIcon className="h-4 w-4 text-muted-foreground" />
-                              </div>
-                            )}
-                            <div>
-                              <div className="font-medium line-clamp-1">
-                                {product.name}
-                              </div>
-                              {product.brand && (
-                                <div className="text-sm text-muted-foreground">
-                                  {product.brand}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <code className="text-sm bg-muted px-1.5 py-0.5 rounded">
-                            {product.sku || "-"}
-                          </code>
-                        </TableCell>
-                        <TableCell>
-                          {product.category_name ? (
-                            <Badge variant="outline">{product.category_name}</Badge>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          {product.tags && product.tags.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 max-w-[200px]">
-                              {product.tags.slice(0, 2).map((tag, idx) => (
-                                <Badge key={idx} variant="secondary" className="text-xs">
-                                  {tag}
-                                </Badge>
-                              ))}
-                              {product.tags.length > 2 && (
-                                <Badge variant="secondary" className="text-xs">
-                                  +{product.tags.length - 2}
-                                </Badge>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-muted-foreground text-sm">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium">
-                            {product.price
-                              ? `${product.currency} ${product.price.toFixed(2)}`
-                              : "-"}
-                          </div>
-                        </TableCell>
-                        <TableCell>{getStatusBadge(product.status)}</TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8"
-                                disabled={actionLoading === product.id}
-                              >
-                                {actionLoading === product.id ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <MoreVertical className="h-4 w-4" />
-                                )}
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem asChild>
-                                <Link
-                                  href={`/dashboard/catalog/products/${product.id}`}
-                                  className="cursor-pointer"
-                                >
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  View Details
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuItem asChild>
-                                <Link
-                                  href={`/dashboard/catalog/products/${product.id}`}
-                                  className="cursor-pointer"
-                                >
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </Link>
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              {product.status === "draft" && (
-                                <DropdownMenuItem
-                                  onClick={() => handleQuickAction(product.id, "verify")}
-                                  disabled={actionLoading === product.id}
-                                >
-                                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                                  Submit for Review
-                                </DropdownMenuItem>
-                              )}
-                              {product.status === "pending_review" && (
-                                <DropdownMenuItem
-                                  onClick={() => handleQuickAction(product.id, "publish")}
-                                  disabled={actionLoading === product.id}
-                                >
-                                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                                  Approve & Publish
-                                </DropdownMenuItem>
-                              )}
-                              {product.status === "published" && (
-                                <DropdownMenuItem
-                                  onClick={() => handleQuickAction(product.id, "archive")}
-                                  disabled={actionLoading === product.id}
-                                >
-                                  <Archive className="mr-2 h-4 w-4" />
-                                  Archive
-                                </DropdownMenuItem>
-                              )}
-                              {product.status === "archived" && (
-                                <DropdownMenuItem
-                                  onClick={() => handleQuickAction(product.id, "unarchive")}
-                                  disabled={actionLoading === product.id}
-                                >
-                                  <Package className="mr-2 h-4 w-4" />
-                                  Unarchive
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive focus:text-destructive"
-                                onClick={() => setDeleteDialog({ id: product.id, name: product.name })}
-                                disabled={actionLoading === product.id}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-
-            {/* Pagination */}
-            {pagination.total > pagination.pageSize && (
-              <div className="flex items-center justify-between mt-4">
-                <p className="text-sm text-muted-foreground">
-                  Showing {(pagination.page - 1) * pagination.pageSize + 1} to{" "}
-                  {Math.min(pagination.page * pagination.pageSize, pagination.total)} of{" "}
-                  {pagination.total} products
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={pagination.page === 1}
-                    onClick={() => fetchProducts(pagination.page - 1)}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={
-                      pagination.page * pagination.pageSize >= pagination.total
-                    }
-                    onClick={() => fetchProducts(pagination.page + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            )}
+        <Card className="shadow-sm border-muted/50 overflow-hidden">
+          <CardContent className="p-0">
+            <ProductsTable
+              products={productsWithVendors}
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              isLoading={isLoading}
+              actionLoadingId={actionLoadingId}
+              onPageChange={handlePageChange}
+              onQuickAction={handleQuickAction}
+              onDelete={(product) => setDeleteTarget(product)}
+            />
           </CardContent>
         </Card>
 
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={!!deleteDialog} onOpenChange={() => setDeleteDialog(null)}>
-          <DialogContent>
+        {/* Delete Dialog */}
+        <Dialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
+          <DialogContent className="sm:max-w-[425px] rounded-2xl">
             <DialogHeader>
-              <DialogTitle>Delete Product?</DialogTitle>
-              <DialogDescription>
-                Are you sure you want to delete "{deleteDialog?.name}"? This action cannot be undone.
+              <div className="h-10 w-10 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center mb-3">
+                <Trash2 className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-lg font-bold">Delete Product?</DialogTitle>
+              <DialogDescription className="text-sm pt-1">
+                This will permanently delete{" "}
+                <span className="font-semibold text-foreground">
+                  &ldquo;{deleteTarget?.name}&rdquo;
+                </span>{" "}
+                and remove all associated data. This cannot be undone.
               </DialogDescription>
             </DialogHeader>
-            <DialogFooter>
+            <DialogFooter className="gap-2 mt-4">
               <Button
                 variant="outline"
-                onClick={() => setDeleteDialog(null)}
-                disabled={actionLoading === deleteDialog?.id}
+                size="sm"
+                onClick={() => setDeleteTarget(null)}
+                disabled={mutations.delete.isPending}
+                className="rounded-lg h-9"
               >
                 Cancel
               </Button>
               <Button
                 variant="destructive"
+                size="sm"
                 onClick={handleDelete}
-                disabled={actionLoading === deleteDialog?.id}
+                disabled={mutations.delete.isPending}
+                className="rounded-lg h-9 text-xs"
               >
-                {actionLoading === deleteDialog?.id && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {mutations.delete.isPending && (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 )}
-                Delete
+                Yes, Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reject Dialog */}
+        <Dialog open={!!rejectTarget} onOpenChange={() => setRejectTarget(null)}>
+          <DialogContent className="sm:max-w-[480px] rounded-2xl">
+            <DialogHeader>
+              <div className="h-10 w-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+                <XCircle className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-lg font-bold">Reject Product Submission</DialogTitle>
+              <DialogDescription className="text-sm pt-1">
+                Provide feedback for{" "}
+                <span className="font-semibold text-foreground">
+                  &ldquo;{rejectTarget?.name}&rdquo;
+                </span>
+                . The vendor will use this to correct the listing.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4">
+              <Textarea
+                placeholder="Reason for rejection (e.g., missing certifications, low-quality images)..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="min-h-[100px] rounded-xl text-sm border-muted-foreground/20"
+              />
+            </div>
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRejectTarget(null)}
+                disabled={mutations.reject.isPending}
+                className="rounded-lg h-9"
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleReject}
+                disabled={!rejectionReason.trim() || mutations.reject.isPending}
+                className="rounded-lg h-9 text-xs"
+              >
+                {mutations.reject.isPending && (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                )}
+                Send Feedback & Reject
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
     </DashboardLayout>
+  );
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-muted border-t-primary" />
+        </div>
+      }
+    >
+      <ProductsPageInner />
+    </Suspense>
   );
 }

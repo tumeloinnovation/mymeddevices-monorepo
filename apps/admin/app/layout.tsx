@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-  title: "MyMedDevices - Admin",
+  title: "Admin Portal | MyMedDevices",
   description: "Admin panel for MyMedDevices platform",
 }
 

@@ -47,10 +47,6 @@ import {
     User,
     ShoppingCart,
     Truck,
-    Clock,
-    Search,
-    FileText,
-    Shield,
     Lock,
     Eye,
     Bell,
@@ -162,35 +158,6 @@ export function DashboardSidebar() {
                     badge: wishlistItems.length,
                     isActive: pathname?.startsWith('/dashboard/wishlist'),
                 },
-                {
-                    label: 'Recently Viewed',
-                    href: '/dashboard/recently-viewed',
-                    icon: Clock,
-                    isActive: pathname?.startsWith('/dashboard/recently-viewed'),
-                },
-                {
-                    label: 'Saved Searches',
-                    href: '/dashboard/saved-searches',
-                    icon: Search,
-                    isActive: pathname?.startsWith('/dashboard/saved-searches'),
-                },
-            ],
-        },
-        {
-            label: 'Medical',
-            items: [
-                {
-                    label: 'Prescriptions',
-                    href: '/dashboard/prescriptions',
-                    icon: FileText,
-                    isActive: pathname?.startsWith('/dashboard/prescriptions'),
-                },
-                {
-                    label: 'Insurance',
-                    href: '/dashboard/insurance',
-                    icon: Shield,
-                    isActive: pathname?.startsWith('/dashboard/insurance'),
-                },
             ],
         },
         {
@@ -254,7 +221,7 @@ export function DashboardSidebar() {
                                             <Link href={item.href}>
                                                 <item.icon />
                                                 <span>{item.label}</span>
-                                                {item.badge !== undefined && item.badge > 0 && (
+                                                {'badge' in item && item.badge !== undefined && item.badge > 0 && (
                                                     <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
                                                         {item.badge}
                                                     </span>

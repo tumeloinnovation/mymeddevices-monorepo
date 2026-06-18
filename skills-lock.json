@@ -19,6 +19,12 @@
       "skillPath": "SKILL.md",
       "computedHash": "b236488b93e04b475def12bedbf8b1cfce348b88acf67d03341724032c87af8d"
     },
+    "email-html-mjml": {
+      "source": "framix-team/skill-email-html-mjml",
+      "sourceType": "github",
+      "skillPath": "email-html-mjml/SKILL.md",
+      "computedHash": "355d308e1d10c8a5ace07f356f01ee605d6350f9af0a056f7fad6d6b44a5bad5"
+    },
     "emil-design-eng": {
       "source": "emilkowalski/skill",
       "sourceType": "github",

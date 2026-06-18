@@ -1,7 +1,15 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
+    "types": [
+      "vitest/globals",
+      "google.maps"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,7 +27,45 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/components/layout/*": [
+        "./components/layout/*"
+      ],
+      "@/components/common/*": [
+        "./components/common/*"
+      ],
+      "@/components/*": [
+        "./components/*",
+        "../../packages/shared-ui/src/components/*"
+      ],
+      "@mymeddevices/ui/*": [
+        "../../packages/shared-ui/src/*"
+      ],
+      "@mymeddevices/core/*": [
+        "../../packages/shared-core/src/*"
+      ],
+      "@mymeddevices/customer-web/*": [
+        "./*"
+      ],
+      "@/providers": [
+        "./app/providers"
+      ],
+      "@/providers/*": [
+        "../../packages/shared-ui/src/providers/*"
+      ],
+      "@/lib/*": [
+        "./lib/*",
+        "../../packages/shared-core/src/lib/*"
+      ],
+      "@/hooks/*": [
+        "./hooks/*",
+        "../../packages/shared-core/src/hooks/*"
+      ],
+      "@/types/*": [
+        "../../packages/shared-core/src/types/*"
+      ],
+      "@/*": [
+        "./*"
+      ]
     }
   },
   "include": [
@@ -27,8 +73,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    ".next/dev/types/**/*.ts"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }

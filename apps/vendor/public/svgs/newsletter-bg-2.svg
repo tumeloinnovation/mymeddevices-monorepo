@@ -1,0 +1,7 @@
+<svg width="600" height="300" viewBox="0 0 600 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="500" cy="50" r="30" fill="#2c29de" opacity="0.1"/>
+  <circle cx="100" cy="250" r="40" fill="#de7429" opacity="0.08"/>
+  <rect x="300" y="100" width="60" height="60" rx="8" fill="#2c29de" opacity="0.05" transform="rotate(45 330 130)"/>
+  <path d="M50 150 Q150 100 250 150 Q350 200 450 150" stroke="#de7429" stroke-width="2" opacity="0.1" fill="none"/>
+</svg></content>
+<parameter name="filePath">/home/nozel/Developer/company/MyMedDevices/mymeddevices_web/public/svgs/newsletter-bg-2.svg

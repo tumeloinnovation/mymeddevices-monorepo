@@ -1,0 +1,45 @@
+<mjml>
+  <mj-head>
+    <mj-include path="../components/head.mjml" />
+  </mj-head>
+  <mj-body background-color="#f4f6f8">
+    <mj-include path="../components/header.mjml" />
+    
+    <mj-section padding="36px 32px 12px" background-color="#ffffff">
+      <mj-column>
+        <mj-text mj-class="h1">Your Order Has Shipped</mj-text>
+        <mj-text>Hi {{ user_name }}, your order is on its way.</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="0 32px" background-color="#ffffff">
+      <mj-column background-color="#f8fafc" border="1px solid #e2e8f0" border-radius="8px" padding="20px">
+        <mj-text padding="0 0 6px"><span style="font-weight: 600; color: #053D7A;">Order ID:</span> {{ order_id }}</mj-text>
+        <mj-text padding="0 0 6px"><span style="font-weight: 600; color: #053D7A;">Carrier:</span> {{ carrier }}</mj-text>
+        <mj-text padding="0"><span style="font-weight: 600; color: #053D7A;">Estimated Delivery:</span> {{ estimated_delivery }}</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="28px 32px 0" background-color="#ffffff">
+      <mj-column background-color="#f8fafc" border="1px solid #e2e8f0" border-radius="8px" padding="20px">
+        <mj-text align="center" font-size="13px" color="#64748b" padding="0 0 4px" text-transform="uppercase" letter-spacing="0.04em">Tracking Number</mj-text>
+        <mj-text align="center" font-family="'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace" font-size="18px" font-weight="700" letter-spacing="1px" color="#053D7A" padding="0">
+          {{ tracking_number }}
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="24px 32px 24px" background-color="#ffffff">
+      <mj-column>
+        <mj-button href="{{ track_url }}">
+          Track Your Shipment
+        </mj-button>
+        <mj-text font-size="14px" color="#64748b" padding-top="20px">
+          Having delivery issues? <a href="{{ site_url }}/support" style="color: #053D7A;">Contact support</a>.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-include path="../components/footer.mjml" />
+  </mj-body>
+</mjml>

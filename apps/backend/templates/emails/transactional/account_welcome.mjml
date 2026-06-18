@@ -1,0 +1,34 @@
+<mjml>
+  <mj-head>
+    <mj-include path="../components/head.mjml" />
+  </mj-head>
+  <mj-body background-color="#f4f6f8">
+    <mj-include path="../components/header.mjml" />
+    
+    <mj-section padding="36px 32px 12px" background-color="#ffffff">
+      <mj-column>
+        <mj-text mj-class="h1">Welcome to MyMedDevices</mj-text>
+        <mj-text>Hi {{ user_name }}, your account has been created successfully.</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="0 32px" background-color="#ffffff">
+      <mj-column background-color="#f8fafc" border="1px solid #e2e8f0" border-radius="8px" padding="20px">
+        <mj-text padding="0"><span style="font-weight: 600; color: #053D7A;">Account ID:</span> {{ account_id }}</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="24px 32px 24px" background-color="#ffffff">
+      <mj-column>
+        <mj-text padding="0 0 24px">
+          To start using your account, please verify your email and complete your profile.
+        </mj-text>
+        <mj-button href="{{ verify_url }}">
+          Verify &amp; Complete Profile
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-include path="../components/footer.mjml" />
+  </mj-body>
+</mjml>

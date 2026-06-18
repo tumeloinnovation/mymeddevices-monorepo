@@ -1,0 +1,23 @@
+<mj-section padding="24px 32px" background-color="#f8fafc">
+  <mj-column>
+    <mj-text font-size="13px" color="#94a3b8" line-height="1.5" padding="0 0 4px">
+      This is an automated message from MyMedDevices.
+    </mj-text>
+    <mj-text font-size="13px" color="#94a3b8" line-height="1.5" padding="0 0 4px">
+      For support or medical consultation, contact <a href="mailto:support@mymeddevices.com" style="color: #053D7A;">support@mymeddevices.com</a>
+    </mj-text>
+    <mj-divider border-width="1px" border-color="#e5e7eb" padding="12px 0" />
+    <mj-text font-size="13px" color="#053D7A" padding="0">
+      <a href="{{ site_url }}/privacy" style="color: #053D7A; margin-right: 16px;">Privacy Policy</a>
+      <a href="{{ site_url }}/support" style="color: #053D7A;">Support &amp; Medical Consultation</a>
+    </mj-text>
+    <mj-text font-size="13px" color="#94a3b8" line-height="1.5" padding="12px 0 0">
+      &copy; 2026 MyMedDevices. All rights reserved.
+    </mj-text>
+    <mj-text font-size="11px" color="#94a3b8" line-height="1.4" padding="8px 0 0">
+      This email and any attachments contain confidential information intended only for the named recipient.
+      If you have received this email in error, please notify the sender immediately and delete it from your system.
+      MyMedDevices complies with applicable data protection and medical device regulations.
+    </mj-text>
+  </mj-column>
+</mj-section>

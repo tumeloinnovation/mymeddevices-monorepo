@@ -1,8 +1,23 @@
 import { toast } from 'sonner';
 import { getAccessToken, setAccessToken, clearAccessToken } from '../auth/token';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// For browser/client-side requests, use relative path to leverage Next.js rewrites
+// For server-side requests (SSR), use the full backend URL
+const API_URL = typeof window === 'undefined'
+  ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000')
+  : '';
 const API_PREFIX = '/api/v1';
+
+// Get base URL - for client-side, prefix is already handled by Next.js rewrites
+// For server-side, we need the full URL
+function getBaseUrl(): string {
+  if (typeof window === 'undefined') {
+    // Server-side: use full backend URL
+    return `${API_URL}${API_PREFIX}`;
+  }
+  // Client-side: prefix is needed so Next.js rewrites can proxy /api/v1/* to backend
+  return API_PREFIX;
+}
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
@@ -64,7 +79,12 @@ class TokenManager {
         return null;
       }
 
-      const response = await fetch(`${API_URL}/api/v1/auth/refresh`, {
+      // Use full URL for server-side, relative for client-side (via Next.js rewrites)
+      const refreshUrl = typeof window === 'undefined'
+        ? `${API_URL}${API_PREFIX}/auth/refresh`
+        : `/auth/refresh`;
+
+      const response = await fetch(refreshUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -194,7 +214,7 @@ export const apiClient = {
       params,
     } = options;
 
-    let url = endpoint.startsWith('http') ? endpoint : `${API_URL}${API_PREFIX}${endpoint}`;
+    let url = endpoint.startsWith('http') ? endpoint : `${getBaseUrl()}${endpoint}`;
     if (params) {
       const searchParams = new URLSearchParams();
       Object.entries(params as Record<string, any>).forEach(([key, value]) => {
@@ -266,6 +286,8 @@ export const apiClient = {
         } else if (errorData.detail) {
           if (typeof errorData.detail === 'string') {
             errorMessage = errorData.detail;
+          } else if (typeof errorData.detail === 'object' && errorData.detail.error) {
+            errorMessage = errorData.detail.error;
           } else {
             errorMessage = JSON.stringify(errorData.detail);
           }
@@ -316,6 +338,8 @@ export const apiClient = {
   handleAuthFailure(): void {
     tokenManager.clearRefreshToken();
     if (typeof window !== 'undefined') {
+      localStorage.removeItem('access_token');
+      clearAccessToken();
       window.dispatchEvent(new CustomEvent('auth:session-expired'));
     }
   },

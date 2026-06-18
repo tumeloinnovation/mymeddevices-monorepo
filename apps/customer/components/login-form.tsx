@@ -3,13 +3,14 @@
 import { useForm } from "react-hook-form"
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema"
 import * as z from "zod"
-import { useAuthStore, useAuthCookie } from "@mymeddevices/shared-core"
+import { useAuthStore } from "@mymeddevices/shared-core"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import useCartStore from "@/lib/store/useCartStore"
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -18,8 +19,8 @@ const loginSchema = z.object({
 })
 
 export function LoginForm() {
-  const { login, isLoading, error } = useAuthStore()
-  const { setAuthCookie } = useAuthCookie()
+  const { login, isLoading, error, getDashboardRoute } = useAuthStore()
+  const { mergeCart } = useCartStore()
   const router = useRouter()
   const {
     register,
@@ -32,8 +33,17 @@ export function LoginForm() {
   const onSubmit = async (data: z.infer<typeof loginSchema>) => {
     try {
       await login({ email: data.email, password: data.password, rememberMe: data.rememberMe })
-      setAuthCookie("1")
-      router.push("/dashboard")
+      
+      // Merge guest cart if it exists
+      try {
+        await mergeCart();
+      } catch (err) {
+        console.error("Failed to merge cart:", err);
+      }
+
+      const searchParams = new URLSearchParams(window.location.search);
+      const returnUrl = searchParams.get('returnUrl');
+      router.push(returnUrl || getDashboardRoute());
     } catch {
       // Error handled by AuthStore
     }

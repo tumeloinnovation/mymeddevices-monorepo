@@ -1,3 +1,9 @@
+from .brand_schemas import (
+    BrandCreate,
+    BrandUpdate,
+    BrandResponse,
+    BrandListResponse,
+)
 from .category_schemas import (
     CategoryCreate,
     CategoryUpdate,
@@ -18,8 +24,18 @@ from .product_schemas import (
     AIAssistResponse,
     ProductCompletenessResponse,
 )
+from .tag_schemas import (
+    TagCreate,
+    TagUpdate,
+    TagResponse,
+    TagListResponse,
+)
 
 __all__ = [
+    "BrandCreate",
+    "BrandUpdate",
+    "BrandResponse",
+    "BrandListResponse",
     "CategoryCreate",
     "CategoryUpdate",
     "CategoryResponse",
@@ -36,4 +52,8 @@ __all__ = [
     "AIAssistRequest",
     "AIAssistResponse",
     "ProductCompletenessResponse",
+    "TagCreate",
+    "TagUpdate",
+    "TagResponse",
+    "TagListResponse",
 ]

@@ -84,14 +84,14 @@ const THEME_CONFIG: Record<
   admin: {
     shapes: adminShapes,
     bgGradient: "from-slate-900 via-blue-950 to-indigo-950",
-    contentGradient: "from-blue-50 via-white to-indigo-50",
+    contentGradient: "bg-white",
     titleColor: "text-blue-300",
     subtitleColor: "text-blue-200/60",
     textColor: "text-blue-200/50",
     featureColor: "text-blue-200/50",
     bulletColor: "bg-blue-400/60",
     copyrightColor: "text-blue-200/25",
-    title: "Admin",
+    title: "Admin Center",
     subtitle: "Control Center",
     description:
       "Manage users, vendors, system settings, and platform operations from a single, secure dashboard.",
@@ -104,7 +104,7 @@ const THEME_CONFIG: Record<
   customer: {
     shapes: customerShapes,
     bgGradient: "from-teal-900 via-cyan-950 to-emerald-950",
-    contentGradient: "from-teal-50 via-white to-cyan-50",
+    contentGradient: "bg-white",
     titleColor: "text-teal-300",
     subtitleColor: "text-teal-200/60",
     textColor: "text-teal-200/50",
@@ -124,7 +124,7 @@ const THEME_CONFIG: Record<
   vendor: {
     shapes: vendorShapes,
     bgGradient: "from-slate-900 via-orange-950 to-amber-950",
-    contentGradient: "from-orange-50 via-white to-amber-50",
+    contentGradient: "bg-white",
     titleColor: "text-orange-300",
     subtitleColor: "text-orange-200/60",
     textColor: "text-orange-200/50",

@@ -9,6 +9,8 @@ from sqlalchemy import select
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
 from app.domains.auth.models.user import User
+from app.domains.catalog.models.product import Product
+from app.domains.catalog.models.category import Category
 from app.domains.vendor.models.vendor_profile import VendorProfile
 from app.domains.catalog.services.catalog_service import CatalogService
 from app.domains.catalog.services.ai_assist_service import AIAssistService
@@ -20,9 +22,16 @@ from app.domains.catalog.schemas.product_schemas import (
     ProductListResponse,
     ProductImageResponse,
     ProductImageReorder,
+    ProductReject,
     AIAssistRequest,
     AIAssistResponse,
     ProductCompletenessResponse,
+)
+from app.domains.catalog.schemas.brand_schemas import (
+    BrandCreate,
+    BrandUpdate,
+    BrandResponse,
+    BrandListResponse,
 )
 from app.domains.catalog.schemas.category_schemas import (
     CategoryCreate,
@@ -30,8 +39,14 @@ from app.domains.catalog.schemas.category_schemas import (
     CategoryResponse,
     CategoryTreeResponse,
 )
+from app.domains.catalog.schemas.tag_schemas import (
+    TagCreate,
+    TagUpdate,
+    TagResponse,
+    TagListResponse,
+)
 
-router = APIRouter(prefix="/products", tags=["Vendor Catalog"])
+router = APIRouter(tags=["Catalog"])
 
 
 # ============================================================================
@@ -89,6 +104,166 @@ async def delete_category(
     service = CatalogService(db)
     try:
         await service.delete_category(category_id=category_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ============================================================================
+# BRANDS (ADMIN-MANAGED)
+# ============================================================================
+
+@router.get("/brands", response_model=BrandListResponse, tags=["Brands"])
+async def list_brands(
+    active_only: bool = Query(True, description="Filter to active brands only"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all brands with pagination."""
+    service = CatalogService(db)
+    brands, total = await service.get_brands(active_only=active_only, page=page, page_size=page_size)
+    return {
+        "brands": brands,
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    }
+
+
+@router.post("/brands", response_model=BrandResponse, status_code=status.HTTP_201_CREATED, tags=["Brands"])
+async def create_brand(
+    data: BrandCreate,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin creates a new brand."""
+    service = CatalogService(db)
+    try:
+        brand = await service.create_brand(**data.model_dump())
+        return brand
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/brands/{brand_id}", response_model=BrandResponse, tags=["Brands"])
+async def get_brand(
+    brand_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a single brand by ID."""
+    service = CatalogService(db)
+    brand = await service.get_brand_by_id(brand_id)
+    if not brand:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Brand not found")
+    return brand
+
+
+@router.patch("/brands/{brand_id}", response_model=BrandResponse, tags=["Brands"])
+async def update_brand(
+    brand_id: str,
+    data: BrandUpdate,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin updates a brand."""
+    service = CatalogService(db)
+    try:
+        brand = await service.update_brand(brand_id=brand_id, **data.model_dump(exclude_unset=True))
+        return brand
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/brands/{brand_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Brands"])
+async def delete_brand(
+    brand_id: str,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin deletes a brand."""
+    service = CatalogService(db)
+    try:
+        await service.delete_brand(brand_id=brand_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ============================================================================
+# TAGS (ADMIN-MANAGED)
+# ============================================================================
+
+@router.get("/tags", response_model=TagListResponse, tags=["Tags"])
+async def list_tags(
+    active_only: bool = Query(True, description="Filter to active tags only"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    db: AsyncSession = Depends(get_db)
+):
+    """List all tags with pagination."""
+    service = CatalogService(db)
+    tags, total = await service.get_tags(active_only=active_only, page=page, page_size=page_size)
+    return {
+        "tags": tags,
+        "total": total,
+        "page": page,
+        "page_size": page_size
+    }
+
+
+@router.post("/tags", response_model=TagResponse, status_code=status.HTTP_201_CREATED, tags=["Tags"])
+async def create_tag(
+    data: TagCreate,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin creates a new tag."""
+    service = CatalogService(db)
+    try:
+        tag = await service.create_tag(**data.model_dump())
+        return tag
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.get("/tags/{tag_id}", response_model=TagResponse, tags=["Tags"])
+async def get_tag(
+    tag_id: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """Get a single tag by ID."""
+    service = CatalogService(db)
+    tag = await service.get_tag_by_id(tag_id)
+    if not tag:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tag not found")
+    return tag
+
+
+@router.patch("/tags/{tag_id}", response_model=TagResponse, tags=["Tags"])
+async def update_tag(
+    tag_id: str,
+    data: TagUpdate,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin updates a tag."""
+    service = CatalogService(db)
+    try:
+        tag = await service.update_tag(tag_id=tag_id, **data.model_dump(exclude_unset=True))
+        return tag
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/tags/{tag_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Tags"])
+async def delete_tag(
+    tag_id: str,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin deletes a tag."""
+    service = CatalogService(db)
+    try:
+        await service.delete_tag(tag_id=tag_id)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -166,7 +341,7 @@ async def get_vendor_context(
 # VENDOR PRODUCT CRUD
 # ============================================================================
 
-@router.post("", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/products", response_model=ProductResponse, status_code=status.HTTP_201_CREATED, tags=["Vendor Catalog"])
 async def create_product(
     data: ProductCreate,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -191,7 +366,7 @@ async def create_product(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("", response_model=ProductListResponse)
+@router.get("/products", response_model=ProductListResponse, tags=["Vendor Catalog"])
 async def list_products(
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     status_filter: Optional[str] = Query(None, description="Filter by status (draft, pending_review, published, archived)"),
@@ -222,7 +397,7 @@ async def list_products(
     }
 
 
-@router.get("/{id}", response_model=ProductResponse)
+@router.get("/products/{id}", response_model=ProductResponse, tags=["Vendor Catalog"])
 async def get_product(
     id: str,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -238,7 +413,7 @@ async def get_product(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.patch("/{id}", response_model=ProductResponse)
+@router.patch("/products/{id}", response_model=ProductResponse, tags=["Vendor Catalog"])
 async def update_product(
     id: str,
     data: ProductUpdate,
@@ -259,7 +434,7 @@ async def update_product(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/products/{id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Vendor Catalog"])
 async def delete_product(
     id: str,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -278,7 +453,7 @@ async def delete_product(
 # LIFECYCLE MANAGEMENT
 # ============================================================================
 
-@router.post("/{id}/verify", response_model=ProductResponse)
+@router.post("/products/{id}/verify", response_model=ProductResponse, tags=["Vendor Catalog"])
 async def verify_product(
     id: str,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -294,7 +469,7 @@ async def verify_product(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/{id}/publish", response_model=ProductResponse)
+@router.post("/products/{id}/publish", response_model=ProductResponse, tags=["Vendor Catalog"])
 async def publish_product(
     id: str,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -310,7 +485,24 @@ async def publish_product(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/{id}/archive", response_model=ProductResponse)
+@router.post("/products/{id}/reject", response_model=ProductResponse, tags=["Vendor Catalog"])
+async def reject_product(
+    id: str,
+    data: ProductReject,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Reject a product under review with feedback. Admin only."""
+    service = CatalogService(db)
+    try:
+        # Admins don't have a vendor restriction
+        product = await service.reject_product(vendor_id=None, product_id=id, reason=data.reason)
+        return product
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/products/{id}/archive", response_model=ProductResponse, tags=["Vendor Catalog"])
 async def archive_product(
     id: str,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -326,7 +518,7 @@ async def archive_product(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.post("/{id}/unarchive", response_model=ProductResponse)
+@router.post("/products/{id}/unarchive", response_model=ProductResponse, tags=["Vendor Catalog"])
 async def unarchive_product(
     id: str,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -346,7 +538,7 @@ async def unarchive_product(
 # COMPLETENESS & AI ASSIST
 # ============================================================================
 
-@router.get("/{id}/completeness", response_model=ProductCompletenessResponse)
+@router.get("/products/{id}/completeness", response_model=ProductCompletenessResponse, tags=["Vendor Catalog"])
 async def get_product_completeness(
     id: str,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -362,7 +554,7 @@ async def get_product_completeness(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.post("/{id}/ai-assist", response_model=AIAssistResponse)
+@router.post("/products/{id}/ai-assist", response_model=AIAssistResponse, tags=["Vendor Catalog"])
 async def get_ai_suggestions(
     id: str,
     data: AIAssistRequest,
@@ -397,7 +589,7 @@ async def get_ai_suggestions(
 # IMAGE MANAGEMENT (LOCAL FILESYSTEM STORAGE)
 # ============================================================================
 
-@router.post("/{id}/images", response_model=ProductImageResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/products/{id}/images", response_model=ProductImageResponse, status_code=status.HTTP_201_CREATED, tags=["Vendor Catalog"])
 async def upload_product_image(
     id: str,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -446,7 +638,7 @@ async def upload_product_image(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.delete("/{id}/images/{image_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/products/{id}/images/{image_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Vendor Catalog"])
 async def remove_product_image(
     id: str,
     image_id: str,
@@ -462,7 +654,7 @@ async def remove_product_image(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.patch("/{id}/images/reorder", response_model=List[ProductImageResponse])
+@router.patch("/products/{id}/images/reorder", response_model=List[ProductImageResponse], tags=["Vendor Catalog"])
 async def reorder_product_images(
     id: str,
     data: ProductImageReorder,

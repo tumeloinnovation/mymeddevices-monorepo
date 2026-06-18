@@ -7,13 +7,20 @@ node_modules
 .next
 out
 next-env.d.ts
+dist
+build
 
 # Python
 .venv
+venv
+env
 __pycache__
 *.pyc
 .pytest_cache
 .uv
+.python-version
+.mypy_cache
+.ruff_cache
 
 # Logs
 logs/
@@ -30,3 +37,13 @@ apps/backend/.env
 # OS
 .DS_Store
 Thumbs.db
+.idea
+.vscode
+*.swp
+*.swo
+
+# Project specific
+static/uploads/*
+!static/uploads/.gitkeep
+backend/compiled_emails/*
+!backend/compiled_emails/.gitkeep

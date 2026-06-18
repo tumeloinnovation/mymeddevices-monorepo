@@ -9,6 +9,7 @@ class CategoryCreate(BaseModel):
     name: str = Field(..., min_length=2, max_length=255)
     slug: str = Field(..., min_length=2, max_length=255, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     description: Optional[str] = None
+    permalink: Optional[str] = Field(None, max_length=500)
     icon_url: Optional[str] = None
     parent_id: Optional[uuid.UUID] = None
     sort_order: int = 0
@@ -20,6 +21,7 @@ class CategoryUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=2, max_length=255)
     slug: Optional[str] = Field(None, min_length=2, max_length=255, pattern=r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
     description: Optional[str] = None
+    permalink: Optional[str] = Field(None, max_length=500)
     icon_url: Optional[str] = None
     parent_id: Optional[uuid.UUID] = None
     sort_order: Optional[int] = None
@@ -32,6 +34,7 @@ class CategoryResponse(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
+    permalink: Optional[str] = None
     icon_url: Optional[str] = None
     parent_id: Optional[uuid.UUID] = None
     sort_order: int
@@ -50,6 +53,7 @@ class CategoryTreeResponse(BaseModel):
     name: str
     slug: str
     description: Optional[str] = None
+    permalink: Optional[str] = None
     icon_url: Optional[str] = None
     sort_order: int
     is_active: bool

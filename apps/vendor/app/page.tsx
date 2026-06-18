@@ -1,5 +1,5 @@
-import { permanentRedirect } from "next/navigation"
+import { redirect } from 'next/navigation';
 
-export default function VendorHome() {
-  permanentRedirect("/dashboard")
+export default function HomePage() {
+  redirect('/vendor/dashboard');
 }

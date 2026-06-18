@@ -1,0 +1,39 @@
+<mjml>
+  <mj-head>
+    <mj-include path="../components/head.mjml" />
+  </mj-head>
+  <mj-body background-color="#f4f6f8">
+    <mj-include path="../components/header.mjml" />
+    
+    <mj-section padding="36px 32px 12px" background-color="#ffffff">
+      <mj-column>
+        <mj-text mj-class="h1">Delivery Confirmed</mj-text>
+        <mj-text>Hi {{ user_name }}, your order <strong>{{ order_id }}</strong> has been delivered successfully.</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="0 32px" background-color="#ffffff">
+      <mj-column background-color="#f0fdf4" border="1px solid #bbf7d0" border-radius="8px" padding="16px 20px">
+        <mj-text font-size="14px" color="#166534" padding="0">
+          Thank you for choosing MyMedDevices for your medical device needs.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="24px 32px 0" background-color="#ffffff">
+      <mj-column>
+        <mj-text padding="0">
+          For device setup instructions and user manuals, visit our resources page.
+        </mj-text>
+        <mj-button href="{{ instructions_url }}" padding-top="24px">
+          Device Setup &amp; Instructions
+        </mj-button>
+        <mj-button href="{{ support_url }}" background-color="transparent" color="#EF6C24" border="2px solid #EF6C24" padding-top="12px">
+          Support &amp; Medical Consultation
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-include path="../components/footer.mjml" />
+  </mj-body>
+</mjml>

@@ -35,6 +35,15 @@ class AuthService:
         user = await self.user_repo.create(user)
         logger.info(f"User registered: {user.email}")
 
+        # Send welcome email
+        try:
+            from app.domains.shopping.services.email_notification_service import EmailNotificationService
+            email_service = EmailNotificationService()
+            user_name = f"{user.first_name} {user.last_name}".strip() or user.email.split('@')[0]
+            await email_service.send_account_welcome(user.email, user_name, str(user.id))
+        except Exception as e:
+            logger.error(f"Failed to send welcome email: {e}")
+
         return user
 
     async def register_vendor(self, vendor_in: VendorUserCreate) -> User:
@@ -122,7 +131,27 @@ class AuthService:
         return user, refresh_token_str
 
     async def create_tokens(self, user: User, refresh_token: str) -> dict:
-        access_token = create_access_token(data={"sub": str(user.id), "email": user.email, "role": user.role})
+        # Ensure vendor_profile is loaded for is_vendor_verified property
+        if user.role == "vendor":
+            from sqlalchemy import select
+            from sqlalchemy.orm import selectinload
+            from app.domains.vendor.models.vendor_profile import VendorProfile
+            result = await self.db.execute(
+                select(User).options(selectinload(User.vendor_profile)).where(User.id == user.id)
+            )
+            user = result.scalar_one()
+
+        # Resolve device_id from refresh token if available to track current session
+        device_id = None
+        if refresh_token:
+            token_obj = await self.token_repo.get_by_token(refresh_token)
+            if token_obj:
+                device_id = token_obj.device_id
+
+        access_token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
+        if device_id:
+            access_token_data["device_id"] = device_id
+        access_token = create_access_token(data=access_token_data)
         return {
             "access_token": access_token,
             "refresh_token": refresh_token,
@@ -137,6 +166,7 @@ class AuthService:
                 "phone": user.phone,
                 "is_active": user.is_active,
                 "is_verified": user.is_verified,
+                "is_vendor_verified": user.is_vendor_verified,
             }
         }
 
@@ -345,6 +375,18 @@ class AuthService:
         if not delete_data.confirm:
             return False, "You must confirm account deletion"
 
+        # Send confirmation email before anonymizing
+        from app.core.mail import send_email
+        try:
+            await send_email(
+                to_email=user.email,
+                subject="Account Deleted - MyMedDevices",
+                body=f"Hello {user.first_name},\n\nYour account at MyMedDevices has been successfully deleted as per your request. All your personal data has been anonymized.\n\nThank you for being with us.",
+                html_content=f"<h1>Account Deleted</h1><p>Hello {user.first_name},</p><p>Your account at MyMedDevices has been successfully deleted as per your request. All your personal data has been anonymized.</p><p>Thank you for being with us.</p>"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send account deletion confirmation email to {user.email}: {e}")
+
         # Soft delete - deactivate and anonymize
         await self.user_repo.update(user, {
             "is_active": False,
@@ -427,4 +469,57 @@ class AuthService:
         await self.user_repo.update(user, {"password_hash": get_password_hash(new_password)})
 
         logger.info(f"Password reset successfully for user: {user.email}")
+        return True
+
+    async def get_devices(self, user: User) -> list[UserDevice]:
+        """
+        Get all devices for a user.
+        """
+        result = await self.db.execute(
+            select(UserDevice).where(UserDevice.user_id == user.id)
+        )
+        return result.scalars().all()
+
+    async def delete_device(self, user: User, device_id: str) -> bool:
+        """
+        Delete a user device and revoke its refresh token.
+        """
+        # Find device
+        device = await self.device_repo.get_by_user_and_device(user.id, device_id)
+        if not device:
+            return False
+            
+        # Delete device
+        await self.device_repo.delete(device.id)
+        
+        # Revoke associated refresh token
+        from sqlalchemy import update
+        await self.db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user.id, RefreshToken.device_id == device_id)
+            .values(revoked=True)
+        )
+        await self.db.commit()
+        return True
+
+    async def delete_all_other_devices(self, user: User, current_device_id: str) -> bool:
+        """
+        Delete all user devices except the current one and revoke their refresh tokens.
+        """
+        from sqlalchemy import delete
+        
+        # Delete other devices
+        await self.db.execute(
+            delete(UserDevice)
+            .where(UserDevice.user_id == user.id, UserDevice.device_id != current_device_id)
+        )
+        
+        # Revoke other refresh tokens
+        from sqlalchemy import update
+        await self.db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user.id, RefreshToken.device_id != current_device_id)
+            .values(revoked=True)
+        )
+        await self.db.commit()
         return True

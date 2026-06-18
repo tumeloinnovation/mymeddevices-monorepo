@@ -35,3 +35,17 @@ async def test_get_shared_cart_success(db: AsyncSession):
     # Verify access count incremented
     await db.refresh(share)
     assert share.access_count == 1
+
+@pytest.mark.asyncio
+async def test_get_shared_cart_expired(db: AsyncSession):
+    from datetime import datetime, timedelta, timezone
+    cart = Cart(cart_type="persistent", is_active=True)
+    db.add(cart)
+    await db.commit()
+    
+    service = CartShareService(db)
+    # Create a share that is already expired
+    share = await service.create_share(cart.id, expires_days=-1)
+    
+    retrieved_cart = await service.get_shared_cart(share.share_token)
+    assert retrieved_cart is None

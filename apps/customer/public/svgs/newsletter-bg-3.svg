@@ -1,0 +1,11 @@
+<svg width="800" height="400" viewBox="0 0 800 400" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <pattern id="dots" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="20" cy="20" r="2" fill="#2c29de" opacity="0.1"/>
+    </pattern>
+  </defs>
+  <rect width="800" height="400" fill="url(#dots)"/>
+  <path d="M700 50 L750 100 L700 150 L650 100 Z" fill="#de7429" opacity="0.08"/>
+  <path d="M100 300 Q200 250 300 300 Q400 350 500 300" stroke="#2c29de" stroke-width="3" opacity="0.1" fill="none"/>
+</svg></content>
+<parameter name="filePath">/home/nozel/Developer/company/MyMedDevices/mymeddevices_web/public/svgs/newsletter-bg-3.svg

@@ -1,5 +1,5 @@
-import { permanentRedirect } from "next/navigation"
+import HomePageClient from "./HomePageClient";
 
-export default function CustomerHome() {
-  permanentRedirect("/dashboard")
+export default function HomePage() {
+  return <HomePageClient />;
 }

@@ -21,6 +21,7 @@ from app.domains.catalog.api.storefront_api import router as storefront_router
 from app.domains.shopping.api.cart_api import router as cart_router
 from app.domains.shopping.api.cart_share_api import router as cart_share_router
 from app.domains.shopping.api.coupons_api import router as coupons_router
+from app.domains.shopping.api.vendor_coupons_api import router as vendor_coupons_router
 from app.domains.shopping.api.saved_cart_api import router as saved_cart_router
 from app.domains.shopping.api.admin_shopping_api import router as admin_shopping_router
 from app.domains.shopping.api.checkout_api import router as checkout_router
@@ -126,6 +127,7 @@ app.include_router(storefront_router, prefix="/api/v1/storefront")
 app.include_router(cart_router, prefix="/api/v1/shopping")
 app.include_router(cart_share_router, prefix="/api/v1/shopping")
 app.include_router(coupons_router, prefix="/api/v1/shopping")
+app.include_router(vendor_coupons_router, prefix="/api/v1/shopping")
 app.include_router(saved_cart_router, prefix="/api/v1/shopping")
 app.include_router(checkout_router, prefix="/api/v1/shopping")
 app.include_router(order_router, prefix="/api/v1/shopping")

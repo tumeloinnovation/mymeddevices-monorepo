@@ -4,6 +4,134 @@ import { useEffect, useState, useCallback } from "react"
 import { useAuthStore } from "@mymeddevices/shared-core"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Skeleton } from "@/components/ui/skeleton"
+import { toast } from "sonner"
+
+interface SystemStatus {
+  smtp: { host: string; port: number; enabled: boolean }
+  sms: { sender_id: string; enabled: boolean }
+}
+
+interface RateLimit {
+  max_requests: number
+  window_seconds: number
+}
+
+function RateLimitsSection({ 
+  limits, 
+  onUpdate 
+}: { 
+  limits: Record<string, [number, number]>
+  onUpdate: (newLimits: Record<string, [number, number]>) => Promise<void>
+}) {
+  const [editingLimits, setEditingLimits] = useState<Record<string, [number, number]>>(limits)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+
+  useEffect(() => {
+    setEditingLimits(limits)
+  }, [limits])
+
+  const handleSave = async () => {
+    setIsSaving(true)
+    try {
+      await onUpdate(editingLimits)
+      setIsEditing(false)
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  const handleChange = (key: string, index: number, value: string) => {
+    const numValue = parseInt(value) || 0
+    setEditingLimits(prev => {
+      const current = [...prev[key]] as [number, number]
+      current[index] = numValue
+      return { ...prev, [key]: current }
+    })
+  }
+
+  return (
+    <div className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 mt-4">
+      <div className="flex items-center justify-between px-4 py-2.5 border-b-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
+        <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-600 dark:text-zinc-400">
+          Rate Limits
+        </h3>
+        {!isEditing ? (
+          <button
+            onClick={() => setIsEditing(true)}
+            className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 transition-colors"
+          >
+            Edit Limits
+          </button>
+        ) : (
+          <div className="flex gap-3">
+            <button
+              onClick={() => {
+                setEditingLimits(limits)
+                setIsEditing(false)
+              }}
+              disabled={isSaving}
+              className="text-[10px] font-bold uppercase tracking-widest text-zinc-500 hover:text-rose-500 transition-colors disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={isSaving}
+              className="text-[10px] font-bold uppercase tracking-widest text-emerald-600 hover:text-emerald-500 transition-colors disabled:opacity-50"
+            >
+              {isSaving ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="p-4">
+        <div className="grid gap-2">
+          <div className="grid grid-cols-3 text-[10px] uppercase tracking-wider text-zinc-400 font-semibold mb-1 px-1">
+            <span>Endpoint</span>
+            <span>Max Requests</span>
+            <span>Window (sec)</span>
+          </div>
+          {Object.entries(editingLimits).map(([key, [max, window]]) => (
+            <div key={key} className="grid grid-cols-3 items-center py-2 px-1 border-b border-zinc-100 dark:border-zinc-900 last:border-0">
+              <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400 uppercase tracking-tight">
+                {key.replace(/_/g, ' ')}
+              </span>
+              <div className="pr-4">
+                {isEditing ? (
+                  <input
+                    type="number"
+                    value={max}
+                    onChange={(e) => handleChange(key, 0, e.target.value)}
+                    className="w-full bg-zinc-100 dark:bg-zinc-900 border-0 text-xs font-mono py-1 px-2 focus:ring-1 focus:ring-zinc-400 outline-none"
+                  />
+                ) : (
+                  <span className="text-sm font-mono text-zinc-900 dark:text-zinc-100 tabular-nums">
+                    {max}
+                  </span>
+                )}
+              </div>
+              <div>
+                {isEditing ? (
+                  <input
+                    type="number"
+                    value={window}
+                    onChange={(e) => handleChange(key, 1, e.target.value)}
+                    className="w-full bg-zinc-100 dark:bg-zinc-900 border-0 text-xs font-mono py-1 px-2 focus:ring-1 focus:ring-zinc-400 outline-none"
+                  />
+                ) : (
+                  <span className="text-sm font-mono text-zinc-900 dark:text-zinc-100 tabular-nums">
+                    {window}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 interface SystemStatus {
   smtp: { host: string; port: number; enabled: boolean }
@@ -104,46 +232,52 @@ function StatusHeaderBar({ allOk }: { allOk: boolean }) {
 }
 
 export default function SystemSettingsPage() {
-  const { getSystemStatus } = useAuthStore()
+  const { getSystemStatus, getRateLimits, updateRateLimits } = useAuthStore()
   const [status, setStatus] = useState<SystemStatus | null>(null)
+  const [rateLimits, setRateLimits] = useState<Record<string, [number, number]> | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchStatus = useCallback(async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true)
     setError(null)
     setStatus(null)
+    setRateLimits(null)
     try {
-      const result = await getSystemStatus()
-      setStatus(result as unknown as SystemStatus)
+      const [statusResult, limitsResult] = await Promise.all([
+        getSystemStatus(),
+        getRateLimits()
+      ])
+      setStatus(statusResult as unknown as SystemStatus)
+      setRateLimits(limitsResult)
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Failed to fetch system status"
+      const msg = e instanceof Error ? e.message : "Failed to fetch system data"
       setError(msg)
     } finally {
       setLoading(false)
     }
-  }, [getSystemStatus])
+  }, [getSystemStatus, getRateLimits])
 
   useEffect(() => {
-    fetchStatus()
-  }, [fetchStatus])
+    fetchData()
+  }, [fetchData])
 
   const allOk = status ? status.smtp.enabled && status.sms.enabled : false
 
   return (
     <DashboardLayout>
-      <div className="max-w-3xl">
+      <div className="max-w-3xl pb-12">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-base font-semibold uppercase tracking-widest text-zinc-800 dark:text-zinc-200">
-              System Status
+              System Settings
             </h1>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              Infrastructure and service health monitor
+              Infrastructure health and application configuration
             </p>
           </div>
           <button
-            onClick={fetchStatus}
+            onClick={fetchData}
             disabled={loading}
             className="text-xs font-medium uppercase tracking-wider px-3 py-1.5 border-2 border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-40 transition-colors"
           >
@@ -158,6 +292,7 @@ export default function SystemSettingsPage() {
               <Skeleton className="h-40 w-full rounded-none" />
               <Skeleton className="h-40 w-full rounded-none" />
             </div>
+            <Skeleton className="h-64 w-full rounded-none" />
           </div>
         ) : error ? (
           <div className="border-2 border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-950/40">
@@ -174,46 +309,60 @@ export default function SystemSettingsPage() {
                 Ensure the backend server is running and you are authenticated as an admin.
               </p>
               <button
-                onClick={fetchStatus}
+                onClick={fetchData}
                 className="text-xs font-medium uppercase tracking-wider px-3 py-1.5 border-2 border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-900/40 transition-colors"
               >
                 Retry
               </button>
             </div>
           </div>
-        ) : status ? (
+        ) : (
           <div className="space-y-4">
-            <StatusHeaderBar allOk={allOk} />
+            {status && (
+              <>
+                <StatusHeaderBar allOk={allOk} />
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <StatusCardShell
-                title="SMTP"
-                status={status.smtp.enabled}
-                statusLabel={status.smtp.enabled ? "Connected" : "Disconnected"}
-              >
-                <DataRow label="Host">{status.smtp.host || "—"}</DataRow>
-                <DataRow label="Port">{status.smtp.port}</DataRow>
-                <DataRow label="Authentication">
-                  <span className={status.smtp.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
-                    {status.smtp.enabled ? "Configured" : "Missing"}
-                  </span>
-                </DataRow>
-              </StatusCardShell>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <StatusCardShell
+                    title="SMTP"
+                    status={status.smtp.enabled}
+                    statusLabel={status.smtp.enabled ? "Connected" : "Disconnected"}
+                  >
+                    <DataRow label="Host">{status.smtp.host || "—"}</DataRow>
+                    <DataRow label="Port">{status.smtp.port}</DataRow>
+                    <DataRow label="Authentication">
+                      <span className={status.smtp.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+                        {status.smtp.enabled ? "Configured" : "Missing"}
+                      </span>
+                    </DataRow>
+                  </StatusCardShell>
 
-              <StatusCardShell
-                title="SMS"
-                status={status.sms.enabled}
-                statusLabel={status.sms.enabled ? "Connected" : "Disconnected"}
-              >
-                <DataRow label="Sender ID">{status.sms.sender_id || "—"}</DataRow>
-                <DataRow label="Provider">Hostpinnacle</DataRow>
-                <DataRow label="API Key">
-                  <span className={status.sms.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
-                    {status.sms.enabled ? "Configured" : "Missing"}
-                  </span>
-                </DataRow>
-              </StatusCardShell>
-            </div>
+                  <StatusCardShell
+                    title="SMS"
+                    status={status.sms.enabled}
+                    statusLabel={status.sms.enabled ? "Connected" : "Disconnected"}
+                  >
+                    <DataRow label="Sender ID">{status.sms.sender_id || "—"}</DataRow>
+                    <DataRow label="Provider">Hostpinnacle</DataRow>
+                    <DataRow label="API Key">
+                      <span className={status.sms.enabled ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}>
+                        {status.sms.enabled ? "Configured" : "Missing"}
+                      </span>
+                    </DataRow>
+                  </StatusCardShell>
+                </div>
+              </>
+            )}
+
+            {rateLimits && (
+              <RateLimitsSection 
+                limits={rateLimits} 
+                onUpdate={async (newLimits) => {
+                  await updateRateLimits(newLimits)
+                  setRateLimits(newLimits)
+                }} 
+              />
+            )}
 
             <div className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
               <div className="flex items-center px-4 py-2.5 border-b-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
@@ -234,7 +383,7 @@ export default function SystemSettingsPage() {
               </div>
             </div>
           </div>
-        ) : null}
+        )}
       </div>
     </DashboardLayout>
   )

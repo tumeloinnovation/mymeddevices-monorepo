@@ -50,6 +50,7 @@ class UserResponse(UserBase):
     id: uuid.UUID = Field(..., description="Unique user identifier (UUID)")
     is_active: bool = Field(True, description="Indicates if the user account is active")
     is_verified: bool = Field(False, description="Indicates if the user's email has been verified via OTP")
+    is_vendor_verified: bool = Field(False, description="Indicates if vendor account is approved")
 
     class Config:
         from_attributes = True

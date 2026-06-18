@@ -1,0 +1,43 @@
+<mjml>
+  <mj-head>
+    <mj-include path="../components/head.mjml" />
+  </mj-head>
+  <mj-body background-color="#f4f6f8">
+    <mj-include path="../components/header.mjml" />
+    
+    <mj-section padding="36px 32px 12px" background-color="#ffffff">
+      <mj-column>
+        <mj-text mj-class="h1">New Login Detected</mj-text>
+        <mj-text>Hi {{ user_name }}, we detected a sign-in to your MyMedDevices account from a device or location we don't recognize.</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="0 32px" background-color="#ffffff">
+      <mj-column background-color="#f8fafc" border="1px solid #e2e8f0" border-radius="8px" padding="20px">
+        <mj-text padding="0 0 6px"><span style="font-weight: 600; color: #053D7A;">Device:</span> {{ device }}</mj-text>
+        <mj-text padding="0 0 6px"><span style="font-weight: 600; color: #053D7A;">Browser:</span> {{ browser }}</mj-text>
+        <mj-text padding="0 0 6px"><span style="font-weight: 600; color: #053D7A;">Location:</span> {{ location }}</mj-text>
+        <mj-text padding="0"><span style="font-weight: 600; color: #053D7A;">Time:</span> {{ time }}</mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="28px 32px 0" background-color="#ffffff">
+      <mj-column background-color="#fef2f2" border="1px solid #fecaca" border-radius="8px" padding="16px 20px">
+        <mj-text font-size="14px" color="#991b1b" padding="0">
+          If this was you, no action is needed. If you do not recognize this login,
+          <a href="{{ security_url }}" style="color: #991b1b; font-weight: 600; text-decoration: underline;">secure your account</a> immediately and contact support.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="24px 32px 24px" background-color="#ffffff">
+      <mj-column>
+        <mj-button href="{{ security_url }}">
+          Review Account Security
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-include path="../components/footer.mjml" />
+  </mj-body>
+</mjml>

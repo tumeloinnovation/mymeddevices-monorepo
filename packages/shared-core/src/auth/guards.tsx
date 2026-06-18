@@ -74,12 +74,12 @@ export function useAuthCookie() {
   const setCookie = useCallback((token: string) => {
     if (typeof document === "undefined") return
     // Use Strict for improved security. Consider setting cookies server-side with HttpOnly and Secure flags
-    document.cookie = `auth-token=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Strict`
+    document.cookie = `auth_token=${token}; path=/; max-age=${7 * 24 * 60 * 60}; SameSite=Strict`
   }, [])
 
   const clearCookie = useCallback(() => {
     if (typeof document === "undefined") return
-    document.cookie = "auth-token=; path=/; max-age=0; SameSite=Strict"
+    document.cookie = "auth_token=; path=/; max-age=0; SameSite=Strict"
   }, [])
 
   return { setAuthCookie: setCookie, clearAuthCookie: clearCookie }

@@ -26,6 +26,8 @@ class VendorProfile(Base, IDMixin, AuditMixin):
     # ===============================
     # STORE INFORMATION
     # ===============================
+    username: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, unique=True, index=True)
+    display_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     store_name: Mapped[str] = mapped_column(String(255), nullable=False)
     store_description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     store_logo_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)

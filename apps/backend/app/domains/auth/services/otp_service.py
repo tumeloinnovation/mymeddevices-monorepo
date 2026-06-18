@@ -165,29 +165,9 @@ class OTPService:
         """
         Send OTP code via SMTP using the branded HTML template.
         """
-        if purpose == "reset_password":
-            subject = "Reset Your MyMed Account Password"
-            title = "Password Reset"
-            lead_text = "We received a request to reset your password. Use the verification code below to proceed."
-            footer_note = "If you did not request a password reset, please ignore this email or contact support."
-        elif purpose == "email_change":
-            subject = "Confirm Your New Email Address"
-            title = "Confirm Email Change"
-            lead_text = "You requested to change your email address. Use the verification code below to confirm this change."
-            footer_note = "If you did not request this email change, please secure your account credentials immediately."
-        else:
-            subject = "Verify Your MyMed Account"
-            title = "Email Verification"
-            lead_text = "Welcome to MyMed! Use the verification code below to verify your email address and activate your account."
-            footer_note = "This code is valid for 15 minutes. For security, never share this code with anyone."
-
-        from app.core.email_templates import otp_html
-        html_content = otp_html(code, title, lead_text, footer_note, self.OTP_EXPIRY_MINUTES)
-
-        text_content = f"{title}\n\n{lead_text}\n\nCode: {code}\nExpires in {self.OTP_EXPIRY_MINUTES} minutes.\n\n{footer_note}"
-
-        from app.core.mail import send_email
-        await send_email(email, subject, text_content, html_content)
+        from app.domains.shopping.services.email_notification_service import EmailNotificationService
+        email_service = EmailNotificationService()
+        await email_service.send_otp(email, code, purpose)
 
     async def initiate_verification(
         self,

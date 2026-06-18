@@ -1,287 +1,181 @@
-from typing import Optional
+import os
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from app.core.config import settings
 
-BRAND_PRIMARY = "#EF6C24"
-BRAND_PRIMARY_LIGHT = "#fbdccb"
-BRAND_DARK = "#053D7A"
-BRAND_DARK_LIGHT = "#d6e4f0"
+# Setup Jinja2 environment
+# The compiled templates are in apps/backend/compiled_emails
+# We use absolute path to be safe
+COMPILED_EMAILS_DIR = Path(__file__).parent.parent.parent / "compiled_emails"
+
+env = Environment(
+    loader=FileSystemLoader(str(COMPILED_EMAILS_DIR)),
+    autoescape=select_autoescape(["html", "xml"]),
+)
 
 
-def _base_html(
-    body_content: str,
-    title: str,
-    preheader: str = "",
-    logo_url: Optional[str] = None,
-) -> str:
-    logo = logo_url or settings.EMAIL_LOGO_URL
-
-    if not logo:
-        header_html = """          <tr>
-            <td style="text-align:center;padding:32px 32px 12px;font-size:20px;font-weight:700;color:#053D7A;letter-spacing:-0.02em;">
-              MyMedDevices
-            </td>
-          </tr>"""
-    else:
-        header_html = f"""          <tr>
-            <td class="header-cell">
-              <img src="{logo}" alt="MyMedDevices" width="180" height="60" style="max-width:180px;height:auto;border:0;outline:none;display:block;margin:0 auto;">
-            </td>
-          </tr>"""
-
-    return f"""<!DOCTYPE html>
-<html lang="en" dir="ltr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="color-scheme" content="light dark">
-  <meta name="supported-color-schemes" content="light dark">
-  <title>{title}</title>
-  <style>
-    .preheader {{
-      display: none;
-      font-size: 1px;
-      color: #f4f6f8;
-      line-height: 1px;
-      max-height: 0px;
-      max-width: 0px;
-      opacity: 0;
-      overflow: hidden;
-      mso-hide: all;
-    }}
-    body {{
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-      background-color: #f4f6f8;
-      margin: 0;
-      padding: 0;
-      -webkit-font-smoothing: antialiased;
-    }}
-    .email-table {{
-      width: 100%;
-      table-layout: fixed;
-      background-color: #f4f6f8;
-    }}
-    .email-container {{
-      max-width: 600px;
-      margin: 0 auto;
-      background: #ffffff;
-      border-radius: 8px;
-      overflow: hidden;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.06);
-      border: 1px solid #e5e7eb;
-    }}
-    .header-cell {{
-      padding: 28px 32px 12px;
-      text-align: center;
-    }}
-    .accent-bar {{
-      height: 4px;
-      background-color: {BRAND_PRIMARY};
-    }}
-    .content-cell {{
-      padding: 36px 32px 24px;
-    }}
-    h1 {{
-      font-size: 22px;
-      font-weight: 700;
-      color: {BRAND_DARK};
-      margin: 0 0 12px;
-      line-height: 1.3;
-    }}
-    p {{
-      font-size: 16px;
-      line-height: 1.6;
-      color: #475569;
-      margin: 0 0 20px;
-    }}
-    .otp-container {{
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 28px;
-      text-align: center;
-      margin: 28px 0;
-    }}
-    .otp-code {{
-      font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, Courier, monospace;
-      font-size: 34px;
-      font-weight: 700;
-      letter-spacing: 8px;
-      color: {BRAND_PRIMARY};
-      margin: 0;
-      display: inline-block;
-      user-select: all;
-    }}
-    .otp-expiry {{
-      font-size: 14px;
-      color: #64748b;
-      margin: 10px 0 0;
-    }}
-    .button-cell {{
-      text-align: center;
-      padding: 8px 0 24px;
-    }}
-    .button {{
-      display: inline-block;
-      padding: 14px 36px;
-      font-size: 16px;
-      font-weight: 600;
-      color: #ffffff;
-      background-color: {BRAND_PRIMARY};
-      border-radius: 6px;
-      text-decoration: none;
-      line-height: 1.4;
-      mso-hide: none;
-    }}
-    .button:hover {{
-      background-color: #d4540f;
-    }}
-    .divider {{
-      height: 1px;
-      background-color: #e5e7eb;
-      margin: 24px 0;
-    }}
-    .footer-cell {{
-      padding: 24px 32px;
-      background-color: #f8fafc;
-      border-top: 1px solid #e5e7eb;
-    }}
-    .footer-text {{
-      font-size: 13px;
-      color: #94a3b8;
-      line-height: 1.5;
-      margin: 0 0 4px;
-    }}
-    .footer-text a {{
-      color: {BRAND_DARK};
-      text-decoration: underline;
-    }}
-    @media (prefers-color-scheme: dark) {{
-      body, .email-table {{
-        background-color: #0f172a;
-      }}
-      .email-container {{
-        background: #1e293b;
-        border-color: #334155;
-      }}
-      h1 {{
-        color: #f1f5f9;
-      }}
-      p {{
-        color: #cbd5e1;
-      }}
-      .otp-container {{
-        background: #0f172a;
-        border-color: #334155;
-      }}
-      .otp-expiry {{
-        color: #94a3b8;
-      }}
-      .footer-cell {{
-        background-color: #0f172a;
-        border-top-color: #334155;
-      }}
-      .footer-text {{
-        color: #64748b;
-      }}
-    }}
-    @media only screen and (max-width: 480px) {{
-      .email-container {{
-        border-radius: 0;
-        border-left: none;
-        border-right: none;
-      }}
-      .content-cell {{
-        padding: 28px 20px 20px;
-      }}
-      .header-cell {{
-        padding: 24px 20px 8px;
-      }}
-      img {{
-        max-width: 150px;
-      }}
-      .footer-cell {{
-        padding: 20px;
-      }}
-      h1 {{
-        font-size: 20px;
-      }}
-      .otp-code {{
-        font-size: 28px;
-        letter-spacing: 6px;
-      }}
-      .button {{
-        display: block;
-        padding: 14px 20px;
-      }}
-    }}
-  </style>
-</head>
-<body lang="en" dir="ltr">
-  <div lang="en" dir="ltr" class="preheader">{preheader}</div>
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="email-table">
-    <tr>
-      <td align="center" style="padding: 32px 16px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" class="email-container">
-          {header_html}
-          <tr>
-            <td class="accent-bar"></td>
-          </tr>
-          {body_content}
-          <tr>
-            <td class="footer-cell">
-              <p class="footer-text">
-                This is an automated message from MyMedDevices.<br>
-                If you need help, contact <a href="mailto:support@mymeddevices.com">support@mymeddevices.com</a>
-              </p>
-              <p class="footer-text" style="margin-top:8px;">
-                &copy; 2026 MyMedDevices. All rights reserved.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>"""
+def render_email_template(template_name: str, context: Dict[str, Any]) -> str:
+    """Helper to render a compiled MJML template with Jinja2."""
+    template = env.get_template(template_name)
+    
+    # Add common variables if not present
+    if "logo_url" not in context:
+        context["logo_url"] = settings.EMAIL_LOGO_URL or ""
+    if "site_url" not in context:
+        context["site_url"] = settings.SITE_URL or ""
+        
+    return template.render(**context)
 
 
 def otp_html(code: str, title: str, lead_text: str, footer_note: str, expiry_minutes: int) -> str:
-    preheader = f"Your verification code: {code} — expires in {expiry_minutes} minutes"
-    body = f"""
-          <tr>
-            <td class="content-cell">
-              <h1>{title}</h1>
-              <p>{lead_text}</p>
-
-              <div class="otp-container">
-                <div class="otp-code">{code}</div>
-                <p class="otp-expiry">Expires in {expiry_minutes} minutes</p>
-              </div>
-
-              <p style="font-size:14px;color:#64748b;margin:0;">
-                {footer_note}
-              </p>
-            </td>
-          </tr>
-"""
-    return _base_html(body, title, preheader=preheader)
+    return render_email_template(
+        "otp.html",
+        {
+            "title": title,
+            "preheader": f"Your verification code: {code} — expires in {expiry_minutes} minutes",
+            "code": code,
+            "lead_text": lead_text,
+            "footer_note": footer_note,
+            "expiry_minutes": expiry_minutes,
+        },
+    )
 
 
 def vendor_notification_html(title: str, message: str, detail: Optional[str] = None) -> str:
-    body = f"""
-          <tr>
-            <td class="content-cell">
-              <h1>{title}</h1>
-              <p>{message}</p>
-"""
-    if detail:
-        body += f"""              <div style="background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:16px;margin:16px 0;">
-                <p style="font-size:14px;color:#991b1b;margin:0;">{detail}</p>
-              </div>
-"""
-    body += """            </td>
-          </tr>
-"""
-    return _base_html(body, title)
+    return render_email_template(
+        "vendor_notification.html",
+        {
+            "title": title,
+            "message": message,
+            "detail": detail,
+        },
+    )
+
+
+def new_device_login_html(
+    user_name: str,
+    device: str,
+    browser: str,
+    location: str,
+    time: str,
+    security_url: Optional[str] = None,
+) -> str:
+    return render_email_template(
+        "new_device_login.html",
+        {
+            "user_name": user_name,
+            "device": device,
+            "browser": browser,
+            "location": location,
+            "time": time,
+            "security_url": security_url or f"{settings.SITE_URL}/security",
+            "title": "New Login Detected",
+            "preheader": "We noticed a sign-in to your account from a new device or location.",
+        },
+    )
+
+
+def password_changed_html(
+    user_name: str,
+    change_time: str,
+    reset_url: Optional[str] = None,
+) -> str:
+    return render_email_template(
+        "password_changed.html",
+        {
+            "user_name": user_name,
+            "change_time": change_time,
+            "reset_url": reset_url or f"{settings.SITE_URL}/reset-password",
+            "title": "Password Changed",
+            "preheader": "Your MyMedDevices account password has been updated.",
+        },
+    )
+
+
+def account_welcome_html(
+    user_name: str,
+    account_id: str,
+    verify_url: str,
+) -> str:
+    return render_email_template(
+        "account_welcome.html",
+        {
+            "user_name": user_name,
+            "account_id": account_id,
+            "verify_url": verify_url,
+            "title": "Welcome to MyMedDevices",
+            "preheader": "Your account has been created. Complete your profile to get started.",
+        },
+    )
+
+
+def order_confirmation_html(
+    user_name: str,
+    order_id: str,
+    order_date: str,
+    items: List[Dict[str, str]],
+    estimated_delivery: str,
+    total: str,
+    track_url: str,
+) -> str:
+    return render_email_template(
+        "order_confirmation.html",
+        {
+            "user_name": user_name,
+            "order_id": order_id,
+            "order_date": order_date,
+            "items": items,
+            "estimated_delivery": estimated_delivery,
+            "total": total,
+            "track_url": track_url,
+            "title": f"Order Confirmed — {order_id}",
+            "preheader": f"Your order {order_id} has been confirmed. Estimated delivery: {estimated_delivery}.",
+        },
+    )
+
+
+def order_shipped_html(
+    user_name: str,
+    order_id: str,
+    tracking_number: str,
+    carrier: str,
+    estimated_delivery: str,
+    track_url: str,
+    support_url: Optional[str] = None,
+) -> str:
+    return render_email_template(
+        "order_shipped.html",
+        {
+            "user_name": user_name,
+            "order_id": order_id,
+            "tracking_number": tracking_number,
+            "carrier": carrier,
+            "estimated_delivery": estimated_delivery,
+            "track_url": track_url,
+            "support_url": support_url or f"{settings.SITE_URL}/support",
+            "title": f"Your Order Has Shipped — {order_id}",
+            "preheader": f"Your order {order_id} has been shipped via {carrier}.",
+        },
+    )
+
+
+def delivery_confirmation_html(
+    user_name: str,
+    order_id: str,
+    support_url: Optional[str] = None,
+    instructions_url: Optional[str] = None,
+) -> str:
+    return render_email_template(
+        "delivery_confirmation.html",
+        {
+            "user_name": user_name,
+            "order_id": order_id,
+            "support_url": support_url or f"{settings.SITE_URL}/support",
+            "instructions_url": instructions_url or f"{settings.SITE_URL}/device-instructions",
+            "title": f"Delivery Confirmed — {order_id}",
+            "preheader": f"Your order {order_id} has been delivered.",
+        },
+    )

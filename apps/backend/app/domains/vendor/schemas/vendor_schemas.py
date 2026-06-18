@@ -33,6 +33,8 @@ class VendorRegisterRequest(BaseModel):
 
 class StoreInfoSchema(BaseModel):
     """Store information for vendor profile"""
+    username: Optional[str] = Field(None, max_length=100)
+    display_name: Optional[str] = Field(None, max_length=255)
     store_name: str = Field(..., min_length=2, max_length=255)
     store_description: Optional[str] = None
     store_logo_url: Optional[str] = None
@@ -88,6 +90,8 @@ class VendorProfileResponse(BaseModel):
     user_id: str
 
     # Store Info
+    username: Optional[str] = None
+    display_name: Optional[str] = None
     store_name: str
     store_description: Optional[str] = None
     store_logo_url: Optional[str] = None
@@ -152,6 +156,8 @@ class VendorStatusResponse(BaseModel):
     """Vendor status for checking approval state"""
     id: str
     approval_status: str
+    username: Optional[str] = None
+    display_name: Optional[str] = None
     company_name: Optional[str] = None
     store_name: Optional[str] = None
     email: str

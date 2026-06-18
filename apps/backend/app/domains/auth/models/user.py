@@ -36,3 +36,16 @@ class User(Base, IDMixin, AuditMixin):
         cascade="all, delete-orphan",
         foreign_keys="[VendorProfile.user_id]"
     )
+    customer_profile: Mapped[Optional["CustomerProfile"]] = relationship(
+        "CustomerProfile",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        foreign_keys="[CustomerProfile.user_id]"
+    )
+
+    @property
+    def is_vendor_verified(self) -> bool:
+        if self.role != "vendor" or not self.vendor_profile:
+            return False
+        return self.vendor_profile.approval_status == "approved"

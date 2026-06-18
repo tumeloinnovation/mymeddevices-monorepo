@@ -34,6 +34,11 @@ class ProductImageReorder(BaseModel):
     image_ids: List[uuid.UUID] = Field(..., description="Ordered list of image IDs")
 
 
+class ProductReject(BaseModel):
+    """Schema for rejecting a product with a reason."""
+    reason: str = Field(..., min_length=5, max_length=1000)
+
+
 # ============================================================================
 # PRODUCT CREATE / UPDATE
 # ============================================================================
@@ -50,12 +55,14 @@ class ProductCreate(BaseModel):
     # Pricing
     base_price: Optional[float] = Field(None, ge=0)
     price: Optional[float] = Field(None, ge=0)
+    sale_price: Optional[float] = Field(None, ge=0)
     compare_at_price: Optional[float] = Field(None, ge=0)
     cost_price: Optional[float] = Field(None, ge=0)
     currency: str = "KES"
 
     # Inventory
     stock_quantity: int = 0
+    stock_status: str = "instock"
     low_stock_threshold: int = 5
     track_inventory: bool = True
 
@@ -75,6 +82,7 @@ class ProductCreate(BaseModel):
     warranty_info: Optional[str] = None
 
     # SEO
+    permalink: Optional[str] = Field(None, max_length=500)
     meta_title: Optional[str] = Field(None, max_length=255)
     meta_description: Optional[str] = Field(None, max_length=500)
     tags: Optional[List[str]] = None
@@ -91,14 +99,19 @@ class ProductUpdate(BaseModel):
     # Pricing
     base_price: Optional[float] = Field(None, ge=0)
     price: Optional[float] = Field(None, ge=0)
+    sale_price: Optional[float] = Field(None, ge=0)
     compare_at_price: Optional[float] = Field(None, ge=0)
     cost_price: Optional[float] = Field(None, ge=0)
     currency: Optional[str] = None
 
     # Inventory
     stock_quantity: Optional[int] = None
+    stock_status: Optional[str] = None
     low_stock_threshold: Optional[int] = None
     track_inventory: Optional[bool] = None
+
+    # SEO
+    permalink: Optional[str] = Field(None, max_length=500)
 
     # Physical
     weight_kg: Optional[float] = Field(None, ge=0)
@@ -144,12 +157,14 @@ class ProductResponse(BaseModel):
     markup_price: Optional[float] = None
     commission_fee: Optional[float] = None
     price: Optional[float] = None
+    sale_price: Optional[float] = None
     compare_at_price: Optional[float] = None
     cost_price: Optional[float] = None
     currency: str
 
     # Inventory
     stock_quantity: int
+    stock_status: str
     low_stock_threshold: int
     track_inventory: bool
 
@@ -157,6 +172,7 @@ class ProductResponse(BaseModel):
     status: str
     is_verified: bool
     verified_at: Optional[datetime] = None
+    rejection_reason: Optional[str] = None
 
     # Merchandising
     is_featured: bool
@@ -180,6 +196,7 @@ class ProductResponse(BaseModel):
     warranty_info: Optional[str] = None
 
     # SEO
+    permalink: Optional[str] = None
     meta_title: Optional[str] = None
     meta_description: Optional[str] = None
     tags: Optional[List[str]] = None
@@ -224,12 +241,14 @@ class StorefrontProductResponse(BaseModel):
 
     # Pricing (NO cost_price)
     price: Optional[float] = None
+    sale_price: Optional[float] = None
     compare_at_price: Optional[float] = None
     currency: str
     is_on_sale: bool
 
     # Inventory
     in_stock: bool = True
+    stock_status: Optional[str] = None  # instock, outofstock, backorder
     stock_quantity: Optional[int] = None  # Only shown if track_inventory
 
     # Merchandising

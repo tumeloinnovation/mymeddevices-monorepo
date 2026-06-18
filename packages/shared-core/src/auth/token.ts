@@ -7,7 +7,7 @@
  * for the api-client to access.
  */
 
-const ACCESS_TOKEN_KEY = 'auth_access_token';
+const ACCESS_TOKEN_KEY = 'access_token';
 
 /**
  * Get the current access token.
