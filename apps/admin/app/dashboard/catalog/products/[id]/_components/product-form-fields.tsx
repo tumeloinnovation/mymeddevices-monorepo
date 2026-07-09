@@ -1,9 +1,11 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { ReactNode, useState, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Building2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Building2, Plus, Trash2 } from "lucide-react";
 
 export function Field({
   label,
@@ -193,3 +195,174 @@ export function TimestampView({ date }: { date?: string | null }) {
     </TextView>
   );
 }
+
+export function SpecificationsView({ data }: { data: unknown }) {
+  const specs = useMemo(() => {
+    if (!data) return {};
+    if (typeof data === "string") {
+      try {
+        return JSON.parse(data);
+      } catch {
+        return {};
+      }
+    }
+    if (typeof data === "object") {
+      return data as Record<string, unknown>;
+    }
+    return {};
+  }, [data]);
+
+  const entries = Object.entries(specs);
+
+  if (entries.length === 0) {
+    return (
+      <div className="text-center py-6 px-4 rounded-xl bg-muted/10 border border-dashed border-muted/20 text-xs text-muted-foreground font-medium">
+        No technical specifications defined.
+      </div>
+    );
+  }
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-2">
+      {entries.map(([key, val]) => (
+        <div
+          key={key}
+          className="flex flex-col gap-1 p-3 rounded-xl bg-muted/20 border border-muted/10 hover:border-muted/30 transition-all duration-200"
+        >
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            {key}
+          </span>
+          <span className="text-sm font-semibold text-foreground leading-relaxed">
+            {typeof val === "object" ? JSON.stringify(val) : String(val)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function SpecificationsEditor({ form }: { form: any }) {
+  const specsValue = form.watch("specifications") || "{}";
+
+  const specs = useMemo(() => {
+    if (!specsValue) return {};
+    if (typeof specsValue === "string") {
+      try {
+        return JSON.parse(specsValue);
+      } catch {
+        return {};
+      }
+    }
+    return specsValue;
+  }, [specsValue]);
+
+  const updateSpecs = (updated: Record<string, string>) => {
+    form.setValue("specifications", JSON.stringify(updated, null, 2), {
+      shouldValidate: true,
+      shouldDirty: true,
+    });
+  };
+
+  const handleSpecChange = (oldKey: string, newKey: string, newValue: string) => {
+    const updated = { ...specs };
+    if (oldKey !== newKey) {
+      delete updated[oldKey];
+    }
+    updated[newKey] = newValue;
+    updateSpecs(updated);
+  };
+
+  const handleSpecDelete = (keyToDelete: string) => {
+    const updated = { ...specs };
+    delete updated[keyToDelete];
+    updateSpecs(updated);
+  };
+
+  const handleSpecAdd = () => {
+    const updated = { ...specs };
+    let newKey = "New Specification";
+    let counter = 1;
+    while (newKey in updated) {
+      newKey = `New Specification ${counter}`;
+      counter++;
+    }
+    updated[newKey] = "";
+    updateSpecs(updated);
+  };
+
+  const entries = Object.entries(specs);
+
+  return (
+    <div className="flex flex-col gap-4 mt-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs text-muted-foreground">
+          Define technical details as clinical/physical key-value pairs.
+        </span>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={handleSpecAdd}
+          className="rounded-xl h-8 text-xs font-semibold gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-all active:scale-[0.97] duration-150"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add Specification
+        </Button>
+      </div>
+
+      {entries.length === 0 ? (
+        <div className="text-center p-8 rounded-xl bg-muted/10 border border-dashed border-muted/20 text-xs text-muted-foreground font-medium">
+          No specifications yet. Click "Add Specification" to define one.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {entries.map(([key, val], idx) => (
+            <div
+              key={idx}
+              className="flex gap-2 items-center bg-muted/5 p-2 rounded-xl border border-muted-foreground/10 hover:border-muted-foreground/20 transition-all duration-200"
+            >
+              <Input
+                value={key}
+                onChange={(e) => handleSpecChange(key, e.target.value, val as string)}
+                placeholder="Specification Name"
+                className="h-9 rounded-lg font-semibold text-xs bg-background flex-1"
+              />
+              <Input
+                value={val as string}
+                onChange={(e) => handleSpecChange(key, key, e.target.value)}
+                placeholder="Value"
+                className="h-9 rounded-lg text-xs bg-background flex-1"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                onClick={() => handleSpecDelete(key)}
+                className="rounded-lg h-9 w-9 text-red-500 hover:bg-red-500/10 hover:text-red-600 transition-all flex-shrink-0 active:scale-[0.95] duration-150"
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function DimensionsView({
+  dimensions,
+}: {
+  dimensions?: { length?: string | number; width?: string | number; height?: string | number; unit?: string } | null;
+}) {
+  if (!dimensions || (!dimensions.length && !dimensions.width && !dimensions.height)) {
+    return <TextView>—</TextView>;
+  }
+  const { length = 0, width = 0, height = 0, unit = "cm" } = dimensions;
+  return (
+    <p className="text-sm font-medium text-foreground">
+      {length} × {width} × {height} {unit}
+    </p>
+  );
+}
+

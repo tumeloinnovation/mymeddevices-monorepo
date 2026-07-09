@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, ForeignKey, Enum as SQLEnum, DateTime
+from sqlalchemy import Column, String, Text, ForeignKey, Enum as SQLEnum, DateTime, JSON
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
 
@@ -25,7 +25,7 @@ class Ticket(Base):
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_reply_at = Column(DateTime(timezone=True), nullable=True)
-    ticket_metadata = Column("metadata", JSONB, nullable=True)
+    ticket_metadata = Column("metadata", JSON, nullable=True)
 
     # Relationships
     customer = relationship("User", foreign_keys=[customer_id], backref="customer_tickets")

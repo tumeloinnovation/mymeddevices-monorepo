@@ -11,6 +11,7 @@ import {
   CategoryUpdate,
   CategoryTree,
   AIAssistRequest,
+  AIDescriptionRequest,
   AIAssistResponse,
   ProductCompleteness,
   Brand,
@@ -31,6 +32,7 @@ export const catalogService = {
     search?: string;
     page?: number;
     page_size?: number;
+    vendor_id?: string;
   }): Promise<ProductListResponse> {
     return apiClient.get<ProductListResponse>('/catalog/products', { params });
   },
@@ -81,6 +83,10 @@ export const catalogService = {
     return apiClient.post<AIAssistResponse>(`/catalog/products/${id}/ai-assist`, data);
   },
 
+  async generateDescriptions(data: AIDescriptionRequest): Promise<AIAssistResponse> {
+    return apiClient.post<AIAssistResponse>('/catalog/ai/generate-descriptions', data);
+  },
+
   // Images
   async uploadImage(id: string, file: File, options?: {
     alt_text?: string;
@@ -106,19 +112,19 @@ export const catalogService = {
 
   // Categories
   async getCategories(): Promise<CategoryTree[]> {
-    return apiClient.get<CategoryTree[]>('/catalog/products/categories');
+    return apiClient.get<CategoryTree[]>('/catalog/categories');
   },
 
   async createCategory(data: CategoryCreate): Promise<Category> {
-    return apiClient.post<Category>('/catalog/products/categories', data);
+    return apiClient.post<Category>('/catalog/categories', data);
   },
 
   async updateCategory(id: string, data: CategoryUpdate): Promise<Category> {
-    return apiClient.patch<Category>(`/catalog/products/categories/${id}`, data);
+    return apiClient.patch<Category>(`/catalog/categories/${id}`, data);
   },
 
   async deleteCategory(id: string): Promise<void> {
-    return apiClient.delete(`/catalog/products/categories/${id}`);
+    return apiClient.delete(`/catalog/categories/${id}`);
   },
 
   // Brands
@@ -127,23 +133,23 @@ export const catalogService = {
     page?: number;
     page_size?: number;
   }): Promise<BrandListResponse> {
-    return apiClient.get<BrandListResponse>('/catalog/products/brands', { params });
+    return apiClient.get<BrandListResponse>('/catalog/brands', { params });
   },
 
   async getBrand(id: string): Promise<Brand> {
-    return apiClient.get<Brand>(`/catalog/products/brands/${id}`);
+    return apiClient.get<Brand>(`/catalog/brands/${id}`);
   },
 
   async createBrand(data: BrandCreate): Promise<Brand> {
-    return apiClient.post<Brand>('/catalog/products/brands', data);
+    return apiClient.post<Brand>('/catalog/brands', data);
   },
 
   async updateBrand(id: string, data: BrandUpdate): Promise<Brand> {
-    return apiClient.patch<Brand>(`/catalog/products/brands/${id}`, data);
+    return apiClient.patch<Brand>(`/catalog/brands/${id}`, data);
   },
 
   async deleteBrand(id: string): Promise<void> {
-    return apiClient.delete(`/catalog/products/brands/${id}`);
+    return apiClient.delete(`/catalog/brands/${id}`);
   },
 
   // Tags
@@ -152,23 +158,23 @@ export const catalogService = {
     page?: number;
     page_size?: number;
   }): Promise<TagListResponse> {
-    return apiClient.get<TagListResponse>('/catalog/products/tags', { params });
+    return apiClient.get<TagListResponse>('/catalog/tags', { params });
   },
 
   async getTag(id: string): Promise<Tag> {
-    return apiClient.get<Tag>(`/catalog/products/tags/${id}`);
+    return apiClient.get<Tag>(`/catalog/tags/${id}`);
   },
 
   async createTag(data: TagCreate): Promise<Tag> {
-    return apiClient.post<Tag>('/catalog/products/tags', data);
+    return apiClient.post<Tag>('/catalog/tags', data);
   },
 
   async updateTag(id: string, data: TagUpdate): Promise<Tag> {
-    return apiClient.patch<Tag>(`/catalog/products/tags/${id}`, data);
+    return apiClient.patch<Tag>(`/catalog/tags/${id}`, data);
   },
 
   async deleteTag(id: string): Promise<void> {
-    return apiClient.delete(`/catalog/products/tags/${id}`);
+    return apiClient.delete(`/catalog/tags/${id}`);
   },
 
   // Storefront APIs

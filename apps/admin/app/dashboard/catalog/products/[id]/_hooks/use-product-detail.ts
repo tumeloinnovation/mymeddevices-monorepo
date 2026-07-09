@@ -156,7 +156,13 @@ export function useImageMutations(productId: string) {
     onError: (err: any) => toast.error(err.message || "Failed to remove image"),
   });
 
-  return { upload, remove };
+  const reorder = useMutation({
+    mutationFn: (imageIds: string[]) => catalogService.reorderImages(productId, imageIds),
+    onSuccess: invalidate,
+    onError: (err: any) => toast.error(err.message || "Failed to update image order"),
+  });
+
+  return { upload, remove, reorder };
 }
 
 export function useAIGenerate(id: string) {

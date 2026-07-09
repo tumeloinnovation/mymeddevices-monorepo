@@ -91,6 +91,10 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
                     brand={product.brands?.[0]?.name}
                     category={product.categories?.map((c) => c.name)}
                     availability={product.stock_status}
+                    modelNumber={product.model_number}
+                    weight={product.weight}
+                    specifications={product.specifications}
+                    tags={product.tags?.map((t) => t.name)}
                   />
                 </TabsContent>
               </div>

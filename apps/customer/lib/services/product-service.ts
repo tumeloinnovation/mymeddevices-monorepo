@@ -214,8 +214,8 @@ export const productService = {
       return {
         product_id: product.id,
         price: product.price,
-        cost_price: product.cost_price,
-        compare_at_price: product.compare_at_price,
+        cost_price: product.cost_price ?? null,
+        compare_at_price: product.compare_at_price ?? null,
         markup_percentage: markupPercentage,
         profit_margin: profitMargin,
       };

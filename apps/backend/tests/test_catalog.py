@@ -359,3 +359,70 @@ async def test_storefront_privacy_and_filtering(client: AsyncClient, vendor_toke
     # Clean up local file
     if os.path.exists(local_filepath):
         os.remove(local_filepath)
+
+
+@pytest.mark.asyncio
+async def test_admin_publish_on_behalf_of_vendor(client: AsyncClient, admin_token: str, vendor_user: User, sample_category: Category, db: AsyncSession):
+    # Get vendor profile to have a valid vendor_id
+    stmt = select(VendorProfile).where(VendorProfile.user_id == vendor_user.id)
+    res = await db.execute(stmt)
+    vendor_profile = res.scalar_one()
+    vendor_id = str(vendor_profile.id)
+
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    # 1. Admin creates a draft product on behalf of vendor (must specify vendor_id)
+    product_data = {
+        "name": "Surgical Stapler Pro",
+        "vendor_id": vendor_id,
+        "category_id": str(sample_category.id),
+        "base_price": 12000.0,
+        "description": "High quality surgical stapler designed for minimal tissue injury and fast healing.",
+        "short_description": "Pro Surgical Stapler",
+        "sku": "SURG-STAPLE-001",
+        "specifications": {"Size": "Medium", "Staple Count": "35"}
+    }
+    
+    response = await client.post("/api/v1/catalog/products", json=product_data, headers=admin_headers)
+    assert response.status_code == 201
+    prod_data = response.json()
+    assert prod_data["name"] == "Surgical Stapler Pro"
+    assert prod_data["vendor_id"] == vendor_id
+    assert prod_data["status"] == "draft"
+    product_id = prod_data["id"]
+
+    # 2. Admin tries to create a product without specifying vendor_id -> Should fail
+    invalid_product_data = {
+        "name": "Surgical Stapler Pro No Vendor",
+        "category_id": str(sample_category.id),
+        "base_price": 12000.0
+    }
+    err_response = await client.post("/api/v1/catalog/products", json=invalid_product_data, headers=admin_headers)
+    assert err_response.status_code == 400
+    assert "vendor_id is required" in err_response.json()["detail"]
+
+    # 3. Admin adds an image on behalf of vendor
+    files = {"file": ("stapler.png", BytesIO(b"fake surgical stapler image content"), "image/png")}
+    img_resp = await client.post(f"/api/v1/catalog/products/{product_id}/images", files=files, headers=admin_headers)
+    assert img_resp.status_code == 201
+    img_data = img_resp.json()
+    
+    local_filename = img_data["url"].split("/")[-1]
+    local_filepath = os.path.join(catalog_settings.UPLOAD_DIR, local_filename)
+
+    try:
+        # 4. Admin verifies the product on behalf of vendor -> should set status to pending_review
+        verify_resp = await client.post(f"/api/v1/catalog/products/{product_id}/verify", headers=admin_headers)
+        assert verify_resp.status_code == 200
+        assert verify_resp.json()["is_verified"] == True
+        assert verify_resp.json()["status"] == "pending_review"
+
+        # 5. Admin publishes the product on behalf of vendor -> should set status to published
+        publish_resp = await client.post(f"/api/v1/catalog/products/{product_id}/publish", headers=admin_headers)
+        assert publish_resp.status_code == 200
+        assert publish_resp.json()["status"] == "published"
+    finally:
+        # Clean up local file created by test
+        if os.path.exists(local_filepath):
+            os.remove(local_filepath)
+

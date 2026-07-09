@@ -41,7 +41,7 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
       return;
     }
     if (qty === 1) {
-      addToCartStore(product, qty);
+      addToCartStore(product as any, qty);
     } else {
       updateQuantityStore(product.id, qty);
     }
@@ -54,7 +54,7 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
     if (isInWishlist(product.id)) {
       removeFromWishlist(product.id);
     } else {
-      addToWishlist( product );
+      addToWishlist(product as any);
     }
   };
 
@@ -63,7 +63,7 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
       removeFromCompare(product.id);
     } else if (canAddMoreCompare()) {
       // store the full Product object in compare
-      addToCompare(product);
+      addToCompare(product as any);
       setIsRelatedModalOpen(true);
     }
   };
@@ -96,18 +96,28 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
   return (
     <div>
       <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-1">{product.name}</h1>
-      <p className="text-sm text-gray-500">SKU: <span className="font-medium">{product.sku}</span></p>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
+        <p>SKU: <span className="font-medium">{product.sku}</span></p>
+        {product.model_number && (
+          <p>Model: <span className="font-medium">{product.model_number}</span></p>
+        )}
+      </div>
 
       {product.brands && product.brands.length > 0 && (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-gray-500 mt-1">
           Brand: <span className="font-medium">{product.brands[0].name}</span>
         </p>
       )}
 
-      {product.categories && product.categories.length > 0 && (
-        <div className="mt-3 mb-3">
-          {product.categories.map((cat) => (
-            <Badge key={cat.id} className="text-sm mr-1">{cat.name}</Badge>
+      {((product.categories && product.categories.length > 0) || (product.tags && product.tags.length > 0)) && (
+        <div className="mt-3 mb-3 flex flex-wrap gap-1.5 items-center">
+          {product.categories?.map((cat) => (
+            <Badge key={cat.id} className="text-xs">{cat.name}</Badge>
+          ))}
+          {product.tags?.map((tag) => (
+            <Badge key={tag.name} variant="outline" className="text-xs bg-gray-50 dark:bg-muted text-gray-600 dark:text-gray-300">
+              {tag.name}
+            </Badge>
           ))}
         </div>
       )}

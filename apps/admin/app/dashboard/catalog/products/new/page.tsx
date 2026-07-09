@@ -5,20 +5,31 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   ArrowLeft,
-  CheckCircle2,
+  Check,
+  ChevronsUpDown,
   Loader2,
-  LayoutDashboard,
-  ChevronRight,
   FileText,
   ShoppingCart,
-  Zap,
-  Globe,
+  Package,
   Settings2,
-  ShieldCheck,
+  Eye,
+  CheckCircle2,
+  Sparkles,
+  Database,
+  Image as ImageIcon,
   Plus,
-  Box,
+  Trash2,
+  X,
+  Upload,
+  Tag,
+  AlertCircle,
+  Zap,
+  ArrowRight,
+  ShieldCheck,
 } from "lucide-react";
-import { catalogService, CategoryTree } from "@mymeddevices/shared-core";
+import { catalogService, CategoryTree, Brand, useAuthStore, VendorListItem } from "@mymeddevices/shared-core";
+import { motion, AnimatePresence } from "framer-motion";
+
 import DashboardLayout from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,39 +44,69 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+const STEPS = [
+  { id: "general", label: "General Info", icon: FileText, description: "Basic product details" },
+  { id: "pricing", label: "Pricing", icon: ShoppingCart, description: "Price and currency" },
+  { id: "inventory", label: "Inventory & Physical", icon: Package, description: "Stock, SKU, weight" },
+  { id: "gallery", label: "Product Gallery", icon: ImageIcon, description: "Manage images" },
+  { id: "ai", label: "AI Assist", icon: Sparkles, description: "Gemini AI content & tags" },
+  { id: "compliance", label: "Compliance & Certs", icon: ShieldCheck, description: "Regulatory details" },
+  { id: "review", label: "Review", icon: Eye, description: "Confirm & publish" },
+];
 
 export default function NewProductPage() {
   const router = useRouter();
+  const { listVendorsAdmin } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [categories, setCategories] = useState<CategoryTree[]>([]);
-  const [activeTab, setActiveTab] = useState("general");
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [vendors, setVendors] = useState<VendorListItem[]>([]);
+  const [currentStep, setCurrentStep] = useState(0);
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
+  const [generating, setGenerating] = useState(false);
+  const [generatingSEO, setGeneratingSEO] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [draftProductId, setDraftProductId] = useState<string | null>(null);
+
+  // Gallery state
+  const [images, setImages] = useState<File[]>([]);
+  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  const [primaryImageIndex, setPrimaryImageIndex] = useState<number>(0);
 
   // Form state
   const [formData, setFormData] = useState({
+    vendor_id: "",
+    vendor_name: "",
     name: "",
     slug: "",
     description: "",
     short_description: "",
     sku: "",
     category_id: "",
+    category_name: "",
     brand: "",
+    brand_name: "",
     manufacturer: "",
     model_number: "",
     price: "",
-    compare_at_price: "",
     cost_price: "",
-    currency: "KES",
     stock_quantity: "0",
     low_stock_threshold: "5",
     track_inventory: true,
     weight_kg: "",
     specifications: "{}",
     certifications: "",
-    kmpdb_registration_number: "",
     ppb_classification: "",
     ce_marking_or_fda_clearance: "",
     warranty_info: "",
@@ -74,10 +115,152 @@ export default function NewProductPage() {
     tags: [] as string[],
   });
 
-  useEffect(() => {
-    async function loadCategories() {
+  // Specifications helpers
+  const specs = (() => {
+    try {
+      return JSON.parse(formData.specifications || "{}");
+    } catch (e) {
+      return {};
+    }
+  })();
+
+  const handleSpecChange = (oldKey: string, newKey: string, newValue: string) => {
+    const updated = { ...specs };
+    if (oldKey !== newKey) {
+      delete updated[oldKey];
+    }
+    updated[newKey] = newValue;
+    setFormData(prev => ({ ...prev, specifications: JSON.stringify(updated, null, 2) }));
+  };
+
+  const handleSpecDelete = (keyToDelete: string) => {
+    const updated = { ...specs };
+    delete updated[keyToDelete];
+    setFormData(prev => ({ ...prev, specifications: JSON.stringify(updated, null, 2) }));
+  };
+
+  const handleSpecAdd = () => {
+    const updated = { ...specs };
+    let newKey = "New Specification";
+    let counter = 1;
+    while (newKey in updated) {
+      newKey = `New Specification ${counter}`;
+      counter++;
+    }
+    updated[newKey] = "";
+    setFormData(prev => ({ ...prev, specifications: JSON.stringify(updated, null, 2) }));
+  };
+
+  const specEntries = Object.entries(specs);
+
+  // Tags helpers
+  const tags = formData.tags || [];
+  const [tagInput, setTagInput] = useState("");
+
+  const handleAddTag = () => {
+    const cleanTag = tagInput.trim().toLowerCase();
+    if (cleanTag && !tags.includes(cleanTag)) {
+      setFormData(prev => ({ ...prev, tags: [...prev.tags, cleanTag] }));
+    }
+    setTagInput("");
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      handleAddTag();
+    }
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setFormData(prev => ({ ...prev, tags: prev.tags.filter((t: string) => t !== tagToRemove) }));
+  };
+
+  // Gemini AI Content Generation helper
+  const generateAIContent = async () => {
+    if (!formData.name || !formData.category_id) {
+      toast.error("Please select a vendor, name, and category first");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      let specificationsObj = {};
       try {
-        const categoriesData = await catalogService.getCategories();
+        specificationsObj = JSON.parse(formData.specifications || "{}");
+      } catch (e) {}
+
+      const draftData: any = {
+        vendor_id: formData.vendor_id || undefined,
+        name: formData.name,
+        slug: formData.slug || undefined,
+        description: formData.description || undefined,
+        short_description: formData.short_description || undefined,
+        sku: formData.sku || undefined,
+        category_id: formData.category_id || undefined,
+        brand: formData.brand_name || undefined,
+        manufacturer: formData.manufacturer || undefined,
+        model_number: formData.model_number || undefined,
+        price: parseFloat(formData.price) || 0,
+        cost_price: formData.cost_price ? parseFloat(formData.cost_price) : undefined,
+        currency: "KES",
+        stock_quantity: parseInt(formData.stock_quantity) || 0,
+        low_stock_threshold: parseInt(formData.low_stock_threshold) || 5,
+        track_inventory: formData.track_inventory,
+        weight_kg: formData.weight_kg ? parseFloat(formData.weight_kg) : undefined,
+        specifications: specificationsObj,
+        certifications: formData.certifications ? formData.certifications.split(", ").filter(Boolean) : undefined,
+        ppb_classification: formData.ppb_classification || undefined,
+        ce_marking_or_fda_clearance: formData.ce_marking_or_fda_clearance || undefined,
+        warranty_info: formData.warranty_info || undefined,
+        meta_title: formData.meta_title || undefined,
+        meta_description: formData.meta_description || undefined,
+        tags: formData.tags.length > 0 ? formData.tags : undefined,
+        status: "draft"
+      };
+
+      let product;
+      if (draftProductId) {
+        product = await catalogService.updateProduct(draftProductId, draftData);
+      } else {
+        product = await catalogService.createProduct(draftData);
+        setDraftProductId(product.id);
+      }
+      
+      const suggestions = await catalogService.getAiSuggestions(product.id, {
+        fields_to_generate: ["description", "short_description", "specifications", "tags", "meta_title", "meta_description"]
+      });
+
+      if (suggestions.suggestions) {
+        const { suggestions: s } = suggestions;
+        setFormData(prev => ({
+          ...prev,
+          description: s.description || prev.description,
+          short_description: s.short_description || prev.short_description,
+          specifications: s.specifications ? JSON.stringify(s.specifications, null, 2) : prev.specifications,
+          tags: s.tags || prev.tags,
+          meta_title: s.meta_title || prev.meta_title,
+          meta_description: s.meta_description || prev.meta_description
+        }));
+        
+        toast.success("AI content and specifications generated successfully!");
+      }
+    } catch (error: any) {
+      toast.error("AI Generation failed: " + (error.message || "Unknown error"));
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  useEffect(() => {
+    async function loadData() {
+      try {
+        const [categoriesData, brandsData, vendorsResult] = await Promise.all([
+          catalogService.getCategories(),
+          catalogService.getBrands({ active_only: true }),
+          listVendorsAdmin({ page: 1, page_size: 100 })
+        ]);
+
         const flatCategories: CategoryTree[] = [];
         const flatten = (catList: CategoryTree[]) => {
           catList.forEach((cat) => {
@@ -87,12 +270,274 @@ export default function NewProductPage() {
         };
         flatten(categoriesData);
         setCategories(flatCategories);
+        setBrands(brandsData.brands || []);
+
+        const vendorsData = Array.isArray(vendorsResult?.vendors) ? vendorsResult.vendors : [];
+        const approvedVendors = vendorsData.filter((v: VendorListItem) => v.approval_status === "approved");
+        setVendors(approvedVendors);
       } catch (error) {
-        console.error("Failed to load categories:", error);
+        console.error("Failed to load data:", error);
       }
     }
-    loadCategories();
-  }, []);
+    loadData();
+  }, [listVendorsAdmin]);
+
+  const updateFormData = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const generateSlug = (name: string) => {
+    const slug = name.toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/[\s]+/g, '-')
+      .replace(/^-+|-+$/g, '');
+    setFormData(prev => ({ ...prev, name, slug }));
+  };
+
+  const generateDescriptions = async () => {
+    if (!formData.name || !formData.brand) {
+      toast.error("Please enter product name and brand first");
+      return;
+    }
+
+    setGenerating(true);
+    try {
+      const brandName = brands.find(b => b.id === formData.brand)?.name || formData.brand;
+      const categoryName = categories.find(c => c.id === formData.category_id)?.name;
+
+      const result = await catalogService.generateDescriptions({
+        product_name: formData.name,
+        brand: brandName,
+        category: categoryName
+      });
+
+      setFormData(prev => ({
+        ...prev,
+        short_description: result.suggestions.short_description || prev.short_description,
+        description: result.suggestions.description || prev.description
+      }));
+
+      toast.success("Descriptions generated successfully");
+    } catch (error) {
+      toast.error("Failed to generate descriptions");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const generateSEO = async () => {
+    if (!formData.name || !formData.description) {
+      toast.error("Please enter product name and description first");
+      return;
+    }
+
+    setGeneratingSEO(true);
+    try {
+      const result = await catalogService.generateDescriptions({
+        product_name: formData.name,
+        brand: brands.find(b => b.id === formData.brand)?.name || formData.brand || "",
+        category: categories.find(c => c.id === formData.category_id)?.name
+      });
+
+      setFormData(prev => ({
+        ...prev,
+        meta_title: result.suggestions.meta_title || prev.meta_title,
+        meta_description: result.suggestions.meta_description || prev.meta_description
+      }));
+
+      toast.success("SEO metadata generated successfully");
+    } catch (error) {
+      toast.error("Failed to generate SEO metadata");
+    } finally {
+      setGeneratingSEO(false);
+    }
+  };
+
+  const fillSampleData = (type: 'complete' | 'simple' | 'invalid_spec' | 'ai_test') => {
+    const sampleVendor = vendors.find(v => v.id) || vendors[0];
+    const vendorId = sampleVendor?.id || "";
+    const vendorName = sampleVendor?.store_name || sampleVendor?.company_name || "";
+
+    if (type === 'complete') {
+      const sampleBrand = brands.find(b => b.name.toLowerCase().includes("medtech")) || brands[0];
+      const sampleCategory = categories.find(c => c.name.toLowerCase().includes("diagnostic") || c.name.toLowerCase().includes("monitor")) || categories[0];
+
+      setFormData({
+        vendor_id: vendorId,
+        vendor_name: vendorName,
+        name: "ProGlucose Blood Glucose Monitoring System",
+        slug: "proglucose-blood-glucose-monitoring-system",
+        description: "The ProGlucose Blood Glucose Monitoring System represents the next generation in diabetes management technology. Designed specifically for hospitals, clinics, and healthcare facilities, this FDA-cleared device delivers laboratory-accurate results within 5 seconds.\n\nKey features include a large, high-contrast LCD display for easy reading, Bluetooth Low Energy connectivity for seamless EHR integration, and a built-in quality control system that automatically validates each test strip batch. The device stores up to 1,000 test results with date/time stamps and supports both fingerstick and alternative site testing.\n\nThe ProGlucose system comes with a desktop cradle for easy storage and includes comprehensive data management software that generates trend reports, averages, and actionable insights for patient care. Device requires no coding and supports multiple user profiles, making it ideal for shared clinical environments.\n\nThis device meets ISO 15197:2013 standards for blood glucose monitoring systems and includes a 2-year manufacturer warranty with optional extended service plans available.",
+        short_description: "Professional-grade blood glucose monitoring system with Bluetooth connectivity and cloud-based analytics for healthcare facilities.",
+        sku: "MTP-PG-2024-001",
+        category_id: sampleCategory?.id || "",
+        category_name: sampleCategory?.name || "Diagnostic Equipment",
+        brand: sampleBrand?.id || "",
+        brand_name: sampleBrand?.name || "MedTech Pro",
+        manufacturer: "MedTech Pro International",
+        model_number: "PG-2024-X",
+        price: "189.99",
+        cost_price: "95.00",
+        stock_quantity: "250",
+        low_stock_threshold: "25",
+        track_inventory: true,
+        weight_kg: "0.35",
+        specifications: JSON.stringify({
+          "Measurement Range": "20-600 mg/dL (1.1-33.3 mmol/L)",
+          "Sample Size": "0.5 μL",
+          "Test Time": "5 seconds",
+          "Memory": "1,000 results",
+          "Display": "2.4\" LCD with backlight",
+          "Connectivity": "Bluetooth 5.0 LE, USB-C",
+          "Battery": "2x AAA (included), ~1,000 tests",
+          "Operating Temperature": "10-40°C (50-104°F)",
+          "Storage Temperature": "0-50°C (32-122°F)",
+          "Dimensions": "95mm x 55mm x 20mm",
+          "Regulatory": "FDA 510(k) Cleared, CE Marked, ISO 13485"
+        }, null, 2),
+        certifications: "ISO 15197:2013, CE 0123, FDA Class II, ISO 13485",
+        ppb_classification: "Class C",
+        ce_marking_or_fda_clearance: "FDA 510(k) Cleared - K212345",
+        warranty_info: "2-year manufacturer warranty on device, 90-day warranty on accessories",
+        meta_title: "ProGlucose Blood Glucose Monitor | MedTech Pro - MyMedDevices",
+        meta_description: "Professional FDA-cleared blood glucose monitoring system with Bluetooth connectivity. 5-second results, EHR integration, ideal for healthcare facilities.",
+        tags: ["blood glucose", "diabetes", "diagnostics", "bluetooth", "fda cleared", "hospital equipment", "point-of-care testing", "monitoring system"]
+      });
+      toast.success("Complete product (ProGlucose) sample data loaded!");
+    } else if (type === 'simple') {
+      const sampleBrand = brands.find(b => b.name.toLowerCase().includes("medicut")) || brands[0];
+      const sampleCategory = categories.find(c => c.name.toLowerCase().includes("surgical") || c.name.toLowerCase().includes("instrument")) || categories[0];
+
+      setFormData({
+        vendor_id: vendorId,
+        vendor_name: vendorName,
+        name: "MediCut Disposable Scalpel",
+        slug: "medicut-disposable-scalpel",
+        description: "MediCut Disposable Scalpels are manufactured with high-carbon steel blades to ensure clean, precise incisions. Individually packaged and sterilized by gamma radiation. Ergonomic plastic handle for secure grip during surgical procedures.",
+        short_description: "High-grade stainless steel disposable surgical scalpel for precise incisions.",
+        sku: "MTP-MC-2024-002",
+        category_id: sampleCategory?.id || "",
+        category_name: sampleCategory?.name || "Surgical Instruments",
+        brand: sampleBrand?.id || "",
+        brand_name: sampleBrand?.name || "MediCut",
+        manufacturer: "MediCut Surgical",
+        model_number: "MC-SC-11",
+        price: "12.50",
+        cost_price: "5.00",
+        stock_quantity: "1000",
+        low_stock_threshold: "100",
+        track_inventory: true,
+        weight_kg: "0.02",
+        specifications: JSON.stringify({
+          "Blade Material": "High Carbon Steel",
+          "Handle Material": "Plastic",
+          "Blade Size": "#11",
+          "Sterilization": "Gamma Radiation (R)",
+          "Packaging": "Individually sealed peel packs",
+          "Quantity": "Box of 10"
+        }, null, 2),
+        certifications: "CE 2460, ISO 13485, FDA Registered",
+        ppb_classification: "Class A",
+        ce_marking_or_fda_clearance: "CE Certified",
+        warranty_info: "Shelf life of 5 years from sterilization date",
+        meta_title: "MediCut Disposable Surgical Scalpel #11 - MyMedDevices",
+        meta_description: "Sterile disposable carbon steel surgical scalpel size #11. Ergonomic handle, individually wrapped. Box of 10.",
+        tags: ["scalpel", "surgical", "disposable", "sterile", "carbon steel"]
+      });
+      toast.success("Simple product (MediCut) sample data loaded!");
+    } else if (type === 'invalid_spec') {
+      const sampleBrand = brands.find(b => b.name.toLowerCase().includes("flowmed")) || brands[0];
+      const sampleCategory = categories.find(c => c.name.toLowerCase().includes("patient") || c.name.toLowerCase().includes("care")) || categories[0];
+
+      setFormData({
+        vendor_id: vendorId,
+        vendor_name: vendorName,
+        name: "Infusion Pump Deluxe",
+        slug: "infusion-pump-deluxe",
+        description: "A high-precision syringe infusion pump for delivering fluids, medications, or nutrients into a patient's circulatory system in controlled amounts.",
+        short_description: "High-precision clinical syringe infusion pump.",
+        sku: "MTP-IPD-2024-003",
+        category_id: sampleCategory?.id || "",
+        category_name: sampleCategory?.name || "Patient Care",
+        brand: sampleBrand?.id || "",
+        brand_name: sampleBrand?.name || "FlowMed",
+        manufacturer: "FlowMed Devices",
+        model_number: "IPD-500",
+        price: "2450.00",
+        cost_price: "1200.00",
+        stock_quantity: "15",
+        low_stock_threshold: "3",
+        track_inventory: true,
+        weight_kg: "2.10",
+        specifications: "{invalid json here}",
+        certifications: "ISO 13485, CE 0123",
+        ppb_classification: "Class B",
+        ce_marking_or_fda_clearance: "FDA 510(k) Cleared",
+        warranty_info: "1-year warranty",
+        meta_title: "Infusion Pump Deluxe - MyMedDevices",
+        meta_description: "High-precision syringe infusion pump for clinical environments.",
+        tags: ["infusion pump", "patient care", "syringe pump"]
+      });
+      toast.success("Invalid specs product (Infusion Pump) sample data loaded! Go to specifications to inspect invalid JSON.");
+    } else if (type === 'ai_test') {
+      const sampleBrand = brands.find(b => b.name.toLowerCase().includes("oxihealth")) || brands[0];
+      const sampleCategory = categories.find(c => c.name.toLowerCase().includes("diagnostic") || c.name.toLowerCase().includes("monitor")) || categories[0];
+
+      setFormData({
+        vendor_id: vendorId,
+        vendor_name: vendorName,
+        name: "Digital Pulse Oximeter",
+        slug: "digital-pulse-oximeter",
+        description: "",
+        short_description: "",
+        sku: "MTP-DPO-2024-004",
+        category_id: sampleCategory?.id || "",
+        category_name: sampleCategory?.name || "Diagnostic Equipment",
+        brand: sampleBrand?.id || "",
+        brand_name: sampleBrand?.name || "OxiHealth",
+        manufacturer: "OxiHealth Instruments",
+        model_number: "DPO-80",
+        price: "45.00",
+        cost_price: "20.00",
+        stock_quantity: "500",
+        low_stock_threshold: "50",
+        track_inventory: true,
+        weight_kg: "0.05",
+        specifications: "{}",
+        certifications: "",
+        ppb_classification: "",
+        ce_marking_or_fda_clearance: "",
+        warranty_info: "",
+        meta_title: "",
+        meta_description: "",
+        tags: []
+      });
+      toast.success("AI Generate product (Pulse Oximeter) sample data loaded! Try clicking 'AI Generate' for short description or SEO.");
+    }
+  };
+
+  const handleNext = () => {
+    // Validate current step before moving
+    if (currentStep === 0 && !formData.name) {
+      toast.error("Product name is required");
+      return;
+    }
+    if (currentStep === 1 && !formData.price) {
+      toast.error("Price is required");
+      return;
+    }
+
+    setCompletedSteps(prev => new Set([...prev, currentStep]));
+    if (currentStep < STEPS.length - 1) {
+      setCurrentStep(prev => prev + 1);
+    }
+  };
+
+  const handleBack = () => {
+    if (currentStep > 0) {
+      setCurrentStep(prev => prev - 1);
+    }
+  };
 
   const handleSave = async () => {
     if (!formData.name || !formData.price) {
@@ -112,26 +557,25 @@ export default function NewProductPage() {
       }
 
       const createData: any = {
+        vendor_id: formData.vendor_id || undefined,
         name: formData.name,
         slug: formData.slug || undefined,
         description: formData.description || undefined,
         short_description: formData.short_description || undefined,
         sku: formData.sku || undefined,
         category_id: formData.category_id || undefined,
-        brand: formData.brand || undefined,
+        brand: formData.brand_name || undefined,
         manufacturer: formData.manufacturer || undefined,
         model_number: formData.model_number || undefined,
         price: parseFloat(formData.price),
-        compare_at_price: formData.compare_at_price ? parseFloat(formData.compare_at_price) : undefined,
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : undefined,
-        currency: formData.currency,
+        currency: "KES",
         stock_quantity: parseInt(formData.stock_quantity) || 0,
         low_stock_threshold: parseInt(formData.low_stock_threshold) || 5,
         track_inventory: formData.track_inventory,
         weight_kg: formData.weight_kg ? parseFloat(formData.weight_kg) : undefined,
         specifications,
         certifications: formData.certifications ? formData.certifications.split(", ").filter(Boolean) : undefined,
-        kmpdb_registration_number: formData.kmpdb_registration_number || undefined,
         ppb_classification: formData.ppb_classification || undefined,
         ce_marking_or_fda_clearance: formData.ce_marking_or_fda_clearance || undefined,
         warranty_info: formData.warranty_info || undefined,
@@ -140,7 +584,23 @@ export default function NewProductPage() {
         tags: formData.tags.length > 0 ? formData.tags : undefined,
       };
 
-      const product = await catalogService.createProduct(createData);
+      let product;
+      if (draftProductId) {
+        product = await catalogService.updateProduct(draftProductId, createData);
+      } else {
+        product = await catalogService.createProduct(createData);
+      }
+
+      // Upload images if any
+      if (images.length > 0) {
+        for (let i = 0; i < images.length; i++) {
+          await catalogService.uploadImage(product.id, images[i], {
+            is_primary: i === primaryImageIndex,
+            sort_order: i,
+          });
+        }
+      }
+
       toast.success("Product created successfully");
       router.push(`/dashboard/catalog/products/${product.id}`);
     } catch (error: any) {
@@ -150,232 +610,1120 @@ export default function NewProductPage() {
     }
   };
 
-  const generateSlug = (name: string) => {
-    const slug = name.toLowerCase()
-      .replace(/[^\w\s-]/g, '')
-      .replace(/[\s]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    setFormData(prev => ({ ...prev, name, slug }));
+  const StepIcon = ({ step, index }: { step: typeof STEPS[0]; index: number }) => {
+    const Icon = step.icon;
+    const isCompleted = completedSteps.has(index);
+    const isCurrent = currentStep === index;
+
+    return (
+      <div className="relative">
+        <div className={cn(
+          "h-10 w-10 rounded-xl flex items-center justify-center border-2 transition-all duration-300",
+          isCompleted && "bg-emerald-500 border-emerald-500 text-white",
+          isCurrent && "bg-primary border-primary text-primary-foreground shadow-lg shadow-primary/30",
+          !isCompleted && !isCurrent && "bg-muted/50 border-muted-foreground/20 text-muted-foreground"
+        )}>
+          {isCompleted ? (
+            <Check className="h-5 w-5" />
+          ) : (
+            <Icon className="h-5 w-5" />
+          )}
+        </div>
+        {index < STEPS.length - 1 && (
+          <div className={cn(
+            "absolute top-10 left-1/2 -translate-x-1/2 w-0.5 h-8 -z-10 transition-colors duration-300",
+            isCompleted ? "bg-emerald-500" : "bg-muted-foreground/10"
+          )} />
+        )}
+      </div>
+    );
   };
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-6 p-4 lg:p-6 max-w-[1200px] mx-auto">
-        {/* Breadcrumbs */}
-        <nav className="flex items-center gap-2 text-xs text-muted-foreground uppercase tracking-widest font-bold">
-          <Link href="/dashboard" className="hover:text-primary transition-colors flex items-center gap-1">
-            <LayoutDashboard className="h-3.5 w-3.5" />
-            Dashboard
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <Link href="/dashboard/catalog/products" className="hover:text-primary transition-colors">
-            Products
-          </Link>
-          <ChevronRight className="h-3 w-3" />
-          <span className="font-bold text-foreground">New Product</span>
-        </nav>
-
-        {/* Header Section */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between border-b pb-6">
-          <div className="flex items-center gap-5">
-            <div className="h-14 w-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center shadow-inner">
-              <Plus className="h-7 w-7" />
-            </div>
+      <div className="flex flex-col h-full">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard/catalog/products">
+              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
+                <ArrowLeft className="h-4 w-4" />
+              </Button>
+            </Link>
             <div>
-              <h1 className="text-3xl font-extrabold tracking-tight">Create Product</h1>
-              <p className="text-muted-foreground text-sm font-medium mt-1">Initialize a new medical equipment listing.</p>
+              <h1 className="text-xl font-bold tracking-tight">New Product</h1>
+              <p className="text-sm text-muted-foreground">Create a new product listing</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" className="h-10 px-5 rounded-xl font-bold text-sm" asChild>
-              <Link href="/dashboard/catalog/products">Cancel</Link>
-            </Button>
-            <Button className="h-10 px-6 rounded-xl font-black shadow-lg shadow-primary/20 text-sm" onClick={handleSave} disabled={loading}>
-              {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-              Publish Product
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl font-mono text-xs border-amber-500/30 text-amber-600 hover:bg-amber-500/10 hover:border-amber-500/50"
+                >
+                  <Database className="mr-2 h-3.5 w-3.5" />
+                  Fill Sample Data
+                  <ChevronsUpDown className="ml-1 h-3.5 w-3.5 opacity-50" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-64 rounded-xl shadow-lg border-border">
+                <DropdownMenuItem onClick={() => fillSampleData('complete')} className="cursor-pointer">
+                  ProGlucose (Complete Product)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => fillSampleData('simple')} className="cursor-pointer">
+                  MediCut Scalpel (Simple Product)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => fillSampleData('ai_test')} className="cursor-pointer">
+                  Pulse Oximeter (AI Gen Test)
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => fillSampleData('invalid_spec')} className="cursor-pointer">
+                  Infusion Pump (Invalid Specifications)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              onClick={currentStep === STEPS.length - 1 ? handleSave : handleNext}
+              disabled={loading}
+              className="rounded-xl font-semibold shadow-lg shadow-primary/20"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Creating...
+                </>
+              ) : currentStep === STEPS.length - 1 ? (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Publish Product
+                </>
+              ) : (
+                <>
+                  Continue
+                  <ChevronsUpDown className="ml-2 h-4 w-4 rotate-90" />
+                </>
+              )}
             </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-3 space-y-6">
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
-              <TabsList className="bg-muted/50 p-1.5 h-12 rounded-2xl w-full justify-start overflow-x-auto no-scrollbar border border-muted-foreground/10">
-                <TabsTrigger value="general" className="px-6 rounded-xl h-9 data-[state=active]:bg-background data-[state=active]:shadow-md font-bold transition-all text-xs">General Info</TabsTrigger>
-                <TabsTrigger value="pricing" className="px-6 rounded-xl h-9 data-[state=active]:bg-background data-[state=active]:shadow-md font-bold transition-all text-xs">Pricing</TabsTrigger>
-                <TabsTrigger value="inventory" className="px-6 rounded-xl h-9 data-[state=active]:bg-background data-[state=active]:shadow-md font-bold transition-all text-xs">Inventory</TabsTrigger>
-                <TabsTrigger value="specs" className="px-6 rounded-xl h-9 data-[state=active]:bg-background data-[state=active]:shadow-md font-bold transition-all text-xs">Specs & SEO</TabsTrigger>
-              </TabsList>
+        {/* Main Content */}
+        <div className="flex-1 flex overflow-hidden">
+          {/* Left Sidebar - Steps */}
+          <div className="w-72 border-r bg-muted/30 flex-shrink-0 overflow-y-auto">
+            <div className="p-6 space-y-2">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-6">
+                Setup Steps
+              </h2>
+              <nav className="space-y-1">
+                {STEPS.map((step, index) => {
+                  const isActive = currentStep === index;
+                  const isCompleted = completedSteps.has(index);
 
-              <TabsContent value="general" className="outline-none">
-                <Card className="shadow-xl shadow-foreground/5 border-muted/50 rounded-3xl">
-                  <CardHeader className="bg-muted/20 border-b p-5">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-primary" />
-                      Core Identity
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Product Name *</Label>
-                        <Input value={formData.name} onChange={(e) => generateSlug(e.target.value)} placeholder="e.g. MRI Scanner Model X" className="h-11 text-base font-bold border-muted-foreground/20 rounded-xl focus:ring-primary" required />
+                  return (
+                    <button
+                      key={step.id}
+                      onClick={() => {
+                        if (isCompleted || index < currentStep) {
+                          setCurrentStep(index);
+                        }
+                      }}
+                      className={cn(
+                        "w-full flex items-center gap-4 p-3 rounded-xl transition-all duration-200 text-left",
+                        isActive && "bg-white shadow-md border border-border",
+                        !isActive && isCompleted && "hover:bg-muted/50",
+                        !isActive && !isCompleted && "opacity-50 cursor-not-allowed"
+                      )}
+                      disabled={!isCompleted && index > currentStep}
+                    >
+                      <StepIcon step={step} index={index} />
+                      <div className="flex-1 min-w-0">
+                        <p className={cn(
+                          "text-sm font-semibold transition-colors",
+                          isActive ? "text-foreground" : "text-muted-foreground"
+                        )}>
+                          {step.label}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {step.description}
+                        </p>
                       </div>
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">URL Path (Slug)</Label>
-                        <Input value={formData.slug} onChange={(e) => setFormData({ ...formData, slug: e.target.value })} placeholder="mri-scanner-model-x" className="h-11 border-muted-foreground/20 rounded-xl font-mono text-xs bg-muted/30" />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-4 border-t border-muted/50">
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Category</Label>
-                        <Select value={formData.category_id} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
-                          <SelectTrigger className="h-11 border-muted-foreground/20 rounded-xl font-bold text-sm">
-                            <SelectValue placeholder="Select a category" />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-2xl shadow-2xl border-muted p-2">
-                            {categories.map((cat) => (
-                              <SelectItem key={cat.id} value={cat.id} className="rounded-lg py-2.5 text-sm">{cat.name}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Brand Name</Label>
-                        <Input value={formData.brand} onChange={(e) => setFormData({ ...formData, brand: e.target.value })} placeholder="e.g. GE Healthcare" className="h-11 border-muted-foreground/20 rounded-xl font-bold text-sm" />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2 pt-4 border-t border-muted/50">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Full Description</Label>
-                      <Textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} rows={6} className="border-muted-foreground/20 rounded-xl py-3 text-sm" placeholder="Detailed technical description and usage guide..." />
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="pricing" className="outline-none">
-                <Card className="shadow-xl shadow-foreground/5 border-muted/50 rounded-3xl">
-                  <CardHeader className="bg-primary/5 border-b p-5">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-primary">
-                      <ShoppingCart className="h-4 w-4" />
-                      Commercial Details
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Retail Price *</Label>
-                        <div className="relative">
-                          <Input type="number" value={formData.price} onChange={(e) => setFormData({ ...formData, price: e.target.value })} className="h-11 pl-11 text-lg font-black rounded-xl border-primary/20 bg-primary/5" placeholder="0.00" required />
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-primary text-sm">KES</span>
-                        </div>
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Compare At Price</Label>
-                        <div className="relative">
-                          <Input type="number" value={formData.compare_at_price} onChange={(e) => setFormData({ ...formData, compare_at_price: e.target.value })} className="h-11 pl-11 rounded-xl text-muted-foreground border-muted-foreground/20 text-sm font-bold" placeholder="0.00" />
-                          <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-muted-foreground text-sm">KES</span>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="inventory" className="outline-none">
-                <Card className="shadow-xl shadow-foreground/5 border-muted/50 rounded-3xl">
-                  <CardHeader className="bg-amber-500/5 border-b p-5">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-amber-600">
-                      <Zap className="h-4 w-4" />
-                      Stock Management
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">SKU Identifier</Label>
-                        <Input value={formData.sku} onChange={(e) => setFormData({ ...formData, sku: e.target.value })} placeholder="e.g. MRI-102-X" className="h-11 border-muted-foreground/20 rounded-xl font-mono font-bold text-xs" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Initial Stock</Label>
-                        <Input type="number" value={formData.stock_quantity} onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })} className="h-11 text-base font-black rounded-xl border-muted-foreground/20" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Alert Level</Label>
-                        <Input type="number" value={formData.low_stock_threshold} onChange={(e) => setFormData({ ...formData, low_stock_threshold: e.target.value })} className="h-11 rounded-xl border-muted-foreground/20 text-sm font-bold" />
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between p-4 bg-muted/20 rounded-2xl border border-muted-foreground/10">
-                      <div className="flex flex-col gap-0.5">
-                        <Label className="text-sm font-bold">Track Inventory</Label>
-                        <p className="text-[10px] text-muted-foreground font-bold">Auto-deduct stock on successful orders</p>
-                      </div>
-                      <Switch checked={formData.track_inventory} onCheckedChange={(checked) => setFormData({ ...formData, track_inventory: checked })} className="data-[state=checked]:bg-primary" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-
-              <TabsContent value="specs" className="outline-none">
-                <Card className="shadow-xl shadow-foreground/5 border-muted/50 rounded-3xl">
-                  <CardHeader className="bg-indigo-500/5 border-b p-5">
-                    <CardTitle className="text-lg font-bold flex items-center gap-2 text-indigo-600">
-                      <Settings2 className="h-4 w-4" />
-                      Technical & SEO
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-6 space-y-6">
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Regulatory ID (KMPDB)</Label>
-                      <Input value={formData.kmpdb_registration_number} onChange={(e) => setFormData({ ...formData, kmpdb_registration_number: e.target.value })} placeholder="KMPDB/REG/..." className="h-11 border-muted-foreground/20 rounded-xl font-bold text-sm" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">SEO Meta Title</Label>
-                      <Input value={formData.meta_title} onChange={(e) => setFormData({ ...formData, meta_title: e.target.value })} placeholder="Optimal for search engines" className="h-11 border-muted-foreground/20 rounded-xl font-bold text-sm" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
           </div>
 
-          <div className="lg:col-span-1 space-y-6">
-             <Card className="shadow-lg border-muted/50 rounded-3xl">
-               <CardHeader className="bg-muted/20 border-b p-5">
-                 <CardTitle className="text-sm font-bold flex items-center gap-2">
-                   <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                   Publishing Guard
-                 </CardTitle>
-               </CardHeader>
-               <CardContent className="p-5 space-y-4">
-                 <p className="text-xs text-muted-foreground font-medium leading-relaxed">
-                   New products are initialized as <span className="font-bold text-foreground italic">Drafts</span>. After creation, you can upload images and submit for review.
-                 </p>
-                 <div className="p-4 rounded-xl bg-primary/5 border border-primary/10 border-dashed">
-                   <p className="text-[10px] font-black text-primary uppercase tracking-[0.15em] mb-3">Checklist:</p>
-                   <ul className="space-y-2">
-                     <li className="flex items-center gap-2 text-[10px] font-black uppercase"><div className={`h-1.5 w-1.5 rounded-full ${formData.name ? "bg-emerald-500 shadow-sm shadow-emerald-500/50" : "bg-muted-foreground/30"}`} /> Name defined</li>
-                     <li className="flex items-center gap-2 text-[10px] font-black uppercase"><div className={`h-1.5 w-1.5 rounded-full ${formData.price ? "bg-emerald-500 shadow-sm shadow-emerald-500/50" : "bg-muted-foreground/30"}`} /> Price set</li>
-                     <li className="flex items-center gap-2 text-[10px] font-black uppercase"><div className={`h-1.5 w-1.5 rounded-full ${formData.category_id ? "bg-emerald-500 shadow-sm shadow-emerald-500/50" : "bg-muted-foreground/30"}`} /> Category set</li>
-                   </ul>
-                 </div>
-               </CardContent>
-             </Card>
+          {/* Right Side - Form Content */}
+          <div className="flex-1 overflow-y-auto">
+            <div className="p-8">
+              {currentStep === 0 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight">General Information</h2>
+                    <p className="text-muted-foreground mt-1">Enter the basic details for your product.</p>
+                  </div>
 
-             <div className="rounded-[2rem] bg-slate-950 p-6 text-white shadow-xl relative overflow-hidden group">
-               <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2 w-24 h-24 bg-primary/20 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-500" />
-               <div className="relative z-10 flex flex-col gap-4">
-                 <div className="h-10 w-10 rounded-xl bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/10 shadow-lg">
-                   <Box className="h-5 w-5 text-primary" />
-                 </div>
-                 <h3 className="text-lg font-black tracking-tight">Catalog Strategy</h3>
-                 <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest leading-relaxed">
-                   Enforce quality standards across the storefront.
-                 </p>
-               </div>
-             </div>
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                    <CardHeader>
+                      <CardTitle>Core Details</CardTitle>
+                      <CardDescription>
+                        The essential information that identifies your product.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="name" className="text-xs font-semibold uppercase tracking-wider">
+                            Product Name <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="name"
+                            value={formData.name}
+                            onChange={(e) => generateSlug(e.target.value)}
+                            placeholder="e.g. MRI Scanner Model X"
+                            className="h-11"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="slug" className="text-xs font-semibold uppercase tracking-wider">
+                            Slug
+                          </Label>
+                          <Input
+                            id="slug"
+                            value={formData.slug}
+                            onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                            placeholder="mri-scanner-model-x"
+                            className="h-11 font-mono text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      <div className="space-y-2">
+                        <Label htmlFor="vendor" className="text-xs font-semibold uppercase tracking-wider">
+                          Vendor <span className="text-red-500">*</span>
+                        </Label>
+                        <SearchableSelect
+                          options={vendors.map((v) => ({
+                            value: v.id,
+                            label: v.store_name || v.company_name || "Unknown",
+                          }))}
+                          value={formData.vendor_id}
+                          onChange={(value) => {
+                            const vendor = vendors.find(v => v.id === value);
+                            setFormData({ ...formData, vendor_id: value, vendor_name: vendor?.store_name || vendor?.company_name || "" });
+                          }}
+                          placeholder="Select vendor..."
+                          searchPlaceholder="Search vendors..."
+                          emptyMessage="No vendors found."
+                          className="w-full"
+                        />
+                        <p className="text-[10px] text-muted-foreground">Select the vendor this product belongs to</p>
+                      </div>
+
+                      <Separator />
+
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="category" className="text-xs font-semibold uppercase tracking-wider">
+                            Category
+                          </Label>
+                          <SearchableSelect
+                            options={categories.map((c) => ({
+                              value: c.id,
+                              label: c.name,
+                            }))}
+                            value={formData.category_id}
+                            onChange={(value) => {
+                              const cat = categories.find(c => c.id === value);
+                              setFormData({ ...formData, category_id: value, category_name: cat?.name || "" });
+                            }}
+                            placeholder="Select category..."
+                            searchPlaceholder="Search categories..."
+                            emptyMessage="No categories found."
+                            className="w-full"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="brand" className="text-xs font-semibold uppercase tracking-wider">
+                            Brand
+                          </Label>
+                          <SearchableSelect
+                            options={brands.map((b) => ({
+                              value: b.id,
+                              label: b.name,
+                            }))}
+                            value={formData.brand}
+                            onChange={(value) => {
+                              const brand = brands.find(b => b.id === value);
+                              setFormData({ ...formData, brand: value, brand_name: brand?.name || "" });
+                            }}
+                            placeholder="Select brand..."
+                            searchPlaceholder="Search brands..."
+                            emptyMessage="No brands found."
+                            className="w-full"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="manufacturer" className="text-xs font-semibold uppercase tracking-wider">
+                            Manufacturer
+                          </Label>
+                          <Input
+                            id="manufacturer"
+                            value={formData.manufacturer}
+                            onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
+                            placeholder="e.g. GE Healthcare"
+                            className="h-11 font-semibold"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="model_number" className="text-xs font-semibold uppercase tracking-wider">
+                            Model Number
+                          </Label>
+                          <Input
+                            id="model_number"
+                            value={formData.model_number}
+                            onChange={(e) => setFormData({ ...formData, model_number: e.target.value })}
+                            placeholder="e.g. Voluson E10"
+                            className="h-11 font-semibold"
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {currentStep === 1 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight">Pricing</h2>
+                    <p className="text-muted-foreground mt-1">Set the pricing details for your product.</p>
+                  </div>
+
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                    <CardHeader>
+                      <CardTitle>Price Information</CardTitle>
+                      <CardDescription>
+                        Configure the retail price and cost price.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="price" className="text-xs font-semibold uppercase tracking-wider">
+                            Retail Price (KES) <span className="text-red-500">*</span>
+                          </Label>
+                          <Input
+                            id="price"
+                            type="number"
+                            value={formData.price}
+                            onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                            placeholder="0.00"
+                            className="h-11 text-lg font-semibold"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="cost_price" className="text-xs font-semibold uppercase tracking-wider">
+                            Cost Price (KES)
+                          </Label>
+                          <Input
+                            id="cost_price"
+                            type="number"
+                            value={formData.cost_price}
+                            onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
+                            placeholder="0.00"
+                            className="h-11"
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {currentStep === 2 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight">Inventory & Physical</h2>
+                    <p className="text-muted-foreground mt-1">Manage stock, SKU, and physical attributes.</p>
+                  </div>
+
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                    <CardHeader>
+                      <CardTitle>Stock & Physical Management</CardTitle>
+                      <CardDescription>
+                        Set up inventory levels and weight.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-4 gap-6">
+                        <div className="space-y-2 col-span-4 md:col-span-1">
+                          <Label htmlFor="sku" className="text-xs font-semibold uppercase tracking-wider">
+                            SKU
+                          </Label>
+                          <Input
+                            id="sku"
+                            value={formData.sku}
+                            onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                            placeholder="e.g. MRI-102-X"
+                            className="h-11 font-mono"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-4 md:col-span-1">
+                          <Label htmlFor="stock_quantity" className="text-xs font-semibold uppercase tracking-wider">
+                            Initial Stock
+                          </Label>
+                          <Input
+                            id="stock_quantity"
+                            type="number"
+                            value={formData.stock_quantity}
+                            onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
+                            className="h-11"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-4 md:col-span-1">
+                          <Label htmlFor="low_stock_threshold" className="text-xs font-semibold uppercase tracking-wider">
+                            Low Stock Alert
+                          </Label>
+                          <Input
+                            id="low_stock_threshold"
+                            type="number"
+                            value={formData.low_stock_threshold}
+                            onChange={(e) => setFormData({ ...formData, low_stock_threshold: e.target.value })}
+                            className="h-11"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-4 md:col-span-1">
+                          <Label htmlFor="weight_kg" className="text-xs font-semibold uppercase tracking-wider">
+                            Weight (kg)
+                          </Label>
+                          <div className="relative">
+                            <Input
+                              id="weight_kg"
+                              type="number"
+                              step="any"
+                              value={formData.weight_kg}
+                              onChange={(e) => setFormData({ ...formData, weight_kg: e.target.value })}
+                              placeholder="e.g. 12.5"
+                              className="h-11 pr-12 font-semibold"
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 font-semibold text-muted-foreground text-xs">kg</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <Separator />
+
+                      <div className="flex items-center justify-between p-4 bg-muted/50 rounded-xl">
+                        <div>
+                          <Label htmlFor="track_inventory" className="text-sm font-semibold">Track Inventory</Label>
+                          <p className="text-xs text-muted-foreground">Automatically deduct stock on orders</p>
+                        </div>
+                        <Switch
+                          id="track_inventory"
+                          checked={formData.track_inventory}
+                          onCheckedChange={(checked) => setFormData({ ...formData, track_inventory: checked })}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {currentStep === 3 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight">Product Gallery</h2>
+                    <p className="text-muted-foreground mt-1">Upload and manage product clinical images.</p>
+                  </div>
+
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                    <CardHeader>
+                      <CardTitle>Image Gallery</CardTitle>
+                      <CardDescription>
+                        Add up to 5 clinical images. Click on any image to set it as primary.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        <AnimatePresence>
+                          {imagePreviews.map((src: string, idx: number) => (
+                            <motion.div
+                              key={src}
+                              initial={{ scale: 0.8, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ scale: 0.8, opacity: 0 }}
+                              onClick={() => setPrimaryImageIndex(idx)}
+                              className={cn(
+                                "relative aspect-square rounded-2xl overflow-hidden group border cursor-pointer transition-all",
+                                idx === primaryImageIndex ? "border-primary ring-2 ring-primary ring-offset-2" : "border-border hover:border-primary/50"
+                              )}
+                            >
+                              <img src={src} alt="Preview" className="object-cover w-full h-full" />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const idxToRemove = idx;
+                                  setImages(prev => prev.filter((_, i) => i !== idxToRemove));
+                                  setImagePreviews(prev => prev.filter((_, i) => i !== idxToRemove));
+                                  setPrimaryImageIndex(prev => {
+                                    if (idxToRemove === prev) return 0;
+                                    if (idxToRemove < prev) return prev - 1;
+                                    return prev;
+                                  });
+                                }}
+                                className="absolute top-2 right-2 h-7 w-7 bg-white/90 rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-all border border-border"
+                              >
+                                <X className="h-4 w-4 text-red-500" />
+                              </button>
+                              {idx === primaryImageIndex ? (
+                                <div className="absolute bottom-0 left-0 right-0 bg-primary/95 text-[9px] font-bold text-white py-1 text-center uppercase tracking-wider">Primary</div>
+                              ) : (
+                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-[9px] font-bold text-white py-1 text-center uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">Set Primary</div>
+                              )}
+                            </motion.div>
+                          ))}
+                        </AnimatePresence>
+                        <label className="aspect-square rounded-2xl border-2 border-dashed border-muted-foreground/20 flex flex-col items-center justify-center gap-2 cursor-pointer hover:bg-muted/30 transition-all group">
+                          <div className="h-10 w-10 rounded-xl bg-muted/50 flex items-center justify-center group-hover:scale-110 transition-transform">
+                            <Upload className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          <span className="text-[10px] font-bold uppercase text-muted-foreground tracking-wider">Add Image</span>
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const files = Array.from(e.target.files || []);
+                              if (files.length > 0) {
+                                setImages([...images, ...files]);
+                                const newPreviews = files.map(f => URL.createObjectURL(f));
+                                setImagePreviews([...imagePreviews, ...newPreviews]);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/10 flex gap-3 items-start">
+                        <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-bold text-amber-900 dark:text-amber-300">Clinical Image Standards</p>
+                          <p className="text-[10px] text-amber-700/80 dark:text-amber-400/80 font-medium leading-relaxed mt-1">
+                            Please upload high-resolution images: 1. Main perspective view, 2. Control console or screen interface, 3. Serial / rating plate label, 4. Included accessories.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {currentStep === 4 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight">AI Assist & Technical Details</h2>
+                    <p className="text-muted-foreground mt-1">Generate details using Gemini AI and manage technical specifications.</p>
+                  </div>
+
+                  {/* Gemini AI Assist Card */}
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5 bg-gradient-to-br from-amber-500/[0.03] to-primary/[0.03] relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
+                      <Zap className="h-24 w-24 text-primary" />
+                    </div>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2 text-amber-600">
+                        <Sparkles className="h-5 w-5" />
+                        Gemini AI Intelligence
+                      </CardTitle>
+                      <CardDescription>
+                        Generate clinically accurate description, specifications, tags, and SEO metadata.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex flex-col items-center justify-center py-6 gap-4">
+                      <div className={`h-16 w-16 rounded-2xl flex items-center justify-center shadow-md bg-white border ${isGenerating ? "animate-pulse" : ""}`}>
+                        {isGenerating ? <Loader2 className="h-6 w-6 text-primary animate-spin" /> : <Sparkles className="h-6 w-6 text-amber-500" />}
+                      </div>
+                      <div className="text-center space-y-1">
+                        <h3 className="text-sm font-bold">Auto-generate with Gemini</h3>
+                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">Requires Product Name and Category to be filled in first.</p>
+                      </div>
+                      <Button
+                        type="button"
+                        onClick={generateAIContent}
+                        disabled={isGenerating || !formData.name || !formData.category_id}
+                        className="rounded-xl h-11 px-6 font-semibold gap-2 shadow-md shadow-primary/10"
+                      >
+                        {isGenerating ? "Generating Content..." : "Generate Details"}
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                    </CardContent>
+                  </Card>
+
+                  {/* Description Card */}
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                    <CardHeader>
+                      <CardTitle>Product Descriptions</CardTitle>
+                      <CardDescription>
+                        Detailed information and short summary generated by AI or entered manually.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="short_description" className="text-xs font-semibold uppercase tracking-wider">
+                          Short Description
+                        </Label>
+                        <Textarea
+                          id="short_description"
+                          value={formData.short_description}
+                          onChange={(e) => setFormData({ ...formData, short_description: e.target.value })}
+                          rows={3}
+                          placeholder="A brief summary for listings..."
+                          className="resize-none"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="description" className="text-xs font-semibold uppercase tracking-wider">
+                          Description
+                        </Label>
+                        <Textarea
+                          id="description"
+                          value={formData.description}
+                          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                          rows={6}
+                          placeholder="Provide a detailed description of the product..."
+                          className="resize-none"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* Technical Specs Card */}
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0">
+                      <div>
+                        <CardTitle>Technical Specifications</CardTitle>
+                        <CardDescription>
+                          Define clinical and physical specifications as key-value pairs.
+                        </CardDescription>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleSpecAdd}
+                        className="rounded-xl h-9 text-xs font-semibold gap-2"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add Spec
+                      </Button>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {specEntries.length === 0 ? (
+                        <div className="text-center p-8 rounded-xl bg-muted/20 border border-dashed border-muted text-xs text-muted-foreground font-medium">
+                          No specifications yet. Click "Generate Details" or add one manually.
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {specEntries.map(([key, val], idx) => (
+                            <div key={idx} className="flex gap-2 items-center bg-muted/30 p-2 rounded-xl border">
+                              <Input
+                                value={key}
+                                onChange={(e) => handleSpecChange(key, e.target.value, val as string)}
+                                placeholder="e.g. Dimensions"
+                                className="h-9 rounded-lg font-bold text-xs"
+                              />
+                              <Input
+                                value={val as string}
+                                onChange={(e) => handleSpecChange(key, key, e.target.value)}
+                                placeholder="Value"
+                                className="h-9 rounded-lg text-xs"
+                              />
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleSpecDelete(key)}
+                                className="rounded-lg h-9 w-9 text-red-500 hover:bg-red-500/10 transition-all flex-shrink-0"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  {/* Tags Card */}
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                    <CardHeader>
+                      <CardTitle>Tags</CardTitle>
+                      <CardDescription>
+                        Manage categorizations and keywords for storefront navigation.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2 p-3 min-h-[56px] rounded-xl border bg-white items-center">
+                        {tags.map((tag: string) => (
+                          <div
+                            key={tag}
+                            className="flex items-center gap-1 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold border border-primary/20"
+                          >
+                            <span>{tag}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveTag(tag)}
+                              className="text-primary hover:text-red-500 rounded-full transition-colors"
+                            >
+                              <X className="h-3 w-3" />
+                            </button>
+                          </div>
+                        ))}
+                        <input
+                          type="text"
+                          value={tagInput}
+                          onChange={(e) => setTagInput(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          onBlur={handleAddTag}
+                          placeholder={tags.length === 0 ? "e.g. ultrasound, portable, ge (Press Enter to add)" : "Add more tags..."}
+                          className="flex-grow min-w-[120px] bg-transparent outline-none text-xs px-1 text-foreground"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  {/* SEO Metadata Card */}
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                    <CardHeader>
+                      <CardTitle>SEO Optimization</CardTitle>
+                      <CardDescription>
+                        Optimize details for search engines.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="space-y-2">
+                        <Label htmlFor="meta_title" className="text-xs font-semibold uppercase tracking-wider">
+                          Meta Title
+                        </Label>
+                        <Input
+                          id="meta_title"
+                          value={formData.meta_title}
+                          onChange={(e) => setFormData({ ...formData, meta_title: e.target.value })}
+                          placeholder="Optimal title for search engines"
+                          className="h-11"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="meta_description" className="text-xs font-semibold uppercase tracking-wider">
+                          Meta Description
+                        </Label>
+                        <Textarea
+                          id="meta_description"
+                          value={formData.meta_description}
+                          onChange={(e) => setFormData({ ...formData, meta_description: e.target.value })}
+                          rows={3}
+                          placeholder="Brief description for search results..."
+                          className="resize-none"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {currentStep === 5 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight">Compliance & Certifications</h2>
+                    <p className="text-muted-foreground mt-1">Regulatory details and hospital compliance data.</p>
+                  </div>
+
+                  {/* Regulatory & Compliance Card */}
+                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                    <CardHeader>
+                      <CardTitle>Compliance & Certifications</CardTitle>
+                      <CardDescription>
+                        Specify medical classification and manufacturer certifications.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="ppb_classification" className="text-xs font-semibold uppercase tracking-wider">
+                            PPB Classification
+                          </Label>
+                          <Input
+                            id="ppb_classification"
+                            value={formData.ppb_classification}
+                            onChange={(e) => setFormData({ ...formData, ppb_classification: e.target.value })}
+                            placeholder="e.g. Class A, Class B"
+                            className="h-11"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2 md:col-span-1">
+                          <Label htmlFor="ce_marking_or_fda_clearance" className="text-xs font-semibold uppercase tracking-wider">
+                            CE Marking / FDA Clearance
+                          </Label>
+                          <Input
+                            id="ce_marking_or_fda_clearance"
+                            value={formData.ce_marking_or_fda_clearance}
+                            onChange={(e) => setFormData({ ...formData, ce_marking_or_fda_clearance: e.target.value })}
+                            placeholder="e.g. CE certified, FDA 510(k) cleared"
+                            className="h-11"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2">
+                          <Label htmlFor="certifications" className="text-xs font-semibold uppercase tracking-wider">
+                            Certifications
+                          </Label>
+                          <Input
+                            id="certifications"
+                            value={formData.certifications}
+                            onChange={(e) => setFormData({ ...formData, certifications: e.target.value })}
+                            placeholder="e.g. ISO 13485, CE 0123, FDA Class II (comma-separated)"
+                            className="h-11"
+                          />
+                        </div>
+                        <div className="space-y-2 col-span-2">
+                          <Label htmlFor="warranty_info" className="text-xs font-semibold uppercase tracking-wider">
+                            Warranty & Support Info
+                          </Label>
+                          <Textarea
+                            id="warranty_info"
+                            value={formData.warranty_info}
+                            onChange={(e) => setFormData({ ...formData, warranty_info: e.target.value })}
+                            rows={3}
+                            placeholder="Warranty terms and conditions..."
+                            className="resize-none"
+                          />
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {currentStep === 6 && (
+                <div className="space-y-8">
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight">Review & Publish</h2>
+                    <p className="text-muted-foreground mt-1">Review your product before publishing.</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-6">
+                    {/* Gallery Preview Card */}
+                    {imagePreviews.length > 0 && (
+                      <Card className="border-border/50 shadow-xl shadow-foreground/5 col-span-2">
+                        <CardHeader>
+                          <CardTitle className="text-sm">Product Gallery Previews</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="grid grid-cols-3 md:grid-cols-5 gap-4">
+                            {imagePreviews.map((src, idx) => (
+                              <div key={idx} className="relative aspect-square rounded-xl overflow-hidden border">
+                                <img src={src} alt="Preview" className="object-cover w-full h-full" />
+                                {idx === primaryImageIndex && (
+                                  <div className="absolute bottom-0 left-0 right-0 bg-primary/90 text-[8px] font-bold text-white py-0.5 text-center uppercase tracking-wider">Primary</div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    {/* Product Details Card */}
+                    <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                      <CardHeader>
+                        <CardTitle className="text-sm">Product Details</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        {[
+                          { label: "Name", value: formData.name },
+                          { label: "Slug", value: formData.slug, mono: true },
+                          { label: "Vendor", value: formData.vendor_name },
+                          { label: "Brand", value: formData.brand_name },
+                          { label: "Manufacturer", value: formData.manufacturer },
+                          { label: "Category", value: formData.category_name },
+                          { label: "Model Number", value: formData.model_number },
+                          { label: "SKU", value: formData.sku, mono: true },
+                        ].map(({ label, value, mono }) => (
+                          <div key={label} className="space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              {label}
+                            </Label>
+                            <p className={cn("text-sm font-medium", mono && "font-mono text-xs")}>
+                              {value || <span className="text-muted-foreground italic">Not set</span>}
+                            </p>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+
+                    {/* Descriptions Card */}
+                    <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                      <CardHeader>
+                        <CardTitle className="text-sm">Descriptions</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-3">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Short Description
+                          </Label>
+                          <p className="text-sm text-muted-foreground">
+                            {formData.short_description || <span className="italic">Not set</span>}
+                          </p>
+                        </div>
+                        <Separator />
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Full Description
+                          </Label>
+                          <p className="text-sm text-muted-foreground line-clamp-4">
+                            {formData.description || <span className="italic">Not set</span>}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Pricing Card */}
+                    <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                      <CardHeader>
+                        <CardTitle className="text-sm">Pricing</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Retail Price (KES)
+                          </Label>
+                          <p className="text-2xl font-bold">{formData.price || <span className="text-muted-foreground italic">Not set</span>}</p>
+                        </div>
+                        {formData.cost_price && (
+                          <>
+                            <Separator />
+                            <div className="space-y-1">
+                              <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                Cost Price (KES)
+                              </Label>
+                              <p className="text-sm text-muted-foreground">{formData.cost_price}</p>
+                            </div>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Inventory Card */}
+                    <Card className="border-border/50 shadow-xl shadow-foreground/5">
+                      <CardHeader>
+                        <CardTitle className="text-sm">Inventory</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-xs">Track Inventory</Label>
+                          <Badge variant={formData.track_inventory ? "default" : "secondary"}>
+                            {formData.track_inventory ? "Enabled" : "Disabled"}
+                          </Badge>
+                        </div>
+                        <Separator />
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Stock
+                            </Label>
+                            <p className="text-lg font-bold">{formData.stock_quantity}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Low Stock Alert
+                            </Label>
+                            <p className="text-sm font-medium">{formData.low_stock_threshold}</p>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Weight (kg)
+                            </Label>
+                            <p className="text-sm font-medium">{formData.weight_kg || <span className="italic">Not set</span>}</p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Specifications Card (full width) */}
+                    <Card className="border-border/50 shadow-xl shadow-foreground/5 col-span-2">
+                      <CardHeader>
+                        <CardTitle className="text-sm">Specifications</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        {(() => {
+                          try {
+                            const specsObjObj = JSON.parse(formData.specifications || "{}");
+                            const entries = Object.entries(specsObjObj);
+                            if (entries.length === 0) {
+                              return <p className="text-sm text-muted-foreground italic">No specifications</p>;
+                            }
+                            return (
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                                {entries.map(([key, value]) => (
+                                  <div key={key} className="space-y-1">
+                                    <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                      {key}
+                                    </Label>
+                                    <p className="text-sm font-medium">{String(value)}</p>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          } catch {
+                            return <p className="text-sm text-destructive italic">Invalid JSON format</p>;
+                          }
+                        })()}
+                      </CardContent>
+                    </Card>
+
+                    {/* Compliance & Certification Card (full width) */}
+                    <Card className="border-border/50 shadow-xl shadow-foreground/5 col-span-2">
+                      <CardHeader>
+                        <CardTitle className="text-sm">Compliance & Certification</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              PPB Classification
+                            </Label>
+                            <Badge variant="outline" className="font-medium">
+                              {formData.ppb_classification || <span className="italic">Not set</span>}
+                            </Badge>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              CE/FDA Clearance
+                            </Label>
+                            <p className="text-sm font-medium">
+                              {formData.ce_marking_or_fda_clearance || <span className="italic">Not set</span>}
+                            </p>
+                          </div>
+                          <div className="space-y-1 md:col-span-2">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Certifications
+                            </Label>
+                            <div className="flex flex-wrap gap-1.5">
+                              {formData.certifications ? (
+                                formData.certifications.split(", ").filter(Boolean).map((cert) => (
+                                  <Badge key={cert} className="bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300">
+                                    {cert}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <span className="text-sm text-muted-foreground italic">None</span>
+                              )}
+                            </div>
+                          </div>
+                          <div className="space-y-1 col-span-2">
+                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Warranty Information
+                            </Label>
+                            <p className="text-sm text-muted-foreground">
+                              {formData.warranty_info || <span className="italic">Not set</span>}
+                            </p>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* SEO Metadata Card (full width) */}
+                    <Card className="border-border/50 shadow-xl shadow-foreground/5 col-span-2">
+                      <CardHeader>
+                        <CardTitle className="text-sm">SEO Metadata</CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Meta Title
+                          </Label>
+                          <p className="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                            {formData.meta_title || <span className="text-muted-foreground italic">Not set</span>}
+                          </p>
+                        </div>
+                        <Separator />
+                        <div className="space-y-1">
+                          <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                            Meta Description
+                          </Label>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {formData.meta_description || <span className="italic">Not set</span>}
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+
+                    {/* Tags Card (full width) */}
+                    <Card className="border-border/50 shadow-xl shadow-foreground/5 col-span-2">
+                      <CardHeader>
+                        <CardTitle className="text-sm">Tags</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {formData.tags.length > 0 ? (
+                            formData.tags.map((tag) => (
+                              <Badge key={tag} variant="secondary" className="font-medium">
+                                {tag}
+                              </Badge>
+                            ))
+                          ) : (
+                            <span className="text-sm text-muted-foreground italic">No tags</span>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                </div>
+              )}
+
+              {/* Navigation Buttons */}
+              <div className="flex items-center justify-between pt-8 border-t mt-8">
+                <Button
+                  variant="outline"
+                  onClick={handleBack}
+                  disabled={currentStep === 0}
+                  className="rounded-xl"
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Back
+                </Button>
+
+                <Button
+                  onClick={currentStep === STEPS.length - 1 ? handleSave : handleNext}
+                  disabled={loading}
+                  className="rounded-xl shadow-lg shadow-primary/20"
+                >
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Creating...
+                    </>
+                  ) : currentStep === STEPS.length - 1 ? (
+                    <>
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Publish Product
+                    </>
+                  ) : (
+                    <>
+                      Continue
+                      <ChevronsUpDown className="ml-2 h-4 w-4 rotate-90" />
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
           </div>
         </div>
       </div>

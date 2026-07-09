@@ -24,6 +24,7 @@ from app.domains.catalog.schemas.product_schemas import (
     ProductImageReorder,
     ProductReject,
     AIAssistRequest,
+    AIDescriptionRequest,
     AIAssistResponse,
     ProductCompletenessResponse,
 )
@@ -341,6 +342,66 @@ async def get_vendor_context(
 # VENDOR PRODUCT CRUD
 # ============================================================================
 
+import csv
+import io
+
+@router.post("/products/bulk-upload", response_model=dict, tags=["Vendor Catalog"])
+async def bulk_upload_products(
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """Bulk upload products via CSV."""
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+        
+    service = CatalogService(db)
+    vendor_id = str(vendor_profile.id) if vendor_profile else None
+    
+    if not vendor_id:
+        raise HTTPException(status_code=400, detail="Admin cannot bulk upload without a vendor context here yet.")
+        
+    content = await file.read()
+    try:
+        text = content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid file encoding. Please use UTF-8.")
+        
+    reader = csv.DictReader(io.StringIO(text))
+    created_count = 0
+    errors = []
+    
+    for i, row in enumerate(reader):
+        try:
+            # Map CSV columns to ProductCreate fields
+            # Expected columns: name, sku, short_description, description, base_price, stock_quantity
+            # Assuming these are mandatory minimums for the schema
+            product_data = {
+                "name": row.get("name"),
+                "sku": row.get("sku"),
+                "short_description": row.get("short_description") or "",
+                "description": row.get("description") or "",
+                "base_price": float(row.get("base_price", 0)),
+                "stock_quantity": int(row.get("stock_quantity", 0)),
+                "is_active": row.get("is_active", "true").lower() == "true",
+            }
+            
+            # Additional optional fields could be added here
+            
+            await service.create_product(
+                vendor_id=vendor_id,
+                **product_data
+            )
+            created_count += 1
+        except Exception as e:
+            errors.append(f"Row {i+1} ({row.get('sku', 'unknown')}): {str(e)}")
+            
+    return {
+        "message": f"Successfully created {created_count} products.",
+        "created_count": created_count,
+        "errors": errors
+    }
+
 @router.post("/products", response_model=ProductResponse, status_code=status.HTTP_201_CREATED, tags=["Vendor Catalog"])
 async def create_product(
     data: ProductCreate,
@@ -552,6 +613,27 @@ async def get_product_completeness(
         return breakdown
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/ai/generate-descriptions", response_model=AIAssistResponse, tags=["Vendor Catalog"])
+async def generate_product_descriptions(
+    data: AIDescriptionRequest,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """Generate AI-powered product descriptions from name and brand (before product creation)."""
+    ai_service = AIAssistService()
+    try:
+        result = await ai_service.generate_descriptions_from_name_brand(
+            product_name=data.product_name,
+            brand=data.brand,
+            category=data.category
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate descriptions: {str(e)}"
+        )
 
 
 @router.post("/products/{id}/ai-assist", response_model=AIAssistResponse, tags=["Vendor Catalog"])

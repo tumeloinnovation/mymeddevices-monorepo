@@ -68,18 +68,6 @@ interface AddressState {
   clearSyncNeeded: () => void;
 }
 
-export const DEFAULT_FALLBACK_ADDRESS: Address = {
-  id: 'default-fallback',
-  address: '123 Main St, Nairobi, Kenya',
-  lat: '-1.2864',
-  lon: '36.8172',
-  tag: 'home',
-  label: 'Home Address',
-  isDefault: true,
-  region: 'Nairobi',
-  city: 'Nairobi',
-  country: 'Kenya'
-};
 
 export const useAddressStore = create<AddressState>()(
   persist(
@@ -170,11 +158,7 @@ export const useAddressStore = create<AddressState>()(
       },
 
       getAddresses: () => {
-        const list = get().addresses;
-        if (list.length === 0) {
-          return [DEFAULT_FALLBACK_ADDRESS];
-        }
-        return list;
+        return get().addresses;
       },
 
       getAddressesByTag: (tag) => {
@@ -183,9 +167,6 @@ export const useAddressStore = create<AddressState>()(
 
       getDefaultAddress: () => {
         const list = get().addresses;
-        if (list.length === 0) {
-          return DEFAULT_FALLBACK_ADDRESS;
-        }
         return list.find(addr => addr.isDefault) || list[0] || null;
       },
 

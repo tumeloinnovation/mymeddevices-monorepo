@@ -17,7 +17,7 @@ const WishlistPage: React.FC = () => {
   const isInCart = useCartStore((s) => s.isInCart);
 
   const handleAddAllToCart = () => {
-    items.forEach((p) => addToCart(p, 1));
+    items.forEach((p) => addToCart(p as any, 1));
   };
 
   return (

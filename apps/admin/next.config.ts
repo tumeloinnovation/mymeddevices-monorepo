@@ -50,6 +50,10 @@ const nextConfig: NextConfig = {
         source: '/health',
         destination: `${backendUrl}/health`,
       },
+      {
+        source: '/static/:path*',
+        destination: `${backendUrl}/static/:path*`,
+      },
     ];
   },
   async headers() {

@@ -7,17 +7,17 @@ import { toast } from 'sonner';
 
 export interface Order {
   id: string;
-  customer_id: string;
-  order_number: string;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
-  total_amount: string;
+  order_number?: number;
+  user_id?: string;
+  guest_token?: string;
+  status: 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+  total_amount: number;
   currency: string;
-  shipping_address: Address;
-  billing_address: Address;
-  items: OrderItem[];
+  shipping_address?: Address | Record<string, any>;
   notes?: string;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
+  items: OrderItem[];
 }
 
 export interface OrderItem {
@@ -49,15 +49,11 @@ export interface Address {
 }
 
 export interface CheckoutRequest {
-  items: Array<{
-    product_id: string;
-    quantity: number;
-    unit_price?: string;
-  }>;
-  shipping_address: Address;
-  billing_address?: Address;
+  cart_id: string;
+  shipping_address: Address | Record<string, any>;
   notes?: string;
   idempotency_key?: string;
+  guest_token?: string;
 }
 
 export interface PaymentRequest {
@@ -216,10 +212,11 @@ export const orderService = {
       }
 
       throw new Error('Invalid response format');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create order:', error);
-      toast.error('Failed to create order');
-      throw error;
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to create order';
+      toast.error(errorMessage);
+      throw new Error(errorMessage);
     }
   },
 
@@ -228,38 +225,34 @@ export const orderService = {
    */
   async createOrderFromCart(
     cartId: string,
-    shippingAddress: Address,
-    billingAddress?: Address,
-    notes?: string
+    shippingAddress: Address | Record<string, any>,
+    billingAddress?: Address | Record<string, any>,
+    notes?: string,
+    guestToken?: string
   ): Promise<Order> {
     try {
-      // First, get the cart to extract items
+      // Validate cart has items first
       const { cartService } = await import('../services/cart-service');
       const cart = await cartService.getCart();
 
       if (!cart || cart.items.length === 0) {
-        throw new Error('Cart is empty');
+        throw new Error('Your cart is empty. Please add items before checkout.');
       }
 
-      // Transform cart items to order items
-      const items = cart.items.map((item) => ({
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-      }));
-
       // Generate idempotency key for this order
-      const idempotencyKey = `order-${cart.id}-${Date.now()}`;
+      const idempotencyKey = `order-${cartId}-${Date.now()}`;
 
       return await this.createOrder({
-        items,
+        cart_id: cartId,
         shipping_address: shippingAddress,
-        billing_address: billingAddress || shippingAddress,
         notes,
         idempotency_key: idempotencyKey,
+        guest_token: guestToken,
       });
-    } catch (error) {
-      console.error('Failed to create order from cart:', error);
+    } catch (error: any) {
+      if (error.message !== 'Your cart is empty. Please add items before checkout.') {
+        console.error('Failed to create order from cart:', error);
+      }
       throw error;
     }
   },
@@ -492,6 +485,7 @@ export const orderService = {
 export function formatOrderStatus(status: Order['status']): string {
   const statusMap: Record<Order['status'], string> = {
     pending: 'Pending',
+    paid: 'Paid',
     processing: 'Processing',
     shipped: 'Shipped',
     delivered: 'Delivered',
@@ -508,6 +502,7 @@ export function formatOrderStatus(status: Order['status']): string {
 export function getOrderStatusColor(status: Order['status']): string {
   const colorMap: Record<Order['status'], string> = {
     pending: 'yellow',
+    paid: 'blue',
     processing: 'blue',
     shipped: 'purple',
     delivered: 'green',

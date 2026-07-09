@@ -8,6 +8,15 @@ from app.core.config import settings
 
 def _send_smtp_sync(to_email: str, subject: str, body: str, html_content: Optional[str] = None) -> bool:
     """Synchronous helper to send email via SMTP, to be executed in a thread pool."""
+    # Log the email in development/testing so developers can see the output and OTP codes immediately
+    if settings.ENVIRONMENT in ("development", "testing") or settings.SMTP_HOST == "localhost":
+        logger.info(
+            f"\n[EMAIL SIMULATION] {subject}\n"
+            f"To: {to_email}\n"
+            f"Body: {body}\n"
+            f"--------------------------------------------------------"
+        )
+
     try:
         # Create message container
         msg = MIMEMultipart("alternative")
@@ -29,10 +38,12 @@ def _send_smtp_sync(to_email: str, subject: str, body: str, html_content: Option
             msg.attach(MIMEText(fallback_html, "html", "utf-8"))
 
         # Establish connection
+        # Use short timeout for localhost to avoid hanging development APIs if no mail server runs
+        timeout = 1.0 if settings.SMTP_HOST in ("localhost", "127.0.0.1") else 10.0
         if settings.SMTP_USE_SSL:
-            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10.0)
+            server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=timeout)
         else:
-            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=10.0)
+            server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=timeout)
             if settings.SMTP_USE_TLS:
                 server.starttls()
 

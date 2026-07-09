@@ -21,45 +21,7 @@ import { toast } from 'sonner';
 import { useProfile } from '@/lib/api/hooks/useProfile';
 
 export default function SettingsPage() {
-  const { profile, loading, error, updateProfile } = useProfile();
-  
-  // Local state for profile inputs
-  const [storeName, setStoreName] = useState('');
-  const [description, setDescription] = useState('');
-  const [businessEmail, setBusinessEmail] = useState('');
-  const [businessPhone, setBusinessPhone] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-
-  // Sync profile values when loaded
-  useEffect(() => {
-    if (profile) {
-      setStoreName(profile.store_name || '');
-      setDescription(profile.description || '');
-      setBusinessEmail(profile.business_email || '');
-      setBusinessPhone(profile.business_phone || '');
-    }
-  }, [profile]);
-
-  const handleSaveProfile = async () => {
-    setIsSaving(true);
-    try {
-      const success = await updateProfile({
-        store_name: storeName,
-        description,
-        business_email: businessEmail,
-        business_phone: businessPhone,
-      });
-      if (success) {
-        toast.success('Store profile updated successfully');
-      } else {
-        toast.error('Failed to update profile');
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Error updating profile');
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  const { profile, loading, error } = useProfile();
 
   if (loading) {
     return (

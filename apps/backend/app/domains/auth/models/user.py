@@ -7,7 +7,7 @@ from app.domains.shared.models import IDMixin, AuditMixin
 class User(Base, IDMixin, AuditMixin):
     __tablename__ = "users"
     __table_args__ = (
-        CheckConstraint("role IN ('admin', 'worker', 'vendor', 'customer', 'guest')", name="check_user_role"),
+        CheckConstraint("role IN ('admin', 'worker', 'vendor', 'customer', 'guest', 'driver')", name="check_user_role"),
         CheckConstraint("email LIKE '%@%.%'", name="check_user_email_format"),
         Index("idx_users_role_active", "role", "is_active"),
     )
@@ -40,8 +40,7 @@ class User(Base, IDMixin, AuditMixin):
         "CustomerProfile",
         back_populates="user",
         uselist=False,
-        cascade="all, delete-orphan",
-        foreign_keys="[CustomerProfile.user_id]"
+        cascade="all, delete-orphan"
     )
 
     @property

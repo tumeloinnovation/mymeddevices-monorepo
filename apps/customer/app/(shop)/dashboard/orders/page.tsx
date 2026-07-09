@@ -26,7 +26,7 @@ export default function OrdersPage() {
     const { data: orders, isLoading } = useCustomerOrders(page, 10, status || undefined);
 
     const filteredOrders = orders?.filter((order) =>
-        order.number.toLowerCase().includes(searchQuery.toLowerCase())
+        String(order.number || '').toLowerCase().includes(searchQuery.toLowerCase())
     );
 
     return (
@@ -115,13 +115,16 @@ export default function OrdersPage() {
                                             <div>
                                                 <p className="text-xs text-muted-foreground">Status</p>
                                                 <span
-                                                    className={`inline-block mt-1 px-3 py-1 rounded-full text-xs font-medium ${order.status === 'completed'
+                                                    className={`inline-block mt-1 px-3 py-1 rounded-full text-xs font-medium ${
+                                                        order.status === 'completed' || order.status === 'delivered'
                                                             ? 'bg-green-100 text-green-700'
                                                             : order.status === 'processing'
                                                                 ? 'bg-blue-100 text-blue-700'
-                                                                : order.status === 'on-hold'
-                                                                    ? 'bg-yellow-100 text-yellow-700'
-                                                                    : 'bg-gray-100 text-gray-700'
+                                                                : order.status === 'shipped'
+                                                                    ? 'bg-purple-100 text-purple-700'
+                                                                    : order.status === 'on-hold' || order.status === 'pending'
+                                                                        ? 'bg-yellow-100 text-yellow-700'
+                                                                        : 'bg-gray-100 text-gray-700'
                                                         }`}
                                                 >
                                                     {order.status}

@@ -60,3 +60,33 @@ html, body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Sidebar navigation active indicator - per DESIGN.md */
+@layer utilities {
+  .sidebar-nav-active {
+    position: relative;
+    background-color: oklch(var(--sidebar-indicator) / 0.1);
+  }
+  .sidebar-nav-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background-color: oklch(var(--sidebar-indicator));
+    border-radius: 0 1px 1px 0;
+  }
+}
+
+/* Sidebar group label styling - compact uppercase per DESIGN.md */
+@layer utilities {
+  .sidebar-group-label {
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: oklch(var(--sidebar-foreground) / 0.6);
+  }
+}

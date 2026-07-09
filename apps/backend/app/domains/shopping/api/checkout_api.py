@@ -24,7 +24,7 @@ async def create_order(
         order = await service.create_order_from_cart(
             cart_id=data.cart_id,
             user_id=current_user.id if current_user else None,
-            shipping_address=data.shipping_address,
+            shipping_address=data.shipping_address.model_dump() if data.shipping_address else None,
             notes=data.notes,
             idempotency_key=data.idempotency_key,
             guest_token=data.guest_token

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import Annotated, Optional, List
+from datetime import datetime, timezone
 
 from app.core.database import get_db
 from app.core.responses import success_response, ApiSuccessResponse
@@ -14,6 +15,7 @@ from app.domains.vendor.schemas.vendor_schemas import (
     VendorStatusResponse,
     VendorListResponse,
     VendorApprovalRequest,
+    AdminCreateVendorRequest,
 )
 from app.core.logging import logger
 
@@ -371,4 +373,90 @@ async def get_vendor_profile_admin(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
+        )
+
+
+@router.post("/admin/create", response_model=ApiSuccessResponse[VendorProfileResponse])
+async def create_vendor_admin(
+    vendor_data: AdminCreateVendorRequest,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new vendor (admin only)"""
+    from app.core.security import get_password_hash
+    from app.domains.auth.repositories.auth_repository import UserRepository
+
+    # Check if user already exists
+    user_repo = UserRepository(db)
+    existing_user = await user_repo.get_by_email(vendor_data.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A user with this email already exists"
+        )
+
+    try:
+        # Create the user with vendor role
+        from app.domains.auth.models.user import User
+        new_user = User(
+            email=vendor_data.email,
+            password_hash=get_password_hash(vendor_data.password),
+            role="vendor",
+            phone=vendor_data.phone,
+            is_active=True,
+            is_verified=True  # Auto-verify admin-created accounts
+        )
+        new_user = await user_repo.create(new_user)
+        logger.info(f"Created vendor user {new_user.email} by admin {current_user.email}")
+
+        # Create vendor profile
+        service = VendorService(db)
+
+        # Normalize phone numbers
+        normalized_mpesa_phone = vendor_data.mpesa_phone
+        if normalized_mpesa_phone and normalized_mpesa_phone.startswith('0'):
+            normalized_mpesa_phone = '+254' + normalized_mpesa_phone[1:]
+
+        normalized_business_phone = vendor_data.business_phone
+        if normalized_business_phone and normalized_business_phone.startswith('0'):
+            normalized_business_phone = '+254' + normalized_business_phone[1:]
+
+        # Determine approval status
+        final_status = "approved" if vendor_data.auto_approve else vendor_data.approval_status
+        approved_at = datetime.now(timezone.utc) if final_status == "approved" else None
+
+        # Create vendor profile with all details
+        from app.domains.vendor.models.vendor_profile import VendorProfile
+        profile = VendorProfile(
+            user_id=new_user.id,
+            store_name=vendor_data.store_name,
+            store_description=vendor_data.store_description,
+            business_email=vendor_data.business_email,
+            business_phone=normalized_business_phone,
+            address_street=vendor_data.address_street,
+            address_city=vendor_data.address_city,
+            address_region=vendor_data.address_region,
+            address_country=vendor_data.address_country,
+            mpesa_phone=normalized_mpesa_phone,
+            mpesa_business_name=vendor_data.mpesa_business_name,
+            mpesa_till_number=vendor_data.mpesa_till_number,
+            mpesa_paybill_number=vendor_data.mpesa_paybill_number,
+            approval_status=final_status,
+            company_name=vendor_data.company_name,
+            vat_number=vendor_data.vat_number,
+            approved_at=approved_at,
+            approved_by=str(current_user.id) if final_status == "approved" else None
+        )
+        profile = await service.vendor_repo.create(profile)
+        logger.info(f"Created vendor profile for user {new_user.id} with status {final_status}")
+
+        return success_response(format_vendor_profile_response(profile, new_user))
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create vendor: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create vendor: {str(e)}"
         )

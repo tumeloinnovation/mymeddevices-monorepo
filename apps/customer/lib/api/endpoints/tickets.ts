@@ -158,7 +158,7 @@ export const customerTicketsApi = {
    */
   async closeTicket(ticketId: string): Promise<Ticket> {
     try {
-      const response = await apiClient.post<any>(`/tickets/${ticketId}/close`);
+      const response = await apiClient.post<any>(`/tickets/${ticketId}/close`, {});
 
       if (response && response.data) {
         toast.success('Ticket closed successfully');

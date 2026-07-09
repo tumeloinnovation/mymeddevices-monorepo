@@ -60,6 +60,19 @@ export interface RegisterData {
   vatNumber?: string;
 }
 
+export interface CompleteRegistrationData {
+  email: string;
+  password: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  company_name?: string;
+  address_street?: string;
+  latitude?: number;
+  longitude?: number;
+  place_id?: string;
+}
+
 export interface ForgotPasswordData {
   email: string;
 }
@@ -83,7 +96,7 @@ export interface TokenResponse {
   refresh_token: string;
   token_type: string;
   expires_in: number;
-  user: any;
+  user: AuthUser;
 }
 
 export interface ChangePasswordData {
@@ -153,6 +166,28 @@ export interface VendorListResponse {
   total: number;
   page: number;
   page_size: number;
+}
+
+export interface CreateVendorData {
+  email: string;
+  password: string;
+  company_name: string;
+  store_name: string;
+  store_description?: string;
+  business_email?: string;
+  business_phone?: string;
+  phone?: string;
+  vat_number?: string;
+  address_street?: string;
+  address_city?: string;
+  address_region?: string;
+  address_country?: string;
+  mpesa_phone?: string;
+  mpesa_business_name?: string;
+  mpesa_till_number?: string;
+  mpesa_paybill_number?: string;
+  approval_status?: 'pending' | 'approved' | 'suspended' | 'rejected';
+  auto_approve?: boolean;
 }
 
 // Vendor Profile types (for self-service and admin viewing)

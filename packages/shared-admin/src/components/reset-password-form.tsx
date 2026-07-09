@@ -1,3 +1,5 @@
+"use client"
+
 import { useForm } from "react-hook-form"
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema"
 import * as z from "zod"
@@ -7,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useState, useEffect } from "react"
-import { KeyRound, Loader2, Eye, EyeOff, CheckCircle } from "lucide-react"
+import { KeyRound, Loader2, CheckCircle } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 
 export type DashboardTheme = "admin" | "vendor"
@@ -38,16 +40,16 @@ const THEME_COLORS: Record<
     iconBgClass: "bg-blue-600 shadow-lg shadow-blue-600/25",
   },
   vendor: {
-    button: "bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-600/25",
-    accent: "focus-visible:ring-orange-500/20",
-    iconBgClass: "bg-orange-600 shadow-lg shadow-orange-600/25",
+    button: "bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/25",
+    accent: "focus-visible:ring-emerald-500/20",
+    iconBgClass: "bg-emerald-600 shadow-lg shadow-emerald-600/25",
   },
 }
 
 export function ResetPasswordForm({ theme = "admin" }: ResetPasswordFormProps) {
   const { resetPassword, isLoading, error } = useAuthStore()
   const [success, setSuccess] = useState(false)
-  const [showPassword, setShowPassword] = useState(false)
+  const [localIsSubmitting, setLocalIsSubmitting] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   
@@ -70,7 +72,8 @@ export function ResetPasswordForm({ theme = "admin" }: ResetPasswordFormProps) {
   }, [email, code])
 
   const onSubmit = async (data: z.infer<typeof resetPasswordSchema>) => {
-    if (!email || !code) return
+    if (!email || !code || localIsSubmitting) return
+    setLocalIsSubmitting(true)
     try {
       await resetPassword(code, data.password, email)
       setSuccess(true)
@@ -79,6 +82,8 @@ export function ResetPasswordForm({ theme = "admin" }: ResetPasswordFormProps) {
       }, 3000)
     } catch {
       // Error handled by AuthStore
+    } finally {
+      setLocalIsSubmitting(false)
     }
   }
 
@@ -127,21 +132,12 @@ export function ResetPasswordForm({ theme = "admin" }: ResetPasswordFormProps) {
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="password">New Password</Label>
-            <div className="relative">
-              <Input
-                id="password"
-                type={showPassword ? "text" : "password"}
-                className={`h-12 rounded-xl pr-10 ${colors.accent}`}
-                {...register("password")}
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400"
-              >
-                {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-              </button>
-            </div>
+            <Input
+              id="password"
+              type="password"
+              className={`h-12 rounded-xl ${colors.accent}`}
+              {...register("password")}
+            />
             {errors.password && <p className="text-xs text-red-500">{errors.password.message}</p>}
           </div>
 
@@ -149,7 +145,7 @@ export function ResetPasswordForm({ theme = "admin" }: ResetPasswordFormProps) {
             <Label htmlFor="confirmPassword">Confirm Password</Label>
             <Input
               id="confirmPassword"
-              type={showPassword ? "text" : "password"}
+              type="password"
               className={`h-12 rounded-xl ${colors.accent}`}
               {...register("confirmPassword")}
             />
@@ -159,9 +155,9 @@ export function ResetPasswordForm({ theme = "admin" }: ResetPasswordFormProps) {
           <Button
             type="submit"
             className={`h-12 w-full rounded-xl text-base font-semibold transition-all active:scale-[0.98] ${colors.button}`}
-            disabled={isLoading || !email || !code}
+            disabled={isLoading || localIsSubmitting || !email || !code}
           >
-            {isLoading ? (
+            {isLoading || localIsSubmitting ? (
               <span className="flex items-center justify-center gap-2">
                 <Loader2 className="h-5 w-5 animate-spin" />
                 Resetting...

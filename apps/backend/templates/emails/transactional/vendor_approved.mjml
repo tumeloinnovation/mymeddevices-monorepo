@@ -1,0 +1,55 @@
+<mjml>
+  <mj-head>
+    <mj-include path="../components/head.mjml" />
+  </mj-head>
+  <mj-body background-color="#f4f6f8">
+    <mj-include path="../components/header.mjml" />
+    
+    <mj-section padding="36px 32px 12px" background-color="#ffffff">
+      <mj-column>
+        <mj-text mj-class="h1">{{ title }}</mj-text>
+        <mj-text font-size="18px" color="#053D7A" font-weight="600" padding-top="10px">
+          Welcome to the MyMedDevices Network!
+        </mj-text>
+        <mj-text>
+          Congratulations, your vendor account for <strong>{{ company_name }}</strong> has been approved. You now have full access to our vendor platform where you can manage your products, track orders, and connect with customers.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="20px 32px 32px" background-color="#ffffff">
+      <mj-column>
+        <mj-button href="{{ dashboard_url }}">
+          Go to Vendor Dashboard
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="0 32px 24px" background-color="#ffffff">
+      <mj-column background-color="#f8fafc" border-radius="8px" padding="24px">
+        <mj-text font-size="16px" font-weight="700" color="#053D7A" padding="0 0 12px">
+          What's next?
+        </mj-text>
+        <mj-text font-size="14px" padding="0 0 8px">
+          • <strong>Update your profile:</strong> Ensure your company details and contact information are up to date.
+        </mj-text>
+        <mj-text font-size="14px" padding="0 0 8px">
+          • <strong>List your products:</strong> Start adding your medical devices and supplies to our catalog.
+        </mj-text>
+        <mj-text font-size="14px" padding="0 0 8px">
+          • <strong>Set up payments:</strong> Configure your payout details to receive payments for your sales.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="0 32px 24px" background-color="#ffffff">
+      <mj-column>
+        <mj-text font-size="14px" color="#64748b">
+          If you have any questions or need assistance getting started, please don't hesitate to reach out to our vendor success team.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-include path="../components/footer.mjml" />
+  </mj-body>
+</mjml>

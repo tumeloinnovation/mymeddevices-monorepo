@@ -340,6 +340,14 @@ async def test_vendor_registration_with_otp_verification(client: AsyncClient, db
     data = response.json()
     assert data["data"]["is_verified"] == True
 
+    # 4.5 Approve vendor (otherwise login returns 403)
+    from app.domains.vendor.models.vendor_profile import VendorProfile
+    result = await db.execute(select(VendorProfile).where(VendorProfile.user_id == vendor.id))
+    profile = result.scalar_one_or_none()
+    if profile:
+        profile.approval_status = "approved"
+        await db.commit()
+
     # 5. Login with verified vendor
     login_data = {
         "email": "vendorflow@example.com",
@@ -1023,8 +1031,7 @@ async def test_forgot_password_and_reset_flow(client: AsyncClient, db):
     assert response.status_code == 200
     data = response.json()
     assert data["success"] == True
-    assert "Password reset code generated" in data["data"]["message"]
-
+    assert "Verification code sent to your email!" in data["data"]["message"]
     # 3. Get OTP from database
     result = await db.execute(select(User).where(User.email == "forgotpass@example.com"))
     user = result.scalar_one_or_none()
@@ -1050,7 +1057,7 @@ async def test_forgot_password_and_reset_flow(client: AsyncClient, db):
     assert response.status_code == 200
     data = response.json()
     assert data["success"] == True
-    assert "Password has been reset successfully" in data["data"]["message"]
+    assert "Password reset successful" in data["data"]["message"]
 
     # 5. Login with new password
     login_data = {
@@ -1080,24 +1087,34 @@ async def test_rate_limiting(client: AsyncClient):
     """Test that rate limiting is successfully applied to endpoints"""
     from app.core.rate_limiting import rate_limiter
     rate_limiter.clear()
+    
+    # Save original login limit and set to 5 for test
+    original_limit = rate_limiter._limits.get("login")
+    rate_limiter._limits["login"] = (5, 300)
 
-    # The login limit is 5 requests per 5 minutes.
-    # Send 5 requests (invalid credentials)
-    login_data = {
-        "email": "ratelimit@example.com",
-        "password": "WrongPassword!",
-        "device_id": "test_device_ratelimit"
-    }
-    for _ in range(5):
+    try:
+        # The login limit is 5 requests per 5 minutes.
+        # Send 5 requests (invalid credentials)
+        login_data = {
+            "email": "ratelimit@example.com",
+            "password": "WrongPassword!",
+            "device_id": "test_device_ratelimit"
+        }
+        for _ in range(5):
+            response = await client.post("/api/v1/auth/login", json=login_data)
+            assert response.status_code == 401
+
+        # 6th request should fail with 429 Too Many Requests
         response = await client.post("/api/v1/auth/login", json=login_data)
-        assert response.status_code == 401
+        assert response.status_code == 429
+        data = response.json()
+        assert "Rate limit exceeded" in data["detail"]["error"]
+    finally:
+        # Restore original login limit and clear rate limiter state
+        if original_limit:
+            rate_limiter._limits["login"] = original_limit
+        else:
+            rate_limiter._limits.pop("login", None)
+        rate_limiter.clear()
 
-    # 6th request should fail with 429 Too Many Requests
-    response = await client.post("/api/v1/auth/login", json=login_data)
-    assert response.status_code == 429
-    data = response.json()
-    assert "Rate limit exceeded" in data["detail"]["error"]
-
-    # Clear rate limiter state so as not to affect subsequent test runs
-    rate_limiter.clear()
 

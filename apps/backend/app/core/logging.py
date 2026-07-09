@@ -26,6 +26,13 @@ def setup_logging():
     # Remove default handler
     logger.remove()
 
+    # Filter to only log auth/otp modules and general errors
+    def auth_logs_only_filter(record):
+        name = record["name"].lower()
+        is_auth = "auth" in name or "otp" in name
+        is_error = record["level"].name in ("ERROR", "CRITICAL", "WARNING")
+        return is_auth or is_error
+
     # Console handler (colored logs)
     logger.add(
         sys.stdout,
@@ -34,7 +41,19 @@ def setup_logging():
         colorize=True,
         enqueue=True,
         backtrace=True,
-        diagnose=True,
+        diagnose=settings.ENVIRONMENT != "production",
+        filter=auth_logs_only_filter,
+    )
+
+    # File handler (specifically to apps/backend/output.log)
+    logger.add(
+        "output.log",
+        format=LOG_FORMAT,
+        level=settings.LOG_LEVEL,
+        enqueue=True,
+        backtrace=True,
+        diagnose=settings.ENVIRONMENT != "production",
+        filter=auth_logs_only_filter,
     )
 
     # Intercept standard logging

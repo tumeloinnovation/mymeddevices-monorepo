@@ -27,12 +27,11 @@ export interface Product {
   description?: string;
   short_description?: string;
   sku?: string;
+  price?: number;
+  cost_price?: number;
   base_price?: number;
   markup_price?: number;
   commission_fee?: number;
-  price?: number;
-  compare_at_price?: number;
-  cost_price?: number;
   currency: string;
   stock_quantity: number;
   low_stock_threshold: number;
@@ -52,9 +51,9 @@ export interface Product {
   manufacturer?: string;
   specifications?: Record<string, any>;
   certifications?: string[];
-  kmpdb_registration_number?: string;
   ppb_classification?: PPBClassification;
   ce_marking_or_fda_clearance?: string;
+  kmpdb_registration_number?: string;
   warranty_info?: string;
   meta_title?: string;
   meta_description?: string;
@@ -66,16 +65,16 @@ export interface Product {
   updated_at: string;
 }
 
+
 export interface ProductCreate {
   name: string;
   category_id?: string;
   description?: string;
   short_description?: string;
   sku?: string;
-  base_price?: number;
   price?: number;
-  compare_at_price?: number;
   cost_price?: number;
+  base_price?: number;
   currency?: string;
   stock_quantity?: number;
   low_stock_threshold?: number;
@@ -87,9 +86,9 @@ export interface ProductCreate {
   manufacturer?: string;
   specifications?: Record<string, any>;
   certifications?: string[];
-  kmpdb_registration_number?: string;
   ppb_classification?: PPBClassification;
   ce_marking_or_fda_clearance?: string;
+  kmpdb_registration_number?: string;
   warranty_info?: string;
   meta_title?: string;
   meta_description?: string;
@@ -144,6 +143,12 @@ export interface CategoryTree {
 
 export interface AIAssistRequest {
   fields_to_generate?: string[];
+}
+
+export interface AIDescriptionRequest {
+  product_name: string;
+  brand: string;
+  category?: string;
 }
 
 export interface AIAssistResponse {

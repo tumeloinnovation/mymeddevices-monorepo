@@ -29,8 +29,7 @@ interface PaginatedResponse<T> {
 // Category Service
 // ============================================================================
 
-import { SEED_CATEGORIES } from '../data/seed/categories';
-import { SEED_PRODUCTS } from '../data/seed/products';
+
 
 /**
  * Category service for API integration
@@ -41,11 +40,7 @@ export const categoryService = {
    */
   async getCategories(): Promise<Category[]> {
     try {
-      const useSeedData = process.env.NEXT_PUBLIC_USE_SEED_DATA === 'true' || !process.env.NEXT_PUBLIC_API_URL;
-      
-      if (useSeedData) {
-        return [...SEED_CATEGORIES];
-      }
+
 
       // Try dedicated endpoint first (if backend adds it)
       try {
@@ -98,18 +93,7 @@ export const categoryService = {
    */
   async getCategory(slug: string): Promise<CategoryWithProducts | null> {
     try {
-      const useSeedData = process.env.NEXT_PUBLIC_USE_SEED_DATA === 'true' || !process.env.NEXT_PUBLIC_API_URL;
-      
-      if (useSeedData) {
-        const category = SEED_CATEGORIES.find(c => c.slug === slug);
-        if (!category) return null;
-        
-        const products = SEED_PRODUCTS.filter(p => p.categories.some(c => c.slug === slug));
-        return {
-          ...category,
-          products
-        };
-      }
+
 
       // Try dedicated endpoint first
       try {

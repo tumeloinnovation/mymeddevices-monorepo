@@ -7,18 +7,22 @@ import type {
 
 export const vendorService = {
   async getMyStatus(): Promise<VendorStatus> {
-    return apiClient.get<VendorStatus>('/vendors/me/status');
+    const result = await apiClient.get<any>('/vendors/me/status');
+    return result?.data || result;
   },
 
   async getMyProfile(): Promise<VendorProfileResponse> {
-    return apiClient.get<VendorProfileResponse>('/vendors/me/profile');
+    const result = await apiClient.get<any>('/vendors/me/profile');
+    return result?.data || result;
   },
 
   async updateMyProfile(data: VendorProfileUpdate): Promise<{ message: string; approval_status: string }> {
-    return apiClient.patch('/vendors/me/profile', data);
+    const result = await apiClient.patch<any>('/vendors/me/profile', data);
+    return result?.data || result;
   },
 
   async getAdminProfile(vendorId: string): Promise<VendorProfileResponse> {
-    return apiClient.get<VendorProfileResponse>(`/vendors/admin/${vendorId}/profile`);
+    const result = await apiClient.get<any>(`/vendors/admin/${vendorId}/profile`);
+    return result?.data || result;
   },
 };

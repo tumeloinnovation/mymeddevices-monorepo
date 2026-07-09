@@ -126,6 +126,27 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
         }
     };
 
+    const handleResendOTP = async () => {
+        if (resendCooldown > 0) return;
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const { initiateRegistration } = useAuthStore.getState();
+            await initiateRegistration({
+                email: registerEmail,
+                role: userType,
+            });
+            setResendCooldown(60);
+        } catch (err: any) {
+            const msg = err?.response?.data?.detail || err?.message || 'Failed to resend verification code.';
+            setError(msg);
+            toast.error(msg);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     const handleVerifyOTP = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
@@ -366,8 +387,8 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                                                 </Button>
                                                 <button
                                                     type="button"
-                                                    onClick={() => setResendCooldown(60)}
-                                                    disabled={resendCooldown > 0}
+                                                    onClick={handleResendOTP}
+                                                    disabled={resendCooldown > 0 || isLoading}
                                                     className="text-xs text-primary hover:underline disabled:text-muted-foreground"
                                                 >
                                                     {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : 'Didn\'t receive code? Resend'}

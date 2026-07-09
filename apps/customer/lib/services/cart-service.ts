@@ -260,13 +260,14 @@ export const cartService = {
     }
   },
 
-  /**
-   * Get cart totals
-   */
-  async getTotals(cartId: string): Promise<CartTotals> {
+  async getTotals(cartId: string, lat?: number, lon?: number): Promise<CartTotals> {
     try {
+      const params: any = { cart_id: cartId };
+      if (lat !== undefined && lat !== null) params.lat = lat;
+      if (lon !== undefined && lon !== null) params.lon = lon;
+
       const response = await apiClient.get<any>(`/shopping/cart/totals`, {
-        params: { cart_id: cartId },
+        params,
       });
 
       if (response && response.data) {

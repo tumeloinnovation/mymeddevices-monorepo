@@ -18,6 +18,19 @@ const nextConfig: NextConfig = {
         source: '/health',
         destination: `${backendUrl}/health`,
       },
+      {
+        source: '/static/:path*',
+        destination: `${backendUrl}/static/:path*`,
+      },
+    ];
+  },
+  async redirects() {
+    return [
+      {
+        source: '/dashboard',
+        destination: '/vendor/dashboard',
+        permanent: false,
+      },
     ];
   },
   images: {

@@ -91,9 +91,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (store.user && store.user.role !== 'vendor') {
-      store.clearAuth();
-      router.push('/login');
+    if (store.user) {
+      const isVendor = store.user.role === 'vendor' || 
+                       (store.user.role as string) === 'seller' || 
+                       store.user.roles?.includes('seller') || 
+                       store.user.roles?.includes('vendor') || 
+                       !!store.user.isVendor;
+      if (!isVendor) {
+        store.clearAuth();
+        router.push('/login');
+      }
     }
   }, [store.user, router]);
 

@@ -20,6 +20,7 @@ import {
   useAuthStore,
 } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
+import AdminMap from "@/components/admin-map";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -80,7 +81,7 @@ export default function OrderDetailPage() {
     setLoading(true);
     try {
       const response = await shoppingService.getOrderDetails(id as string);
-      setOrder(response);
+      setOrder((response as any)?.data ?? response);
     } catch (error) {
       console.error("Failed to load order:", error);
       toast.error("Failed to load order details");
@@ -145,6 +146,10 @@ export default function OrderDetailPage() {
         </div>
       </DashboardLayout>
     );
+  }
+
+  if (!order) {
+    return null;
   }
 
   const status = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending;
@@ -251,6 +256,62 @@ export default function OrderDetailPage() {
                 </p>
               </CardContent>
             </Card>
+
+            {order.shipping_address?.route_coordinates && order.shipping_address.route_coordinates.length > 0 && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <MapPin className="h-5 w-5" />
+                    Delivery Route Map
+                  </CardTitle>
+                  <CardDescription>
+                    Route path for Company Rider: Office &rarr; Vendor pickups &rarr; Customer destination
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <AdminMap 
+                    markers={(() => {
+                      const coords = order.shipping_address.route_coordinates;
+                      const markers = [];
+                      markers.push({
+                        lat: coords[0][0],
+                        lng: coords[0][1],
+                        label: "Company Office (Start)"
+                      });
+                      for (let i = 1; i < coords.length - 1; i++) {
+                        markers.push({
+                          lat: coords[i][0],
+                          lng: coords[i][1],
+                          label: `Vendor Pickup #${i}`
+                        });
+                      }
+                      if (coords.length > 1) {
+                        markers.push({
+                          lat: coords[coords.length - 1][0],
+                          lng: coords[coords.length - 1][1],
+                          label: `Customer: ${order.shipping_address.full_name || 'Delivery Destination'}`
+                        });
+                      }
+                      return markers;
+                    })()}
+                    routeCoordinates={order.shipping_address.route_coordinates}
+                    height="350px"
+                  />
+                  {order.shipping_address.calculated_distance_km && (
+                    <div className="flex justify-between items-center text-sm font-semibold border-t pt-3">
+                      <span className="text-muted-foreground">Calculated Route Distance</span>
+                      <span className="text-primary">{order.shipping_address.calculated_distance_km.toFixed(2)} km</span>
+                    </div>
+                  )}
+                  {order.shipping_address.logistics_type && (
+                    <div className="flex justify-between items-center text-sm font-semibold">
+                      <span className="text-muted-foreground">Logistics Mode</span>
+                      <span className="uppercase text-orange-600">{order.shipping_address.logistics_type.replace('_', ' ')}</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Sidebar: Customer & Shipping */}

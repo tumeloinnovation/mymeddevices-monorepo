@@ -1,6 +1,8 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 import uuid
+from dataclasses import dataclass
+from typing import Union, Literal, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -10,12 +12,21 @@ from app.domains.auth.models.token_device import RefreshToken, UserDevice
 from app.domains.auth.schemas.auth_schemas import (
     UserCreate, VendorUserCreate, LoginRequest, OTPLoginRequest, GuestLoginRequest,
     ChangePasswordRequest, ChangeEmailRequest, DeleteAccountRequest,
-    RegisterInitiateRequest, RegisterCompleteRequest
+    RegisterInitiateRequest, RegisterCompleteRequest, Token, UserResponse
 )
 from app.core.logging import logger
 from app.domains.auth.services.otp_service import OTPService
 from app.domains.auth.repositories.auth_repository import UserRepository, RefreshTokenRepository, UserDeviceRepository
 from app.domains.vendor.services.vendor_service import VendorService
+
+@dataclass
+class AuthSuccess:
+    user: User
+    refresh_token: str
+
+@dataclass
+class AuthFailure:
+    reason: Literal["user_not_found", "invalid_password", "account_disabled", "vendor_pending_approval"]
 
 class AuthService:
     def __init__(self, db: AsyncSession):
@@ -66,15 +77,21 @@ class AuthService:
         }
         user = await self.user_repo.update(user, updates)
         
-        # If vendor, ensure profile is created if not already
         if user.role == "vendor":
+            if not data.address_street or data.latitude is None or data.longitude is None:
+                raise ValueError("Address street, latitude, and longitude are required for vendor registration.")
+            
             from app.domains.vendor.services.vendor_service import VendorService
             vendor_service = VendorService(self.db)
             profile = await vendor_service.get_vendor_profile(str(user.id))
             if not profile:
                 await vendor_service.create_vendor_profile(
                     user_id=str(user.id),
-                    company_name=data.company_name or "Pending Store Name"
+                    company_name=data.company_name or "Pending Store Name",
+                    address_street=data.address_street,
+                    latitude=data.latitude,
+                    longitude=data.longitude,
+                    place_id=data.place_id
                 )
                 
         logger.info(f"Registration completed for user: {user.email}")
@@ -135,7 +152,11 @@ class AuthService:
         await vendor_service.create_vendor_profile(
             user_id=str(vendor.id),
             company_name=vendor_in.company_name,
-            vat_number=vendor_in.vat_number
+            vat_number=vendor_in.vat_number,
+            address_street=vendor_in.address_street,
+            latitude=vendor_in.latitude,
+            longitude=vendor_in.longitude,
+            place_id=vendor_in.place_id
         )
 
         # Send OTP for email verification
@@ -144,21 +165,21 @@ class AuthService:
 
         return vendor
 
-    async def authenticate(self, login_data: LoginRequest) -> tuple[User, str]:
+    async def authenticate(self, login_data: LoginRequest) -> Union[AuthSuccess, AuthFailure]:
         user = await self.user_repo.get_by_email(login_data.email)
 
         if not user:
             await self.log_failed_login(login_data.email, login_data.device_id, "user_not_found")
-            return None, None
+            return AuthFailure(reason="user_not_found")
 
         if not verify_password(login_data.password, user.password_hash):
             await self.log_failed_login(login_data.email, login_data.device_id, "invalid_password")
-            return None, None
+            return AuthFailure(reason="invalid_password")
 
         # Check if user is active
         if not user.is_active:
             await self.log_failed_login(login_data.email, login_data.device_id, "account_disabled")
-            return None, None
+            return AuthFailure(reason="account_disabled")
 
         # Check vendor approval status
         if user.role == "vendor":
@@ -169,9 +190,7 @@ class AuthService:
             profile = result.scalar_one_or_none()
             if not profile or profile.approval_status != "approved":
                 await self.log_failed_login(login_data.email, login_data.device_id, "vendor_not_approved")
-                # We return a specific message for this in the API layer or handle it here
-                # For now, let's return None and we'll handle the specific error message in the API
-                return "vendor_pending_approval", None
+                return AuthFailure(reason="vendor_pending_approval")
 
         # Create or update device record
         device = await self.device_repo.get_by_user_and_device(user.id, login_data.device_id)
@@ -198,9 +217,9 @@ class AuthService:
         await self.token_repo.create(refresh_token)
 
         logger.info(f"User authenticated: {user.email} on device {login_data.device_id}, remember_me={login_data.remember_me}")
-        return user, refresh_token_str
+        return AuthSuccess(user=user, refresh_token=refresh_token_str)
 
-    async def create_tokens(self, user: User, refresh_token: str) -> dict:
+    async def create_tokens(self, user: User, refresh_token: str) -> Token:
         # Ensure vendor_profile is loaded for is_vendor_verified property
         if user.role == "vendor":
             from sqlalchemy import select
@@ -222,23 +241,14 @@ class AuthService:
         if device_id:
             access_token_data["device_id"] = device_id
         access_token = create_access_token(data=access_token_data)
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer",
-            "expires_in": security_settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            "user": {
-                "id": str(user.id),
-                "email": user.email,
-                "role": user.role,
-                "first_name": user.first_name,
-                "last_name": user.last_name,
-                "phone": user.phone,
-                "is_active": user.is_active,
-                "is_verified": user.is_verified,
-                "is_vendor_verified": user.is_vendor_verified,
-            }
-        }
+        
+        return Token(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            expires_in=security_settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            user=UserResponse.model_validate(user)
+        )
 
     async def authenticate_otp(self, login_data: OTPLoginRequest) -> tuple[User, str]:
         user = await self.user_repo.get_by_email(login_data.email)
@@ -305,7 +315,7 @@ class AuthService:
         else:
             # Create new guest user with temporary email
             guest_id = secrets.token_hex(8)
-            temp_email = f"guest_{guest_id}@temp.local"
+            temp_email = f"guest_{guest_id}@temp.mymeddevices.com"
 
             # Create guest user (no password)
             guest = User(

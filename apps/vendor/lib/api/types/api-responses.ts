@@ -48,6 +48,8 @@ export interface Product {
   sku: string;
   description?: string;
   price: number;
+  base_price?: number;
+  markup_price?: number;
   compare_at_price?: number;
   cost_price?: number;
   track_inventory: boolean;
@@ -254,6 +256,11 @@ export interface StoreProfile {
   description?: string;
   business_email: string;
   business_phone?: string;
+  mpesa_phone?: string;
+  mpesa_till_number?: string;
+  bank_account_number?: string;
+  bank_name?: string;
+  bank_account_name?: string;
   policies: StorePolicies;
   social_links?: SocialLinks;
   status: 'active' | 'pending' | 'suspended' | 'inactive';
@@ -275,10 +282,19 @@ export interface SocialLinks {
 }
 
 export interface UpdateStoreProfileDto {
-  store_name?: string;
-  description?: string;
-  business_email?: string;
-  business_phone?: string;
+  store_info?: {
+    store_name?: string;
+    store_description?: string;
+    business_email?: string;
+    business_phone?: string;
+  };
+  payment_details?: {
+    mpesa_phone?: string;
+    mpesa_till_number?: string;
+    bank_account_number?: string;
+    bank_name?: string;
+    bank_account_name?: string;
+  };
   policies?: StorePolicies;
   social_links?: SocialLinks;
 }

@@ -2,70 +2,127 @@ import { useMemo } from 'react';
 import { useAuthStore } from '@/lib/store/useAuthStore';
 import { useWishlistStore } from '@/lib/store/useWishlistStore';
 import { useAddressStore } from '@/lib/store/useAddressStore';
-import { SEED_ORDERS } from '@/lib/data/seed/orders';
 import type { DashboardStats } from '@/types/dashboard';
 import { Order } from '@/lib/data/types';
 import { orderService } from '../lib/services/order-service';
 import { useQuery } from '@tanstack/react-query';
 
 /**
- * Hook to get customer orders with pagination (Mocked)
+ * Hook to get customer orders with pagination (Real API)
  */
 export function useCustomerOrders(page = 1, perPage = 10, status?: string) {
     const user = useAuthStore((state) => state.user);
     const email = user?.email;
 
-    return useMemo(() => {
-        if (!email) return { data: [], isLoading: false, error: null };
-        
-        // Filter orders by email
-        let orders = SEED_ORDERS.filter((o: Order) => o.billing.email === email);
-        
-        if (status && status !== 'all') {
-            orders = orders.filter((o: Order) => o.status === status);
-        }
+    return useQuery<Order[]>({
+        queryKey: ['customer-orders', email, page, perPage, status],
+        queryFn: async () => {
+            if (!email) return [];
+            
+            const response = await orderService.getOrders({ page, limit: perPage });
+            const items = response.items || [];
+            
+            // Map items to WooCommerce/frontend shape expected by the UI pages
+            const mappedOrders: Order[] = items.map((order: any) => ({
+                id: order.id as any,
+                number: String(order.order_number || ''),
+                status: order.status as any,
+                currency: order.currency || 'KES',
+                date_created: order.created_at,
+                date_modified: order.updated_at,
+                total: order.total_amount,
+                subtotal: order.total_amount,
+                discount_total: '0',
+                shipping_total: '0',
+                total_tax: '0',
+                customer_id: typeof order.customer_id === 'number' ? order.customer_id : 1,
+                customer_note: order.notes || '',
+                billing: {
+                    first_name: order.billing_address?.first_name || '',
+                    last_name: order.billing_address?.last_name || '',
+                    company: '',
+                    address_1: order.billing_address?.address_line1 || '',
+                    address_2: order.billing_address?.address_line2 || '',
+                    city: order.billing_address?.city || '',
+                    state: order.billing_address?.state || '',
+                    postcode: order.billing_address?.postal_code || order.billing_address?.postcode || '',
+                    country: order.billing_address?.country || '',
+                    email: order.billing_address?.email || '',
+                    phone: order.billing_address?.phone || '',
+                },
+                shipping: {
+                    first_name: order.shipping_address?.first_name || '',
+                    last_name: order.shipping_address?.last_name || '',
+                    company: '',
+                    address_1: order.shipping_address?.address_line1 || '',
+                    address_2: order.shipping_address?.address_line2 || '',
+                    city: order.shipping_address?.city || '',
+                    state: order.shipping_address?.state || '',
+                    postcode: order.shipping_address?.postal_code || order.shipping_address?.postcode || '',
+                    country: order.shipping_address?.country || '',
+                    email: order.shipping_address?.email || '',
+                    phone: order.shipping_address?.phone || '',
+                },
+                payment_method: 'mpesa',
+                payment_method_title: 'M-PESA',
+                line_items: (order.items || []).map((item: any) => ({
+                    id: item.id,
+                    name: item.product_name,
+                    product_id: item.product_id,
+                    variation_id: 0,
+                    quantity: item.quantity,
+                    price: parseFloat(item.unit_price) || 0,
+                    total: item.total_price,
+                    subtotal: item.total_price,
+                    subtotal_tax: '0',
+                    total_tax: '0',
+                    sku: item.product?.sku || '',
+                })),
+                shipping_lines: [],
+                meta_data: [],
+            }));
 
-        const start = (page - 1) * perPage;
-        const paginatedOrders = orders.slice(start, start + perPage);
-
-        return {
-            data: paginatedOrders,
-            isLoading: false,
-            error: null,
-        };
-    }, [email, page, perPage, status]);
+            if (status && status !== 'all' && status.trim() !== '') {
+                return mappedOrders.filter((o: Order) => o.status === status);
+            }
+            return mappedOrders;
+        },
+        enabled: !!email,
+    });
 }
 
 /**
- * Hook to calculate order statistics (Mocked)
+ * Hook to calculate order statistics (Real API)
  */
 export function useOrderStats() {
     const user = useAuthStore((state) => state.user);
     const email = user?.email;
 
-    return useMemo(() => {
-        if (!email) return { data: null, isLoading: false };
+    return useQuery({
+        queryKey: ['customer-order-stats', email],
+        queryFn: async () => {
+            if (!email) return { totalOrders: 0, totalSpent: 0, completedOrders: 0, processingOrders: 0 };
 
-        const orders = SEED_ORDERS.filter((o: Order) => o.billing.email === email);
-        const totalOrders = orders.length;
-        const totalSpent = orders
-            .filter((o: Order) => o.status === 'completed')
-            .reduce((sum: number, order: Order) => sum + parseFloat(order.total), 0);
+            const response = await orderService.getOrders({ page: 1, limit: 100 });
+            const orders = response.items || [];
+            const totalOrders = response.total || orders.length;
+            const totalSpent = orders
+                .filter((o: any) => o.status === 'completed' || o.status === 'delivered')
+                .reduce((sum: number, order: any) => sum + parseFloat(order.total_amount), 0);
 
-        return {
-            data: {
+            return {
                 totalOrders,
                 totalSpent,
-                completedOrders: orders.filter((o: Order) => o.status === 'completed').length,
-                processingOrders: orders.filter((o: Order) => o.status === 'processing').length,
-            },
-            isLoading: false,
-        };
-    }, [email]);
+                completedOrders: orders.filter((o: any) => o.status === 'completed' || o.status === 'delivered').length,
+                processingOrders: orders.filter((o: any) => o.status === 'processing').length,
+            };
+        },
+        enabled: !!email,
+    });
 }
 
 /**
- * Hook to get dashboard statistics (Mocked)
+ * Hook to get dashboard statistics
  */
 export function useDashboardStats(): {
     data: DashboardStats | undefined;
@@ -75,15 +132,11 @@ export function useDashboardStats(): {
     const user = useAuthStore((state) => state.user);
     const wishlistItems = useWishlistStore((state) => state.items);
     const { addresses } = useAddressStore();
-    const { data: orderStats, isLoading: statsLoading } = useOrderStats();
+    const { data: orderStats, isLoading: statsLoading, error: statsError } = useOrderStats();
 
-    return useMemo(() => {
-        if (!user || statsLoading || !orderStats) {
-            return {
-                data: undefined,
-                isLoading: statsLoading,
-                error: null,
-            };
+    const data = useMemo(() => {
+        if (!user || !orderStats) {
+            return undefined;
         }
 
         const stats: DashboardStats = {
@@ -94,12 +147,14 @@ export function useDashboardStats(): {
             memberSince: '2024',
         };
 
-        return {
-            data: stats,
-            isLoading: false,
-            error: null,
-        };
-    }, [user, wishlistItems.length, addresses.length, orderStats, statsLoading]);
+        return stats;
+    }, [user, wishlistItems.length, addresses.length, orderStats]);
+
+    return {
+        data,
+        isLoading: statsLoading,
+        error: statsError as Error | null,
+    };
 }
 
 /**

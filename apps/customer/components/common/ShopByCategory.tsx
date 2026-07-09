@@ -6,7 +6,14 @@ import { useCategories } from '@/lib/hooks/useCategories';
 import { FolderOpen } from 'lucide-react';
 
 export const ShopByCategories: React.FC = () => {
+  const [mounted, setMounted] = React.useState(false);
   const { data: categories = [], isLoading, error } = useCategories();
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const showSkeleton = !mounted || isLoading;
 
   return (
     <section className="bg-background sm:py-12">
@@ -16,7 +23,7 @@ export const ShopByCategories: React.FC = () => {
           description="Check out all the feature categories for simple product discovery."
         />
 
-        {isLoading ? (
+        {showSkeleton ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
             {Array.from({ length: 5 }).map((_, i) => (
               <div key={i} className="bg-card border border-border rounded-2xl p-4 h-40 animate-pulse" />

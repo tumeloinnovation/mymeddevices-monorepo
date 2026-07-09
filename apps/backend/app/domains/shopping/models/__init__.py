@@ -11,7 +11,7 @@ from app.domains.shopping.models.cart_discount import CartDiscount
 from app.domains.shopping.models.cart_merge import CartMergeLog
 from app.domains.shopping.models.cart_share import CartShare
 from app.domains.shopping.models.saved_cart import SavedCart, SavedCartItem
-from app.domains.shopping.models.order import Order, OrderItem, OrderStatus
+from app.domains.shopping.models.order import Order, OrderItem, OrderStatus, OrderTimelineEvent
 from app.domains.shopping.models.payment import Payment
 from app.domains.shopping.models.shipment import Shipment, ShipmentStatus
 
@@ -32,6 +32,7 @@ __all__ = [
     "Order",
     "OrderItem",
     "OrderStatus",
+    "OrderTimelineEvent",
     "Payment",
     "Shipment",
     "ShipmentStatus",

@@ -3,6 +3,7 @@ import uuid
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from app.domains.auth.models.user import User
 from app.domains.vendor.models.vendor_profile import VendorProfile
 from app.domains.catalog.models.category import Category
@@ -160,6 +161,57 @@ async def test_order_audit_workflow(client: AsyncClient, db: AsyncSession, sampl
     )
     assert proc_resp.status_code == 200
     assert proc_resp.json()["data"]["status"] == "processing"
+
+    # Verify timeline events and vendor endpoints
+    vendor_a_user_id = vendor_a_user.id
+    stmt = select(Order).where(Order.id == uuid.UUID(order_id)).options(selectinload(Order.timeline_events))
+    res = await db.execute(stmt)
+    order_in_db = res.scalar_one()
+    db.expire(order_in_db)
+    res = await db.execute(stmt)
+    order_in_db = res.scalar_one()
+    assert len(order_in_db.timeline_events) == 3
+    assert order_in_db.timeline_events[0].status == "pending"
+    assert order_in_db.timeline_events[1].status == "paid"
+    assert order_in_db.timeline_events[2].status == "processing"
+
+    vendor_a_token = create_access_token({"sub": str(vendor_a_user_id), "role": "vendor"})
+    vendor_headers = {"Authorization": f"Bearer {vendor_a_token}"}
+    vendor_orders_resp = await client.get("/api/v1/vendor/orders", headers=vendor_headers)
+    assert vendor_orders_resp.status_code == 200
+    
+    vendor_orders_data = vendor_orders_resp.json()["data"]
+    assert "items" in vendor_orders_data
+    assert "orders" in vendor_orders_data
+    assert len(vendor_orders_data["items"]) == 1
+    
+    v_order = vendor_orders_data["items"][0]
+    assert v_order["customer_name"] == "John Doe"
+    assert v_order["customer_email"] == customer_email
+    assert v_order["vendor_amount"] == 1050
+    assert v_order["item_count"] == 1
+    
+    vendor_order_detail_resp = await client.get(f"/api/v1/vendor/orders/{order_id}", headers=vendor_headers)
+    assert vendor_order_detail_resp.status_code == 200
+    vendor_order_detail = vendor_order_detail_resp.json()["data"]
+    assert vendor_order_detail["shipping_address"] is not None
+    assert vendor_order_detail["billing_address"] is not None
+    assert len(vendor_order_detail["timeline"]) == 3
+    
+    item_id = vendor_order_detail["items"][0]["id"]
+    update_status_resp = await client.patch(
+        f"/api/v1/vendor/orders/{order_id}/items/{item_id}/status",
+        json={"status": "packed"},
+        headers=vendor_headers
+    )
+    assert update_status_resp.status_code == 200
+    
+    tracking_resp = await client.post(
+        f"/api/v1/vendor/orders/{order_id}/items/{item_id}/tracking",
+        json={"tracking_number": "TRK-123456", "carrier": "G4S"},
+        headers=vendor_headers
+    )
+    assert tracking_resp.status_code == 200
 
     # 5. Shopping Session 2: Products from 2 vendors
     # Get new cart

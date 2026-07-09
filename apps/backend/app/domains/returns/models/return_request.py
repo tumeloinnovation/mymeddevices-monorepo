@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import Column, String, Text, ForeignKey, Enum as SQLEnum, DateTime, Numeric
+from sqlalchemy import Column, String, Text, ForeignKey, Enum as SQLEnum, DateTime, Numeric, JSON
 from sqlalchemy.orm import relationship
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.core.database import Base
 
@@ -22,7 +22,7 @@ class ReturnRequest(Base):
     )
     reason = Column(String(500), nullable=False)
     description = Column(Text, nullable=True)
-    items = Column(JSONB, nullable=False, default=list)  # List of items being returned with UUIDs
+    items = Column(JSON, nullable=False, default=list)  # List of items being returned with UUIDs
     refund_method = Column(String(50), default="original")  # original, store_credit, bank_transfer
     refund_amount = Column(Numeric(10, 2), nullable=True)
     refund_transaction_id = Column(UUID(as_uuid=True), nullable=True)

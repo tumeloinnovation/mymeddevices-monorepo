@@ -28,7 +28,7 @@ async function fetchProduct(slug: string): Promise<Product | null> {
       slug: data.slug,
       description: data.description || '',
       short_description: data.short_description || '',
-      sku: 'N/A', // SKU not in storefront response
+      sku: data.sku || 'N/A',
       price: data.price?.toString() || '0',
       regular_price: data.price?.toString() || '0',
       sale_price: data.sale_price?.toString() || '0',
@@ -59,6 +59,8 @@ async function fetchProduct(slug: string): Promise<Product | null> {
       type: 'simple',
       purchasable: true,
       catalog_visibility: 'visible',
+      model_number: data.model_number || '',
+      specifications: data.specifications || {},
     } as Product;
   } catch (e) {
     console.error('Failed to fetch product:', e);

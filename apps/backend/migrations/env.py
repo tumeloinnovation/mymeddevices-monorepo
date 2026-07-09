@@ -20,7 +20,7 @@ from app.domains.auth.models import User, RefreshToken, UserDevice, OTP
 from app.domains.vendor.models import VendorProfile
 from app.domains.customers.models import CustomerProfile, Address, WishlistItem, Review
 from app.domains.catalog.models import Category, Product, ProductImage, ProductVariant, Brand, Tag
-from app.domains.shopping.models import Cart, CartItem, Coupon, CartDiscount, CartMergeLog, CartShare, SavedCart
+from app.domains.shopping.models import Cart, CartItem, Coupon, CartDiscount, CartMergeLog, CartShare, SavedCart, OrderTimelineEvent
 from app.domains.admin.models import SystemSetting
 from app.domains.payments.models import Transaction, PaymentCallback, PaymentMethod, Refund, SavedPaymentMethod
 from app.domains.tickets.models import Ticket, TicketReply

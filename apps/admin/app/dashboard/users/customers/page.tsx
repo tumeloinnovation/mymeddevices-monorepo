@@ -46,7 +46,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import Link from "next/link";
-import { usersService, type Customer as ApiCustomer } from "@mymeddevices/shared-core";
+import { usersService, shoppingService, type Customer as ApiCustomer, type UserStats } from "@mymeddevices/shared-core";
 
 // Local interface extending API type with UI-specific properties
 interface Customer extends ApiCustomer {
@@ -72,6 +72,29 @@ export default function CustomersPage() {
     total: 0,
     totalPages: 0,
   });
+
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [avgOrderValue, setAvgOrderValue] = useState<number | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadStats() {
+      setStatsLoading(true);
+      try {
+        const [statsData, analyticsData] = await Promise.all([
+          usersService.getStats(),
+          shoppingService.getAnalytics(),
+        ]);
+        setStats(statsData);
+        setAvgOrderValue(analyticsData.average_cart_value);
+      } catch (error) {
+        console.error("Failed to load customer stats/analytics", error);
+      } finally {
+        setStatsLoading(false);
+      }
+    }
+    loadStats();
+  }, []);
 
   useEffect(() => {
     async function loadCustomers() {
@@ -141,7 +164,7 @@ export default function CustomersPage() {
   };
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("ke-KES", {
+    return new Intl.NumberFormat("en-KE", {
       style: "currency",
       currency: "KES",
     }).format(amount);
@@ -187,10 +210,10 @@ export default function CustomersPage() {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {statsLoading ? (
                 <Skeleton className="h-8 w-20" />
               ) : (
-                <div className="text-2xl font-bold">{pagination.total}</div>
+                <div className="text-2xl font-bold">{stats?.total_customers ?? 0}</div>
               )}
               <p className="text-xs text-muted-foreground mt-1">Registered accounts</p>
             </CardContent>
@@ -201,10 +224,10 @@ export default function CustomersPage() {
               <CheckCircle className="h-4 w-4 text-green-500" />
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {statsLoading ? (
                 <Skeleton className="h-8 w-20" />
               ) : (
-                <div className="text-2xl font-bold">{customers.filter((c) => c.status === "active").length}</div>
+                <div className="text-2xl font-bold">{stats?.active_customers ?? 0}</div>
               )}
               <p className="text-xs text-muted-foreground mt-1">Currently active</p>
             </CardContent>
@@ -215,12 +238,12 @@ export default function CustomersPage() {
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {statsLoading ? (
                 <Skeleton className="h-8 w-20" />
               ) : (
-                <div className="text-2xl font-bold">47</div>
+                <div className="text-2xl font-bold">{stats?.new_this_month ?? 0}</div>
               )}
-              <p className="text-xs text-green-600 mt-1">+12.5% from last month</p>
+              <p className="text-xs text-green-600 mt-1">New users added</p>
             </CardContent>
           </Card>
           <Card>
@@ -229,12 +252,12 @@ export default function CustomersPage() {
               <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {loading ? (
+              {statsLoading ? (
                 <Skeleton className="h-8 w-20" />
               ) : (
-                <div className="text-2xl font-bold">KES 12,450</div>
+                <div className="text-2xl font-bold">{formatCurrency(avgOrderValue ?? 0)}</div>
               )}
-              <p className="text-xs text-muted-foreground mt-1">Per customer</p>
+              <p className="text-xs text-muted-foreground mt-1">Per completed order</p>
             </CardContent>
           </Card>
         </div>

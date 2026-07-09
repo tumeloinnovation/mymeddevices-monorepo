@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react';
-import { SEED_PRODUCTS } from '@/lib/data/seed/products';
-import { Product } from '@/lib/data/types';
+import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { productService } from '../services/product-service';
+import { Product } from '../data/types';
 
 export const useProductSearch = (searchQuery: string) => {
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -16,21 +17,25 @@ export const useProductSearch = (searchQuery: string) => {
     return () => clearTimeout(timer);
   }, [searchQuery]);
 
-  const products = useMemo(() => {
-    if (debouncedQuery.length < 2) return [];
-    
-    const query = debouncedQuery.toLowerCase();
-    return SEED_PRODUCTS.filter(p => 
-      p.name.toLowerCase().includes(query) || 
-      p.description.toLowerCase().includes(query) ||
-      p.short_description.toLowerCase().includes(query) ||
-      p.categories.some(c => c.name.toLowerCase().includes(query))
-    ).slice(0, 10);
-  }, [debouncedQuery]);
+  const { data: products = [], isLoading } = useQuery<Product[]>({
+    queryKey: ['product-search', debouncedQuery],
+    queryFn: async () => {
+      if (debouncedQuery.length < 2) return [];
+      try {
+        const response = await productService.getProducts({ q: debouncedQuery, limit: 10 });
+        return response.items || [];
+      } catch (error) {
+        console.error('Failed to search products:', error);
+        return [];
+      }
+    },
+    enabled: debouncedQuery.length >= 2,
+    staleTime: 60 * 1000, // Cache search results for 1 minute
+  });
 
   return {
     data: products,
-    isLoading: false,
+    isLoading,
     debouncedQuery,
     isSearching: searchQuery !== debouncedQuery,
   };

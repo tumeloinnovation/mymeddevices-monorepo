@@ -21,6 +21,7 @@ from .product_schemas import (
     ProductImageResponse,
     ProductImageReorder,
     AIAssistRequest,
+    AIDescriptionRequest,
     AIAssistResponse,
     ProductCompletenessResponse,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "ProductImageResponse",
     "ProductImageReorder",
     "AIAssistRequest",
+    "AIDescriptionRequest",
     "AIAssistResponse",
     "ProductCompletenessResponse",
     "TagCreate",

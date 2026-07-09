@@ -11,10 +11,10 @@ from app.core.dependencies import require_role
 from app.domains.auth.models.user import User
 from app.domains.vendor.models.vendor_profile import VendorProfile
 from app.core.logging import logger
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, EmailStr
 
 
-router = APIRouter(prefix="/admin/users", tags=["Admin - User Management"])
+router = APIRouter(prefix="/users", tags=["Admin - User Management"])
 
 
 # ============================================================================
@@ -100,6 +100,20 @@ class VendorListResponse(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class AdminCustomerCreate(BaseModel):
+    """Admin customer creation schema"""
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    phone: str
+    first_name: str = Field(..., min_length=1, alias="firstName")
+    last_name: str = Field(..., min_length=1, alias="lastName")
+    loyalty_points: Optional[int] = 0
+    notes: Optional[str] = None
+
+    class Config:
+        populate_by_name = True
 
 
 # ============================================================================
@@ -247,6 +261,30 @@ async def list_customers(
     result = await db.execute(query)
     users = result.scalars().all()
 
+    # Fetch order stats for these users
+    user_ids = [user.id for user in users]
+    order_stats = {}
+    if user_ids:
+        from app.domains.shopping.models.order import Order
+        stats_query = select(
+            Order.user_id,
+            func.count(Order.id).label("total_orders"),
+            func.sum(Order.total_amount).label("total_spent"),
+            func.max(Order.created_at).label("last_order")
+        ).where(
+            and_(
+                Order.user_id.in_(user_ids),
+                Order.status != "cancelled"
+            )
+        ).group_by(Order.user_id)
+        stats_result = await db.execute(stats_query)
+        for row in stats_result.all():
+            order_stats[row.user_id] = {
+                "total_orders": row.total_orders or 0,
+                "total_spent": float(row.total_spent or 0.0),
+                "last_order_date": row.last_order.isoformat() if row.last_order else None
+            }
+
     # Build response
     customers = []
     for user in users:
@@ -257,6 +295,12 @@ async def list_customers(
         if not user.is_active:
             status = "suspended"  # Could be refined with additional logic
 
+        user_order_stats = order_stats.get(user.id, {
+            "total_orders": 0,
+            "total_spent": 0.0,
+            "last_order_date": None
+        })
+
         customers.append(CustomerListItem(
             id=str(user.id),
             name=name,
@@ -264,9 +308,9 @@ async def list_customers(
             phone=user.phone,
             location=None,  # Could be added from address tables later
             status=status,
-            total_orders=0,  # To be implemented with orders integration
-            total_spent=0.0,  # To be implemented with orders integration
-            last_order_date=None,  # To be implemented with orders integration
+            total_orders=user_order_stats["total_orders"],
+            total_spent=user_order_stats["total_spent"],
+            last_order_date=user_order_stats["last_order_date"],
             joined_date=user.created_at.isoformat() if user.created_at else None
         ))
 
@@ -288,13 +332,16 @@ async def get_customer(
     db: AsyncSession = Depends(get_db)
 ):
     """Get customer details"""
+    from sqlalchemy.orm import selectinload
     try:
         customer_uuid = uuid.UUID(customer_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid customer ID")
 
     result = await db.execute(
-        select(User).where(and_(User.id == customer_uuid, User.role == "customer"))
+        select(User)
+        .options(selectinload(User.customer_profile))
+        .where(and_(User.id == customer_uuid, User.role == "customer"))
     )
     user = result.scalar_one_or_none()
 
@@ -303,6 +350,7 @@ async def get_customer(
 
     name = " ".join(filter(None, [user.first_name, user.last_name])) or "Customer"
 
+    profile = user.customer_profile
     return success_response({
         "id": str(user.id),
         "name": name,
@@ -311,8 +359,22 @@ async def get_customer(
         "status": "active" if user.is_active else "inactive",
         "is_verified": user.is_verified,
         "joined_date": user.created_at.isoformat() if user.created_at else None,
-        "last_login": user.updated_at.isoformat() if user.updated_at else None
+        "last_login": user.updated_at.isoformat() if user.updated_at else None,
+        "loyalty_tier": profile.loyalty_tier if profile else "bronze",
+        "loyalty_points": profile.loyalty_points if profile else 0,
+        "notes": profile.notes if profile else None,
+        "avatar_url": profile.avatar_url if profile else None,
+        "email_order_updates": profile.email_order_updates if profile else True,
+        "email_promotions": profile.email_promotions if profile else False,
+        "email_newsletter": profile.email_newsletter if profile else True,
+        "email_security": profile.email_security if profile else True,
+        "sms_order_updates": profile.sms_order_updates if profile else True,
+        "sms_promotions": profile.sms_promotions if profile else False,
+        "sms_security": profile.sms_security if profile else True,
+        "language": profile.language if profile else "en",
+        "timezone": profile.timezone if profile else "eat"
     })
+
 
 
 @router.patch("/customers/{customer_id}/status")
@@ -351,6 +413,60 @@ async def update_customer_status(
     return success_response({
         "message": f"Customer {action}d successfully",
         "status": "active" if user.is_active else "inactive"
+    })
+
+
+@router.post("/customers")
+async def create_customer(
+    data: AdminCustomerCreate,
+    current_user: Annotated[User, Depends(require_role("admin"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a new customer account"""
+    # Check if user exists
+    existing = await db.execute(select(User).where(User.email == data.email))
+    if existing.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="User with this email already exists")
+
+    from app.core.security import get_password_hash
+    from app.domains.customers.models.customer_profile import CustomerProfile
+
+    new_user = User(
+        email=data.email,
+        password_hash=get_password_hash(data.password),
+        role="customer",
+        first_name=data.first_name,
+        last_name=data.last_name,
+        phone=data.phone,
+        is_active=True,
+        is_verified=True  # Pre-verified
+    )
+
+    db.add(new_user)
+    await db.flush()  # Get new_user.id
+
+    # Create customer profile
+    new_profile = CustomerProfile(
+        user_id=new_user.id,
+        loyalty_points=data.loyalty_points or 0,
+        notes=data.notes
+    )
+    db.add(new_profile)
+    await db.commit()
+
+    # Send welcome email
+    try:
+        from app.domains.shopping.services.email_notification_service import EmailNotificationService
+        email_service = EmailNotificationService()
+        user_name = f"{new_user.first_name} {new_user.last_name}".strip() or new_user.email.split('@')[0]
+        await email_service.send_account_welcome(new_user.email, user_name, str(new_user.id))
+    except Exception as e:
+        logger.error(f"Failed to send welcome email: {e}")
+
+    return success_response({
+        "id": str(new_user.id),
+        "email": new_user.email,
+        "message": "Customer account created successfully!"
     })
 
 
@@ -654,7 +770,7 @@ async def list_vendors_overview(
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
     status_filter: Optional[str] = Query(None, description="Filter by approval status"),
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100),
+    page_size: int = Query(20, ge=1, le=2000),
     db: AsyncSession = Depends(get_db)
 ):
     """List vendors with basic info for overview page"""

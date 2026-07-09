@@ -1,3 +1,4 @@
+import uuid
 from typing import TypeVar, Generic, Type, List, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
@@ -13,7 +14,7 @@ class BaseRepository(Generic[ModelType]):
         self.model = model
         self.db = db
 
-    async def get(self, id: Any) -> Optional[ModelType]:
+    async def get(self, id: uuid.UUID | int | str) -> Optional[ModelType]:
         result = await self.db.execute(select(self.model).where(self.model.id == id))
         return result.scalar_one_or_none()
 
@@ -50,7 +51,7 @@ class BaseRepository(Generic[ModelType]):
         await self.db.refresh(db_obj)
         return db_obj
 
-    async def delete(self, id: Any) -> bool:
+    async def delete(self, id: uuid.UUID | int | str) -> bool:
         db_obj = await self.get(id)
         if not db_obj:
             return False

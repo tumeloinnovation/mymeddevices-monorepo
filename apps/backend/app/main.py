@@ -16,6 +16,7 @@ from app.domains.users.api.users_api import router as users_router
 from app.domains.customers.api.customer_api import router as customer_router
 from app.domains.vendor.api.vendor_api import router as vendor_router
 from app.domains.vendor.api.vendor_analytics_api import router as vendor_analytics_router
+from app.domains.vendor.api.vendor_earnings_api import router as vendor_earnings_router
 from app.domains.catalog.api.catalog_api import router as catalog_router
 from app.domains.catalog.api.storefront_api import router as storefront_router
 from app.domains.shopping.api.cart_api import router as cart_router
@@ -90,13 +91,14 @@ async def validation_exception_handler(request, exc: RequestValidationError):
         # Custom transformations for known errors
         friendly_msg = friendly_msg.replace("Value error, ", "")
     
+    from fastapi.encoders import jsonable_encoder
     logger.warning(f"Validation error: {friendly_msg}")
     return JSONResponse(
         status_code=422,
         content={
             "success": False, 
             "detail": friendly_msg,
-            "errors": exc.errors()
+            "errors": jsonable_encoder(exc.errors())
         }
     )
 
@@ -148,6 +150,7 @@ app.include_router(users_router, prefix="/api/v1")
 app.include_router(customer_router, prefix="/api/v1/customers")
 app.include_router(vendor_router, prefix="/api/v1")
 app.include_router(vendor_analytics_router, prefix="/api/v1")
+app.include_router(vendor_earnings_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1/catalog")
 app.include_router(storefront_router, prefix="/api/v1/storefront")
 app.include_router(cart_router, prefix="/api/v1/shopping")

@@ -18,11 +18,11 @@ export interface VendorCoupon {
 
 export const vendorCouponsApi = {
   getCoupons: async (params?: { page?: number; limit?: number; is_active?: boolean }) => {
-    return await apiClient.get<VendorCoupon[]>('/coupons/vendor', { params: params as any });
+    return await apiClient.get<VendorCoupon[]>('/shopping/vendor/coupons', { params: params as any });
   },
 
   getCoupon: async (id: string) => {
-    return await apiClient.get<VendorCoupon>(`/coupons/${id}`);
+    return await apiClient.get<VendorCoupon>(`/shopping/vendor/coupons/${id}`);
   },
 
   create: async (data: {
@@ -33,18 +33,18 @@ export const vendorCouponsApi = {
     valid_from: string;
     valid_until?: string;
   }) => {
-    return await apiClient.post<VendorCoupon>('/coupons/vendor', data);
+    return await apiClient.post<VendorCoupon>('/shopping/vendor/coupons', data);
   },
 
   update: async (id: string, data: Partial<VendorCoupon>) => {
-    return await apiClient.patch<VendorCoupon>(`/coupons/${id}`, data);
+    return await apiClient.patch<VendorCoupon>(`/shopping/vendor/coupons/${id}`, data);
   },
 
   delete: async (id: string) => {
-    return await apiClient.delete<{ message: string }>(`/coupons/${id}`);
+    return await apiClient.delete<{ message: string }>(`/shopping/vendor/coupons/${id}`);
   },
 
-  getStats: async () => {
-    return await apiClient.get<{ total_coupons: number; active_coupons: number; total_usages: number }>('/coupons/stats');
+  getStats: async (id: string) => {
+    return await apiClient.get<any>(`/shopping/vendor/coupons/${id}/stats`);
   },
 };

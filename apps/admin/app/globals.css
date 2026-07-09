@@ -48,73 +48,137 @@
   --radius-xl: calc(var(--radius) * 1.4);
 }
 
+/*
+ * Warm Orange/Olive Theme
+ * Orange: #e0752b — primary actions, active nav
+ * Olive: #a69d61 — secondary emphasis, success state
+ * Teal: #a5c5c6 — muted foreground, labels
+ * Navy: #00132c — surface raised
+ * Dark Teal: #001820 — surface
+ * Dark Blue: #0e599b — borders, info
+ * Black: #060909 — canvas background
+ */
+
 :root {
-  --background: 1 0 0;
-  --foreground: 0.145 0 0;
+  /* Light mode - clean gray with orange accents */
+  --background: 0.98 0 0;
+  --foreground: 0.08 0.01 240;
   --card: 1 0 0;
-  --card-foreground: 0.145 0 0;
+  --card-foreground: 0.08 0.01 240;
   --popover: 1 0 0;
-  --popover-foreground: 0.145 0 0;
-  --primary: 0.646 0.222 41.116;
-  --primary-foreground: 0.985 0 0;
-  --secondary: 0.97 0 0;
-  --secondary-foreground: 0.205 0 0;
-  --muted: 0.97 0 0;
-  --muted-foreground: 0.556 0 0;
-  --accent: 0.97 0 0;
-  --accent-foreground: 0.205 0 0;
-  --destructive: 0.577 0.245 27.325;
-  --border: 0.922 0 0;
-  --input: 0.922 0 0;
-  --ring: 0.708 0 0;
-  --chart-1: 0.646 0.222 41.116;
-  --chart-2: 0.6 0.118 184.704;
-  --chart-3: 0.398 0.07 227.392;
-  --chart-4: 0.828 0.189 84.429;
-  --chart-5: 0.769 0.188 70.08;
-  --radius: 0.625rem;
-  --sidebar-background: 0.985 0 0;
-  --sidebar-foreground: 0.145 0 0;
-  --sidebar-primary: 0.646 0.222 41.116;
-  --sidebar-primary-foreground: 0.985 0 0;
-  --sidebar-accent: 0.97 0 0;
-  --sidebar-accent-foreground: 0.205 0 0;
-  --sidebar-border: 0.922 0 0;
-  --sidebar-ring: 0.708 0 0;
+  --popover-foreground: 0.08 0.01 240;
+  --primary: 0.64 0.21 48; /* Orange #e0752b */
+  --primary-foreground: 0.98 0 0;
+  --secondary: 0.66 0.12 85; /* Olive #a69d61 */
+  --secondary-foreground: 0.98 0 0;
+  --muted: 0.96 0.01 240;
+  --muted-foreground: 0.48 0.01 240;
+  --accent: 0.76 0.04 195; /* Teal #a5c5c6 */
+  --accent-foreground: 0.08 0.01 240;
+  --destructive: 0.55 0.22 25;
+  --destructive-foreground: 0.98 0 0;
+  --border: 0.88 0 0;
+  --input: 0.88 0 0;
+  --ring: 0.64 0.21 48; /* Orange focus ring */
+  --chart-1: 0.64 0.21 48; /* Orange */
+  --chart-2: 0.38 0.16 250; /* Dark Blue */
+  --chart-3: 0.66 0.12 85; /* Olive */
+  --chart-4: 0.76 0.04 195; /* Teal */
+  --chart-5: 0.55 0.22 25; /* Red accent */
+  --radius: 0.5rem;
+  --sidebar-background: 0.96 0 0;
+  --sidebar-foreground: 0.08 0.01 240;
+  --sidebar-primary: 0.64 0.21 48;
+  --sidebar-primary-foreground: 0.98 0 0;
+  --sidebar-accent: 0.94 0 0;
+  --sidebar-accent-foreground: 0.08 0.01 240;
+  --sidebar-border: 0.88 0 0;
+  --sidebar-ring: 0.64 0.21 48;
+  /* Enhanced sidebar colors per DESIGN.md - light mode */
+  --sidebar-canvas: 0.98 0 0;
+  --sidebar-surface: 0.96 0 0;
+  --sidebar-surface-raised: 0.94 0 0;
+  --sidebar-indicator: 0.64 0.21 48; /* #e0752b orange */
 }
 
 .dark {
-  --background: 0.145 0 0;
-  --foreground: 0.985 0 0;
-  --card: 0.205 0 0;
-  --card-foreground: 0.985 0 0;
-  --popover: 0.205 0 0;
-  --popover-foreground: 0.985 0 0;
-  --primary: 0.646 0.222 41.116;
-  --primary-foreground: 0.985 0 0;
-  --secondary: 0.269 0 0;
-  --secondary-foreground: 0.985 0 0;
-  --muted: 0.269 0 0;
-  --muted-foreground: 0.708 0 0;
-  --accent: 0.269 0 0;
-  --accent-foreground: 0.985 0 0;
-  --destructive: 0.704 0.191 22.216;
-  --border: 1 0 0 / 10%;
-  --input: 1 0 0 / 15%;
-  --ring: 0.556 0 0;
-  --chart-1: 0.646 0.222 41.116;
-  --chart-2: 0.6 0.118 184.704;
-  --chart-3: 0.398 0.07 227.392;
-  --chart-4: 0.828 0.189 84.429;
-  --chart-5: 0.769 0.188 70.08;
-  --sidebar-background: 0.205 0 0;
-  --sidebar-foreground: 0.985 0 0;
-  --sidebar-primary: 0.488 0.243 264.376;
-  --sidebar-primary-foreground: 0.985 0 0;
-  --sidebar-accent: 0.269 0 0;
-  --sidebar-accent-foreground: 0.985 0 0;
-  --sidebar-border: 1 0 0 / 10%;
-  --sidebar-ring: 0.556 0 0;
+  /* Dark mode - near-black canvas with orange/olive accents */
+  --background: 0.04 0.005 180; /* #060909 near-black canvas */
+  --foreground: 0.98 0 0;
+  --card: 0.12 0.02 210; /* #001820 dark teal surface */
+  --card-foreground: 0.98 0 0;
+  --popover: 0.12 0.02 210;
+  --popover-foreground: 0.98 0 0;
+  --primary: 0.64 0.21 48; /* Orange #e0752b */
+  --primary-foreground: 0.98 0 0;
+  --secondary: 0.15 0.08 265; /* #00132c navy surface raised */
+  --secondary-foreground: 0.98 0 0;
+  --muted: 0.15 0.08 265;
+  --muted-foreground: 0.76 0.04 195; /* Teal #a5c5c6 */
+  --accent: 0.76 0.04 195; /* Teal */
+  --accent-foreground: 0.04 0.005 180;
+  --destructive: 0.55 0.22 25;
+  --destructive-foreground: 0.98 0 0;
+  --border: 0.38 0.16 250; /* #0e599b dark blue */
+  --input: 0.38 0.16 250;
+  --ring: 0.64 0.21 48; /* Orange focus ring */
+  --chart-1: 0.64 0.21 48; /* Orange */
+  --chart-2: 0.38 0.16 250; /* Dark Blue */
+  --chart-3: 0.66 0.12 85; /* Olive */
+  --chart-4: 0.76 0.04 195; /* Teal */
+  --chart-5: 0.55 0.22 25; /* Red accent */
+  --sidebar-background: 0.12 0.02 210; /* #001820 surface */
+  --sidebar-foreground: 0.98 0 0;
+  --sidebar-primary: 0.64 0.21 48; /* Orange active nav #e0752b */
+  --sidebar-primary-foreground: 0.98 0 0;
+  --sidebar-accent: 0.15 0.08 265; /* #00132c surface raised */
+  --sidebar-accent-foreground: 0.98 0 0;
+  --sidebar-border: 0.38 0.16 250; /* #0e599b border */
+  --sidebar-ring: 0.64 0.21 48;
+  /* Enhanced sidebar colors per DESIGN.md */
+  --sidebar-canvas: 0.04 0.005 180; /* #060909 */
+  --sidebar-surface: 0.12 0.02 210; /* #001820 */
+  --sidebar-surface-raised: 0.15 0.08 265; /* #00132c */
+  --sidebar-indicator: 0.64 0.21 48; /* #e0752b orange */
 }
 
+/* Semantic color helpers for admin use */
+@layer base {
+  .text-success {
+    color: oklch(0.66 0.12 85); /* Olive for success */
+  }
+  .text-success-light {
+    color: oklch(0.76 0.08 85);
+  }
+  .bg-success {
+    background-color: oklch(0.66 0.12 85);
+  }
+  .bg-success-subtle {
+    background-color: oklch(0.66 0.12 85 / 0.15);
+  }
 
+  .text-warning {
+    color: oklch(0.64 0.21 48); /* Orange for warning */
+  }
+  .bg-warning {
+    background-color: oklch(0.64 0.21 48);
+  }
+  .bg-warning-subtle {
+    background-color: oklch(0.64 0.21 48 / 0.15);
+  }
+
+  .text-info {
+    color: oklch(0.5 0.14 250); /* Dark blue for info */
+  }
+  .bg-info-subtle {
+    background-color: oklch(0.38 0.16 250 / 0.15);
+  }
+}
+
+/* Focus visible with orange ring */
+@layer base {
+  *:focus-visible {
+    outline: 2px solid oklch(0.64 0.21 48);
+    outline-offset: 2px;
+  }
+}

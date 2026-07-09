@@ -113,16 +113,16 @@ class ShoppingService {
     return apiClient.get<ShoppingAnalytics>("/admin/shopping/analytics");
   }
 
-  async adminListOrders(params?: any): Promise<any[]> {
-    return apiClient.get<any[]>("/admin/shopping/orders", { params });
+  async adminListOrders(params?: any): Promise<any> {
+    return apiClient.get<any>("/admin/shopping/orders", { params });
   }
 
   async adminUpdateOrderStatus(orderId: string, status: string): Promise<any> {
     return apiClient.patch(`/admin/shopping/orders/${orderId}/status`, { status });
   }
 
-  async vendorListOrders(page: number = 1, pageSize: number = 20): Promise<any[]> {
-    return apiClient.get<any[]>(`/admin/shopping/orders/vendor?page=${page}&page_size=${pageSize}`);
+  async vendorListOrders(page: number = 1, pageSize: number = 20): Promise<any> {
+    return apiClient.get<any>(`/admin/shopping/orders/vendor?page=${page}&page_size=${pageSize}`);
   }
 
   // ============================================================================

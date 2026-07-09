@@ -5,6 +5,7 @@ from sqlalchemy import (
     ForeignKey, JSON, DateTime, Index
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
 from app.domains.shared.models import IDMixin, AuditMixin, SoftDeleteMixin
@@ -59,8 +60,6 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
     markup_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     commission_fee: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
-    sale_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
-    compare_at_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     cost_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), default="KES")
 
@@ -171,3 +170,8 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
         back_populates="products",
         lazy="selectin"
     )
+
+    @hybrid_property
+    def category_name(self) -> Optional[str]:
+        """Get the category name from the relationship"""
+        return self.category.name if self.category else None

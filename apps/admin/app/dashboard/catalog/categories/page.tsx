@@ -1,67 +1,59 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { 
-  Plus, 
-  FolderTree, 
-  ChevronRight, 
-  ChevronDown, 
-  Edit, 
-  Trash2, 
-  MoreVertical,
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  Plus,
+  FolderTree,
+  ChevronRight,
+  ChevronDown,
   Loader2,
-  FolderPlus,
-  Info,
-  LayoutDashboard,
-  ChevronRight as ChevronRightIcon,
+  Boxes,
   Search,
   Filter,
-  Eye,
-  Settings2,
-  Boxes,
-  Activity,
-  ArrowUpRight,
+  X,
+  MoreVertical,
+  FolderPlus,
 } from "lucide-react";
 import {
   catalogService,
   CategoryTree,
-  CategoryCreate,
-  CategoryUpdate
 } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
-import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
+
+type FilterStatus = "all" | "active" | "inactive";
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<CategoryTree[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<CategoryTree | null>(null);
   const [parentId, setParentId] = useState<string | undefined>(undefined);
-  
+  const [userEditedSlug, setUserEditedSlug] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
+
   // Form state
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
@@ -69,11 +61,16 @@ export default function CategoriesPage() {
   const [isActive, setIsActive] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  // Expansion state
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
   const fetchCategories = async () => {
     setLoading(true);
     try {
       const data = await catalogService.getCategories();
       setCategories(data);
+      // Auto-expand top level by default
+      setExpandedIds(new Set(data.map((c) => c.id)));
     } catch (error) {
       toast.error("Failed to load categories");
     } finally {
@@ -85,24 +82,68 @@ export default function CategoriesPage() {
     fetchCategories();
   }, []);
 
-  const openCreateDialog = (pid?: string) => {
+  // Auto-generate slug from name
+  useEffect(() => {
+    if (!editingCategory && !userEditedSlug && name) {
+      const generatedSlug = name
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/[\s]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+      setSlug(generatedSlug);
+    }
+  }, [name, editingCategory, userEditedSlug]);
+
+  const toggleExpanded = (id: string) => {
+    const newSet = new Set(expandedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setExpandedIds(newSet);
+  };
+
+  const toggleExpandAll = () => {
+    if (expandedIds.size === getAllCategoryIds(categories).size) {
+      setExpandedIds(new Set());
+    } else {
+      setExpandedIds(getAllCategoryIds(categories));
+    }
+  };
+
+  const getAllCategoryIds = (cats: CategoryTree[]): Set<string> => {
+    const ids = new Set<string>();
+    const collect = (nodes: CategoryTree[]) => {
+      nodes.forEach((n) => {
+        ids.add(n.id);
+        if (n.children?.length) collect(n.children);
+      });
+    };
+    collect(cats);
+    return ids;
+  };
+
+  const openCreateSheet = (pid?: string) => {
     setEditingCategory(null);
+    setUserEditedSlug(false);
     setParentId(pid);
     setName("");
     setSlug("");
     setDescription("");
     setIsActive(true);
-    setIsDialogOpen(true);
+    setSheetOpen(true);
   };
 
-  const openEditDialog = (category: CategoryTree) => {
+  const openEditSheet = (category: CategoryTree) => {
     setEditingCategory(category);
+    setUserEditedSlug(true);
     setParentId(undefined);
     setName(category.name);
     setSlug(category.slug);
     setDescription(category.description || "");
     setIsActive(category.is_active);
-    setIsDialogOpen(true);
+    setSheetOpen(true);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -116,7 +157,7 @@ export default function CategoriesPage() {
           description,
           is_active: isActive
         });
-        toast.success("Category updated successfully");
+        toast.success("Category updated");
       } else {
         await catalogService.createCategory({
           name,
@@ -126,9 +167,9 @@ export default function CategoriesPage() {
           is_active: isActive,
           sort_order: 0
         });
-        toast.success("Category created successfully");
+        toast.success("Category created");
       }
-      setIsDialogOpen(false);
+      setSheetOpen(false);
       fetchCategories();
     } catch (error) {
       console.error("Failed to save category:", error);
@@ -138,22 +179,9 @@ export default function CategoriesPage() {
     }
   };
 
-  const generateSlug = (val: string) => {
-    setName(val);
-    if (!editingCategory) {
-      setSlug(
-        val
-          .toLowerCase()
-          .replace(/[^\w\s-]/g, '')
-          .replace(/[\s]+/g, '-')
-          .replace(/^-+|-+$/g, '')
-      );
-    }
-  };
-
-  const handleDeleteCategory = async (id: string) => {
+  const handleDeleteCategory = async (category: CategoryTree) => {
     try {
-      await catalogService.deleteCategory(id);
+      await catalogService.deleteCategory(category.id);
       toast.success("Category deleted");
       fetchCategories();
     } catch (error: any) {
@@ -161,360 +189,590 @@ export default function CategoriesPage() {
     }
   };
 
-  const totalCategories = React.useMemo(() => {
-    let count = 0;
+  // Stats
+  const stats = useMemo(() => {
+    let total = 0;
+    let active = 0;
+    let inactive = 0;
+    let withChildren = 0;
+
     const countNodes = (nodes: CategoryTree[]) => {
-      nodes.forEach(n => {
-        count++;
-        if (n.children?.length) countNodes(n.children);
+      nodes.forEach((n) => {
+        total++;
+        if (n.is_active) active++;
+        else inactive++;
+        if (n.children?.length) {
+          withChildren++;
+          countNodes(n.children);
+        }
       });
     };
     countNodes(categories);
-    return count;
+
+    return { total, active, inactive, withChildren };
   }, [categories]);
 
-  const activeCategories = React.useMemo(() => {
-    let count = 0;
-    const countNodes = (nodes: CategoryTree[]) => {
-      nodes.forEach(n => {
-        if (n.is_active) count++;
-        if (n.children?.length) countNodes(n.children);
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+  };
+
+  const hasActiveFilters = searchQuery || statusFilter !== "all";
+
+  // Filtered categories (flat list for rendering)
+  const filteredCategories = useMemo(() => {
+    const result: { category: CategoryTree; level: number }[] = [];
+
+    const filterNodes = (nodes: CategoryTree[], level: number) => {
+      nodes.forEach((node) => {
+        const matchesSearch =
+          !searchQuery ||
+          node.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          node.slug.toLowerCase().includes(searchQuery.toLowerCase());
+
+        const matchesStatus =
+          statusFilter === "all" ||
+          (statusFilter === "active" && node.is_active) ||
+          (statusFilter === "inactive" && !node.is_active);
+
+        // Include if matches, or if children might match
+        const hasMatchingChildren = node.children?.some((child) =>
+          searchQuery
+            ? child.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+              child.slug.toLowerCase().includes(searchQuery.toLowerCase())
+            : statusFilter === "all" ||
+              (statusFilter === "active" && child.is_active) ||
+              (statusFilter === "inactive" && !child.is_active)
+        );
+
+        if (matchesSearch || hasMatchingChildren) {
+          result.push({ category: node, level });
+          if (node.children?.length && (expandedIds.has(node.id) || hasMatchingChildren)) {
+            filterNodes(node.children, level + 1);
+          }
+        }
       });
     };
-    countNodes(categories);
-    return count;
-  }, [categories]);
+
+    filterNodes(categories, 0);
+    return result;
+  }, [categories, searchQuery, statusFilter, expandedIds]);
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-8 p-4 lg:p-8 max-w-[1600px] mx-auto">
-        {/* Breadcrumbs */}
-        <nav className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Link href="/dashboard" className="hover:text-primary transition-colors flex items-center gap-1">
-            <LayoutDashboard className="h-4 w-4" />
-            Dashboard
-          </Link>
-          <ChevronRightIcon className="h-3 w-3" />
-          <Link href="/dashboard/catalog" className="hover:text-primary transition-colors">
-            Catalog
-          </Link>
-          <ChevronRightIcon className="h-3 w-3" />
-          <span className="font-medium text-foreground">Categories</span>
-        </nav>
-
-        {/* Header Section */}
-        <div className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between border-b pb-8">
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight">Category Taxonomy</h1>
-            <p className="text-muted-foreground text-base mt-2">
-              Organize your medical equipment into a logical hierarchical structure.
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" className="h-11 px-6 shadow-sm">
-              <Boxes className="mr-2 h-4 w-4" />
-              Manage Layout
-            </Button>
-            <Button className="h-11 px-6 shadow-md shadow-primary/20" onClick={() => openCreateDialog()}>
-              <Plus className="mr-2 h-4 w-4" />
-              New Root Category
-            </Button>
-          </div>
+      {/* Page Header */}
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-[20px]/[28px] font-semibold tracking-tight">
+            Categories
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {stats.total} total · {stats.active} active · {stats.withChildren} with sub-categories
+          </p>
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-          {/* Main Content - Tree View */}
-          <div className="lg:col-span-3 flex flex-col gap-6">
-            <Card className="shadow-xl shadow-foreground/5 border-muted/50 overflow-hidden">
-              <CardHeader className="bg-muted/30 border-b p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-xl font-bold">Taxonomy Tree</CardTitle>
-                    <CardDescription className="text-sm">Drag and drop to reorder (Coming soon)</CardDescription>
-                  </div>
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input placeholder="Find category..." className="pl-10 w-[240px] bg-background" />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="p-6">
-                {loading ? (
-                  <div className="flex flex-col items-center justify-center py-24 gap-4">
-                    <Loader2 className="h-12 w-12 animate-spin text-primary" />
-                    <p className="text-muted-foreground font-medium">Building taxonomy tree...</p>
-                  </div>
-                ) : categories.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-24 text-center border-2 border-dashed rounded-3xl">
-                    <div className="h-20 w-20 rounded-full bg-muted/30 flex items-center justify-center mb-6">
-                      <FolderTree className="h-10 w-10 text-muted-foreground/30" />
-                    </div>
-                    <h3 className="text-xl font-bold">No categories yet</h3>
-                    <p className="text-muted-foreground mt-2 max-w-sm">
-                      Start your catalog structure by creating your first top-level category.
-                    </p>
-                    <Button variant="secondary" className="mt-6" onClick={() => openCreateDialog()}>
-                      Create first category
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {categories.map((cat) => (
-                      <CategoryItem 
-                        key={cat.id} 
-                        category={cat} 
-                        onEdit={openEditDialog}
-                        onAddChild={openCreateDialog}
-                        onDelete={handleDeleteCategory}
-                      />
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar - Insights */}
-          <div className="lg:col-span-1 flex flex-col gap-6">
-            <Card className="shadow-lg border-muted/50">
-              <CardHeader>
-                <CardTitle className="text-lg font-bold flex items-center gap-2">
-                  <Activity className="h-5 w-5 text-primary" />
-                  Taxonomy Stats
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Total Categories</span>
-                  <Badge variant="secondary" className="font-bold text-sm">{totalCategories}</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Active Nodes</span>
-                  <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 font-bold text-sm">{activeCategories}</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Root Categories</span>
-                  <Badge variant="outline" className="font-bold text-sm border-primary/30 text-primary">{categories.length}</Badge>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="shadow-lg border-muted/50 bg-primary/5 border-primary/10">
-              <CardHeader>
-                <CardTitle className="text-lg font-bold flex items-center gap-2">
-                  <Info className="h-5 w-5 text-primary" />
-                  Structure Guidelines
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-4 text-sm leading-relaxed text-muted-foreground">
-                  <div className="flex gap-3">
-                    <div className="h-6 w-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-black shrink-0">1</div>
-                    <p><span className="font-bold text-foreground">Flat is Better:</span> Aim for no more than 3 levels of depth for optimal user navigation.</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="h-6 w-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-black shrink-0">2</div>
-                    <p><span className="font-bold text-foreground">SEO Slugs:</span> Keep slugs short, descriptive, and keyword-rich for better search ranking.</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <div className="h-6 w-6 rounded-full bg-primary/20 text-primary flex items-center justify-center text-[10px] font-black shrink-0">3</div>
-                    <p><span className="font-bold text-foreground">Visibility:</span> Deactivating a category hides it from the store but preserves product associations.</p>
-                  </div>
-                </div>
-                <Button variant="link" className="p-0 h-auto text-primary font-bold mt-4" asChild>
-                  <Link href="/dashboard/system">
-                    Full Documentation <ArrowUpRight className="ml-1 h-3 w-3" />
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-          </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="ghost" onClick={toggleExpandAll}>
+            {expandedIds.size === getAllCategoryIds(categories).size ? (
+              <>Collapse all</>
+            ) : (
+              <>Expand all</>
+            )}
+          </Button>
+          <Button size="default" onClick={() => openCreateSheet()}>
+            <Plus className="h-4 w-4 mr-1.5" />
+            Add Category
+          </Button>
         </div>
-
-        {/* Create/Edit Dialog */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogContent className="sm:max-w-[550px] rounded-3xl p-0 overflow-hidden">
-            <form onSubmit={handleSubmit}>
-              <div className="p-8 bg-muted/30 border-b">
-                <DialogHeader>
-                  <div className="h-14 w-14 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-4 shadow-inner">
-                    <Boxes className="h-7 w-7" />
-                  </div>
-                  <DialogTitle className="text-2xl font-black">{editingCategory ? "Update Category" : "New Category"}</DialogTitle>
-                  <DialogDescription className="text-sm pt-1">
-                    {parentId ? "Adding a sub-category to an existing branch." : "Adding a new root category to the catalog structure."}
-                  </DialogDescription>
-                </DialogHeader>
-              </div>
-              
-              <div className="grid gap-6 p-8">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="cat-name" className="text-sm font-bold uppercase tracking-widest text-muted-foreground/80">Category Name</Label>
-                    <Input 
-                      id="cat-name" 
-                      value={name} 
-                      onChange={(e) => generateSlug(e.target.value)} 
-                      placeholder="e.g. Diagnostics"
-                      required
-                      className="h-12 text-base font-medium border-muted-foreground/20 rounded-xl focus:ring-primary"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="cat-slug" className="text-sm font-bold uppercase tracking-widest text-muted-foreground/80">URL Path (Slug)</Label>
-                    <Input 
-                      id="cat-slug" 
-                      value={slug} 
-                      onChange={(e) => setSlug(e.target.value)} 
-                      placeholder="diagnostics"
-                      required
-                      className="h-12 border-muted-foreground/20 rounded-xl font-mono text-sm bg-muted/30"
-                    />
-                  </div>
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="cat-desc" className="text-sm font-bold uppercase tracking-widest text-muted-foreground/80">Public Description</Label>
-                  <Textarea 
-                    id="cat-desc" 
-                    value={description} 
-                    onChange={(e) => setDescription(e.target.value)} 
-                    placeholder="Describe what kind of medical equipment belongs in this category..."
-                    className="min-h-[100px] border-muted-foreground/20 rounded-xl py-4"
-                  />
-                </div>
-                
-                <div className="flex items-center justify-between p-4 bg-muted/20 rounded-2xl border border-muted-foreground/10">
-                  <div className="flex flex-col gap-0.5">
-                    <Label htmlFor="cat-active" className="text-sm font-bold">Category Status</Label>
-                    <p className="text-xs text-muted-foreground font-medium">Toggle visibility on the storefront</p>
-                  </div>
-                  <Switch 
-                    id="cat-active" 
-                    checked={isActive} 
-                    onCheckedChange={setIsActive} 
-                    className="data-[state=checked]:bg-emerald-500"
-                  />
-                </div>
-              </div>
-              
-              <DialogFooter className="p-8 bg-muted/30 border-t gap-3 sm:gap-0">
-                <Button variant="outline" type="button" onClick={() => setIsDialogOpen(false)} disabled={saving} className="h-12 px-8 rounded-xl font-bold">
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={saving} className="h-12 px-8 rounded-xl font-black shadow-lg shadow-primary/20">
-                  {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  {editingCategory ? "Update Category" : "Create Category"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        </Dialog>
       </div>
+
+      {/* Stat Cards */}
+      <div className="grid grid-cols-4 gap-4 mb-6">
+        <StatCard
+          label="Total Categories"
+          value={stats.total}
+          trend={null}
+        />
+        <StatCard
+          label="Active"
+          value={stats.active}
+          trend={{ value: "+3", positive: true }}
+          trendLabel="vs last month"
+        />
+        <StatCard
+          label="Inactive"
+          value={stats.inactive}
+          trend={null}
+        />
+        <StatCard
+          label="Parent Categories"
+          value={categories.length}
+          trend={null}
+        />
+      </div>
+
+      {/* Filter Bar */}
+      <div className="flex items-center gap-3 mb-4">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Filter categories..."
+            className="h-8 pl-8 text-sm"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        {/* Status Filter */}
+        <div className="flex items-center gap-1">
+          <FilterChip
+            active={statusFilter === "all"}
+            onClick={() => setStatusFilter("all")}
+          >
+            All
+          </FilterChip>
+          <FilterChip
+            active={statusFilter === "active"}
+            onClick={() => setStatusFilter("active")}
+          >
+            Active
+          </FilterChip>
+          <FilterChip
+            active={statusFilter === "inactive"}
+            onClick={() => setStatusFilter("inactive")}
+          >
+            Inactive
+          </FilterChip>
+        </div>
+
+        {hasActiveFilters && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 ml-auto"
+            onClick={clearFilters}
+          >
+            <X className="h-3 w-3 mr-1" />
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      {/* Categories Tree */}
+      {loading ? (
+        <TreeSkeleton />
+      ) : filteredCategories.length === 0 ? (
+        <EmptyState
+          hasFilters={hasActiveFilters}
+          onClearFilters={clearFilters}
+          icon={<Boxes className="h-10 w-10" />}
+          noun="categories"
+        />
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          {/* Header */}
+          <div className="h-[34px] bg-muted/30 border-b flex items-center px-4">
+            <div className="w-6" />
+            <div className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Category
+            </div>
+            <div className="w-24 text-right text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Children
+            </div>
+            <div className="w-20 text-center text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+              Status
+            </div>
+            <div className="w-10" />
+          </div>
+
+          {/* Tree Rows */}
+          {filteredCategories.map(({ category, level }) => (
+            <CategoryRow
+              key={category.id}
+              category={category}
+              level={level}
+              isExpanded={expandedIds.has(category.id)}
+              onToggleExpanded={() => toggleExpanded(category.id)}
+              onEdit={openEditSheet}
+              onAddChild={(pid) => openCreateSheet(pid)}
+              onDelete={handleDeleteCategory}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Create/Edit Sheet */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="w-full sm:max-w-[480px] p-0 gap-0">
+          <form onSubmit={handleSubmit} className="h-full flex flex-col">
+            {/* Header */}
+            <div className="p-6 border-b">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Boxes className="h-5 w-5" />
+                </div>
+                <div>
+                  <SheetTitle className="text-lg font-semibold">
+                    {editingCategory ? "Edit Category" : "Add Category"}
+                  </SheetTitle>
+                  <SheetDescription className="text-xs">
+                    {editingCategory
+                      ? "Update category details"
+                      : parentId
+                      ? "Add a sub-category"
+                      : "Add a new category to your catalog"}
+                  </SheetDescription>
+                </div>
+              </div>
+            </div>
+
+            {/* Form */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Name */}
+              <div className="space-y-1.5">
+                <Label htmlFor="name" className="text-sm">
+                  Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Diagnostics"
+                  required
+                />
+              </div>
+
+              {/* Slug */}
+              <div className="space-y-1.5">
+                <Label htmlFor="slug" className="text-sm">Slug</Label>
+                <Input
+                  id="slug"
+                  value={slug}
+                  onChange={(e) => {
+                    setSlug(e.target.value);
+                    setUserEditedSlug(true);
+                  }}
+                  placeholder="diagnostics"
+                  className="font-mono text-sm"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Auto-generated from name (edit to customize)
+                </p>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <Label htmlFor="description" className="text-sm">Description</Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Brief description..."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+
+              {/* Status */}
+              <div className="flex items-center gap-3 pt-2">
+                <Checkbox
+                  id="is_active"
+                  checked={isActive}
+                  onCheckedChange={(checked) => setIsActive(checked as boolean)}
+                />
+                <div>
+                  <Label htmlFor="is_active" className="text-sm cursor-pointer">
+                    Active Status
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Visible in storefront
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t flex items-center justify-end gap-3 bg-muted/20">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setSheetOpen(false)}
+                disabled={saving}
+                className="h-9 px-4"
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving} className="h-9 px-5">
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {editingCategory ? "Save Changes" : "Create Category"}
+              </Button>
+            </div>
+          </form>
+        </SheetContent>
+      </Sheet>
     </DashboardLayout>
   );
 }
 
-function CategoryItem({ 
-  category, 
-  level = 0, 
-  onEdit, 
-  onAddChild,
-  onDelete
-}: { 
-  category: CategoryTree, 
-  level?: number,
-  onEdit: (cat: CategoryTree) => void,
-  onAddChild: (pid: string) => void,
-  onDelete: (id: string) => void
+// Stat Card Component
+function StatCard({
+  label,
+  value,
+  trend,
+  trendLabel,
+}: {
+  label: string;
+  value: number;
+  trend?: { value: string; positive: boolean } | null;
+  trendLabel?: string;
 }) {
-  const [isExpanded, setIsExpanded] = useState(level < 1);
+  return (
+    <div className="px-4 py-3 bg-card border rounded-lg">
+      <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
+        {label}
+      </div>
+      <div className="text-[24px] font-semibold tabular-nums tracking-tight">
+        {value.toLocaleString()}
+      </div>
+      {trend && (
+        <div className="flex items-center gap-1 mt-1">
+          <span
+            className={`text-xs font-medium tabular-nums ${
+              trend.positive ? "text-success" : "text-destructive"
+            }`}
+          >
+            {trend.value}
+          </span>
+          {trendLabel && (
+            <span className="text-xs text-muted-foreground">{trendLabel}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Filter Chip Component
+function FilterChip({
+  children,
+  active,
+  onClick,
+}: {
+  children: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${
+        active
+          ? "bg-primary text-primary-foreground"
+          : "bg-muted/50 text-muted-foreground hover:bg-muted"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+// Category Row Component
+function CategoryRow({
+  category,
+  level = 0,
+  isExpanded,
+  onToggleExpanded,
+  onEdit,
+  onAddChild,
+  onDelete,
+}: {
+  category: CategoryTree;
+  level?: number;
+  isExpanded: boolean;
+  onToggleExpanded: () => void;
+  onEdit: (cat: CategoryTree) => void;
+  onAddChild: (pid: string) => void;
+  onDelete: (cat: CategoryTree) => void;
+}) {
   const hasChildren = category.children && category.children.length > 0;
+  const childCount = category.children?.length || 0;
+  const indentWidth = level * 20;
 
   return (
-    <div className="flex flex-col">
-      <div className={`flex items-center group py-2 px-4 transition-all duration-200 rounded-2xl border border-transparent hover:border-muted-foreground/10 hover:bg-muted/30 ${!category.is_active ? "opacity-60" : ""}`}>
-        <div style={{ paddingLeft: `${level * 24}px` }} className="flex items-center flex-1 min-w-0">
-          {hasChildren ? (
-            <button 
-              onClick={() => setIsExpanded(!isExpanded)} 
-              className="p-1.5 hover:bg-muted rounded-lg mr-2 text-muted-foreground transition-colors"
-            >
-              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            </button>
-          ) : (
-            <div className="w-9 mr-1" />
-          )}
-          
-          <div className={`h-10 w-10 rounded-xl flex items-center justify-center mr-4 shrink-0 transition-colors ${category.is_active ? "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white shadow-sm" : "bg-muted text-muted-foreground"}`}>
-            {level === 0 ? <Boxes className="h-5 w-5" /> : <FolderTree className="h-4 w-4" />}
-          </div>
-          
-          <div className="flex flex-col min-w-0">
-            <span className={`text-base font-bold truncate ${!category.is_active ? "text-muted-foreground italic" : "text-foreground group-hover:text-primary transition-colors"}`}>
-              {category.name}
-            </span>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className="text-[10px] font-mono font-black uppercase tracking-widest text-muted-foreground bg-muted px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity">
-                /{category.slug}
-              </span>
-              {!category.is_active && (
-                <Badge variant="outline" className="text-[10px] py-0 px-1.5 border-amber-500/30 text-amber-600 bg-amber-50">Inactive</Badge>
-              )}
-            </div>
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all scale-95 group-hover:scale-100">
-          <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl" onClick={() => onAddChild(category.id)}>
-            <FolderPlus className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="icon" className="h-9 w-9 text-muted-foreground hover:text-primary hover:bg-primary/10 rounded-xl" onClick={() => onEdit(category)}>
-            <Edit className="h-4 w-4" />
-          </Button>
-          
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 p-2 rounded-2xl shadow-xl border-muted">
-              <DropdownMenuLabel className="text-xs font-bold uppercase tracking-widest text-muted-foreground/70 px-2 py-1.5">Manage Node</DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => onEdit(category)} className="rounded-lg py-2.5">
-                <Edit className="h-4 w-4 mr-3" /> Edit Details
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onAddChild(category.id)} className="rounded-lg py-2.5">
-                <FolderPlus className="h-4 w-4 mr-3" /> Add Child
-              </DropdownMenuItem>
-              <DropdownMenuItem className="rounded-lg py-2.5" asChild>
-                <Link href={`/dashboard/catalog/products?category=${category.id}`}>
-                  <Boxes className="h-4 w-4 mr-3" /> View Products
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/5 rounded-lg py-2.5" onClick={() => onDelete(category.id)}>
-                <Trash2 className="h-4 w-4 mr-3" /> Delete Node
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
+    <div
+      className={`h-[36px] border-b last:border-0 flex items-center hover:bg-muted/30 transition-colors ${
+        !category.is_active ? "opacity-50" : ""
+      }`}
+    >
+      {/* Expand/Collapse + Indent */}
+      <div
+        className="flex items-center"
+        style={{ paddingLeft: `${indentWidth + 12}px` }}
+      >
+        {hasChildren ? (
+          <button
+            onClick={onToggleExpanded}
+            className="p-0.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {isExpanded ? (
+              <ChevronDown className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronRight className="h-3.5 w-3.5" />
+            )}
+          </button>
+        ) : (
+          <div className="w-5" />
+        )}
       </div>
-      
-      {isExpanded && hasChildren && (
-        <div className="mt-2 ml-4 border-l-2 border-muted/50 pl-4 space-y-1">
-          {category.children.map((child) => (
-            <CategoryItem 
-              key={child.id} 
-              category={child} 
-              level={level + 1} 
-              onEdit={onEdit} 
-              onAddChild={onAddChild}
-              onDelete={onDelete}
-            />
-          ))}
+
+      {/* Icon + Name */}
+      <div className="flex-1 flex items-center gap-2 min-w-0">
+        <div
+          className={`h-5 w-5 rounded flex items-center justify-center shrink-0 ${
+            category.is_active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+          }`}
+        >
+          {level === 0 ? (
+            <Boxes className="h-3 w-3" />
+          ) : (
+            <FolderTree className="h-3 w-3" />
+          )}
         </div>
+        <span className="text-sm font-medium text-foreground truncate">
+          {category.name}
+        </span>
+        <span className="text-xs text-muted-foreground font-mono shrink-0">
+          /{category.slug}
+        </span>
+      </div>
+
+      {/* Children Count */}
+      <div className="w-24 text-right pr-4">
+        <span className="text-sm text-foreground tabular-nums">
+          {childCount > 0 ? childCount : "—"}
+        </span>
+      </div>
+
+      {/* Status Badge */}
+      <div className="w-20 text-center">
+        <StatusBadge isActive={category.is_active} />
+      </div>
+
+      {/* Actions */}
+      <div className="w-10 flex justify-end pr-2">
+        <RowActions
+          category={category}
+          hasChildren={hasChildren}
+          onEdit={onEdit}
+          onAddChild={onAddChild}
+          onDelete={onDelete}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Status Badge Component
+function StatusBadge({ isActive }: { isActive: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+        isActive
+          ? "bg-success/15 text-success border border-success/20"
+          : "bg-muted text-muted-foreground"
+      }`}
+    >
+      {isActive ? "Active" : "Inactive"}
+    </span>
+  );
+}
+
+// Row Actions Component
+function RowActions({
+  category,
+  hasChildren,
+  onEdit,
+  onAddChild,
+  onDelete,
+}: {
+  category: CategoryTree;
+  hasChildren: boolean;
+  onEdit: (cat: CategoryTree) => void;
+  onAddChild: (pid: string) => void;
+  onDelete: (cat: CategoryTree) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="icon-sm" variant="ghost" className="h-7 w-7">
+          <MoreVertical className="h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem onClick={() => onEdit(category)}>Edit category</DropdownMenuItem>
+        {hasChildren && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onAddChild(category.id)}>
+              <FolderPlus className="h-3.5 w-3.5 mr-1.5" />
+              Add sub-category
+            </DropdownMenuItem>
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive" onClick={() => onDelete(category)}>
+          Delete category
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+// Tree Skeleton Component
+function TreeSkeleton() {
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div className="h-[34px] bg-muted/30 border-b" />
+      {Array.from({ length: 10 }).map((_, i) => (
+        <div
+          key={i}
+          className="h-[36px] border-b last:border-0 animate-pulse bg-muted/20"
+          style={{ paddingLeft: `${(i % 3) * 20 + 12}px` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+// Empty State Component
+function EmptyState({
+  hasFilters,
+  onClearFilters,
+  icon,
+  noun,
+}: {
+  hasFilters: boolean;
+  onClearFilters: () => void;
+  icon: React.ReactNode;
+  noun: string;
+}) {
+  return (
+    <div className="border rounded-lg p-12 text-center">
+      <div className="text-muted-foreground/30 mx-auto mb-3 flex justify-center">
+        {icon}
+      </div>
+      <h3 className="text-sm font-medium text-foreground mb-1">
+        {hasFilters ? `No ${noun} found` : `No ${noun} yet`}
+      </h3>
+      <p className="text-sm text-muted-foreground mb-4">
+        {hasFilters
+          ? "Try adjusting your filters to find what you're looking for."
+          : `${noun.charAt(0).toUpperCase() + noun.slice(1)} will appear here once created.`}
+      </p>
+      {hasFilters && (
+        <Button size="sm" variant="outline" onClick={onClearFilters}>
+          Clear filters
+        </Button>
       )}
     </div>
   );

@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 import uuid
@@ -7,12 +8,13 @@ from app.core.database import get_db
 from app.core.responses import success_response, ApiSuccessResponse
 from app.core.security import verify_access_token
 from app.domains.auth.schemas.auth_schemas import (
-    UserCreate, VendorUserCreate, UserResponse, Token, LoginRequest, RefreshRequest,
+    UserCreate, VendorUserCreate, UserResponse, Token, LoginResponse, LoginRequest, RefreshRequest,
     OTPLoginRequest, GuestLoginRequest, ChangePasswordRequest, ChangeEmailRequest,
     ConfirmEmailChangeRequest, DeleteAccountRequest, ForgotPasswordRequest, ResetPasswordRequest,
-    UserRegisterResponse, VendorRegisterResponse, RegisterInitiateRequest, RegisterCompleteRequest
+    UserRegisterResponse, VendorRegisterResponse, RegisterInitiateRequest, RegisterCompleteRequest,
+    DeleteAllDevicesRequest
 )
-from app.domains.auth.services.auth_service import AuthService
+from app.domains.auth.services.auth_service import AuthService, AuthSuccess, AuthFailure
 from app.domains.auth.models.user import User
 from app.domains.auth.models.token_device import RefreshToken
 from app.core.logging import logger
@@ -97,7 +99,7 @@ async def register_vendor(vendor_in: VendorUserCreate, db: AsyncSession = Depend
     6. Start selling
     """
     auth_service = AuthService(db)
-    try {
+    try:
         vendor = await auth_service.register_vendor(vendor_in)
         return success_response({
             "id": str(vendor.id),
@@ -107,53 +109,46 @@ async def register_vendor(vendor_in: VendorUserCreate, db: AsyncSession = Depend
             "phone": vendor.phone,
             "is_verified": vendor.is_verified,
             "message": "Vendor application submitted successfully!",
-            "next_steps": ["Verify email", "Wait for admin approval"]
+            "next_steps": [
+                "1. Verify your email with the OTP code sent",
+                "2. Wait for admin approval (you'll receive an email)",
+                "3. Complete your profile settings",
+                "4. Start listing products"
+            ]
         })
     except ValueError as e:
-
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
 
-    return success_response({
-        "id": str(vendor.id),
-        "email": vendor.email,
-        "role": vendor.role,
-        "company_name": vendor.company_name,
-        "phone": vendor.phone,
-        "is_verified": vendor.is_verified,
-        "message": "Registration successful. Please check your email for verification code.",
-        "next_steps": [
-            "1. Verify your email with the OTP code sent",
-            "2. Wait for admin approval (you'll receive an email)",
-            "3. Complete your profile settings",
-            "4. Start listing products"
-        ]
-    })
-
-@router.post("/login", dependencies=[Depends(RateLimiterDependency("login"))])
+@router.post("/login", response_model=ApiSuccessResponse[LoginResponse], dependencies=[Depends(RateLimiterDependency("login"))])
 async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
     auth_service = AuthService(db)
-    user, refresh_token = await auth_service.authenticate(login_data)
+    result = await auth_service.authenticate(login_data)
     
-    if user == "vendor_pending_approval":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Your vendor account is pending admin approval. You will receive an email once approved."
-        )
+    if isinstance(result, AuthFailure):
+        if result.reason == "vendor_pending_approval":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your vendor account is pending admin approval. You will receive an email once approved."
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect email or password",
+            )
         
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect email or password",
-        )
-    
-    token_data = await auth_service.create_tokens(user, refresh_token)
-    token_data["message"] = f"Welcome back, {user.first_name or user.email}!"
-    return success_response(token_data)
+    user = result.user
+    refresh_token = result.refresh_token
+    token_obj = await auth_service.create_tokens(user, refresh_token)
+    response_data = LoginResponse(
+        **token_obj.model_dump(),
+        message=f"Welcome back, {user.first_name or user.email}!"
+    )
+    return success_response(response_data)
 
-@router.post("/login/otp", dependencies=[Depends(RateLimiterDependency("login"))])
+@router.post("/login/otp", response_model=ApiSuccessResponse[Token], dependencies=[Depends(RateLimiterDependency("login"))])
 async def login_otp(login_data: OTPLoginRequest, db: AsyncSession = Depends(get_db)):
     auth_service = AuthService(db)
     user, refresh_token = await auth_service.authenticate_otp(login_data)
@@ -165,7 +160,7 @@ async def login_otp(login_data: OTPLoginRequest, db: AsyncSession = Depends(get_
     return success_response(await auth_service.create_tokens(user, refresh_token))
 
 
-@router.post("/guest", dependencies=[Depends(RateLimiterDependency("guest_login"))])
+@router.post("/guest", response_model=ApiSuccessResponse[Token], dependencies=[Depends(RateLimiterDependency("guest_login"))])
 async def guest_login(guest_data: GuestLoginRequest, db: AsyncSession = Depends(get_db)):
     """
     Create or retrieve a guest user session.
@@ -182,7 +177,7 @@ async def guest_login(guest_data: GuestLoginRequest, db: AsyncSession = Depends(
         )
     return success_response(await auth_service.create_tokens(user, refresh_token))
 
-@router.post("/refresh")
+@router.post("/refresh", response_model=ApiSuccessResponse[Token])
 async def refresh(refresh_data: RefreshRequest, db: AsyncSession = Depends(get_db)):
     """Refresh access token using refresh token"""
     auth_service = AuthService(db)
@@ -218,7 +213,7 @@ async def refresh(refresh_data: RefreshRequest, db: AsyncSession = Depends(get_d
     logger.info(f"Token refreshed for user: {user.email}")
     return success_response(tokens)
 
-@router.post("/logout")
+@router.post("/logout", response_model=ApiSuccessResponse[dict[str, str]])
 async def logout(
     refresh_data: RefreshRequest,
     request: Request,
@@ -255,7 +250,7 @@ async def logout(
     return success_response({"message": "Successfully logged out"})
 
 
-@router.post("/change-password")
+@router.post("/change-password", response_model=ApiSuccessResponse[dict[str, str]])
 async def change_password(
     password_data: ChangePasswordRequest,
     request: Request,
@@ -305,7 +300,7 @@ async def change_password(
     return success_response({"message": "Password changed successfully"})
 
 
-@router.post("/change-email")
+@router.post("/change-email", response_model=ApiSuccessResponse[dict[str, str]])
 async def change_email(
     email_data: ChangeEmailRequest,
     current_user: User = Depends(get_current_user),
@@ -332,7 +327,7 @@ async def change_email(
     })
 
 
-@router.post("/confirm-email-change")
+@router.post("/confirm-email-change", response_model=ApiSuccessResponse[dict[str, str]])
 async def confirm_email_change(
     confirm_data: ConfirmEmailChangeRequest,
     current_user: User = Depends(get_current_user),
@@ -360,7 +355,7 @@ async def confirm_email_change(
     })
 
 
-@router.delete("/account", status_code=status.HTTP_202_ACCEPTED)
+@router.delete("/account", response_model=ApiSuccessResponse[dict[str, str]], status_code=status.HTTP_202_ACCEPTED)
 async def delete_account(
     delete_data: DeleteAccountRequest,
     current_user: User = Depends(get_current_user),
@@ -386,7 +381,7 @@ async def delete_account(
     })
 
 
-@router.post("/forgot-password", dependencies=[Depends(RateLimiterDependency("password_reset"))])
+@router.post("/forgot-password", response_model=ApiSuccessResponse[dict[str, Any]], dependencies=[Depends(RateLimiterDependency("password_reset"))])
 async def forgot_password(
     request: ForgotPasswordRequest,
     db: AsyncSession = Depends(get_db)
@@ -419,7 +414,7 @@ async def forgot_password(
     })
 
 
-@router.post("/reset-password", dependencies=[Depends(RateLimiterDependency("password_reset"))])
+@router.post("/reset-password", response_model=ApiSuccessResponse[dict[str, str]], dependencies=[Depends(RateLimiterDependency("password_reset"))])
 async def reset_password(
     request: ResetPasswordRequest,
     db: AsyncSession = Depends(get_db)
@@ -451,7 +446,7 @@ async def reset_password(
     })
 
 
-@router.get("/devices")
+@router.get("/devices", response_model=ApiSuccessResponse[list[dict[str, Any]]])
 async def get_user_devices(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -478,7 +473,7 @@ async def get_user_devices(
         } for device in devices
     ])
 
-@router.delete("/devices/{device_id}")
+@router.delete("/devices/{device_id}", response_model=ApiSuccessResponse[dict[str, str]])
 async def delete_user_device(
     device_id: str,
     db: AsyncSession = Depends(get_db),
@@ -497,22 +492,16 @@ async def delete_user_device(
     return success_response({"message": "Device removed successfully"})
 
 
-@router.post("/devices/delete-all")
+@router.post("/devices/delete-all", response_model=ApiSuccessResponse[dict[str, str]])
 async def delete_all_other_devices(
-    request: dict, # Expecting {"current_device_id": "..."}
+    request: DeleteAllDevicesRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """
     Remove all device sessions except the current one.
     """
-    device_id = request.get("current_device_id")
-    if not device_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="current_device_id is required"
-        )
-        
+    device_id = request.current_device_id
     auth_service = AuthService(db)
     success = await auth_service.delete_all_other_devices(current_user, device_id)
     if not success:

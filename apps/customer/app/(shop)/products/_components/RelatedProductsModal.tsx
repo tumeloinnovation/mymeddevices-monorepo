@@ -71,14 +71,14 @@ const RelatedProductsModal: React.FC<RelatedProductsModalProps> = ({
   };
 
   const handleAddToCart = (prod: Product) => {
-    addToCart(prod, 1);
+    addToCart(prod as any, 1);
   };
 
   const handleWishlistToggle = (prod: Product) => {
     if (isInWishlist(prod.id)) {
       removeFromWishlist(prod.id);
     } else {
-      addToWishlist(prod);
+      addToWishlist(prod as any);
     }
   };
 
@@ -86,7 +86,7 @@ const RelatedProductsModal: React.FC<RelatedProductsModalProps> = ({
     if (isInCompare(prod.id)) {
       removeFromCompare(prod.id);
     } else if (canAddMoreCompare()) {
-      addToCompare(prod);
+      addToCompare(prod as any);
     }
   };
 

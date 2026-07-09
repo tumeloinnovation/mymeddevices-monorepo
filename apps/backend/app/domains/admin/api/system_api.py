@@ -73,3 +73,48 @@ async def update_rate_limits(limits: dict, db: AsyncSession = Depends(get_db)):
     
     return success_response(limits)
 
+
+@router.get("/shipping-settings", dependencies=[Depends(require_role("admin"))])
+async def get_shipping_settings(db: AsyncSession = Depends(get_db)):
+    """
+    Get current shipping settings.
+    """
+    shipping_settings = await SystemSettingService.get_setting(db, "shipping_settings")
+    if not shipping_settings:
+        shipping_settings = {
+            "flat_fee": 200.0,
+            "rate_per_km": 20.0,
+            "max_radius_km": 50.0,
+            "courier_fee": 450.0
+        }
+    return success_response(shipping_settings)
+
+
+@router.put("/shipping-settings", dependencies=[Depends(require_role("admin"))])
+async def update_shipping_settings(settings_in: dict, db: AsyncSession = Depends(get_db)):
+    """
+    Update shipping settings.
+    """
+    required_keys = ["flat_fee", "rate_per_km", "max_radius_km", "courier_fee"]
+    for key in required_keys:
+        if key not in settings_in:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Missing required parameter: {key}"
+            )
+        try:
+            settings_in[key] = float(settings_in[key])
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Value for {key} must be a number"
+            )
+
+    await SystemSettingService.set_setting(
+        db,
+        "shipping_settings",
+        settings_in,
+        "Shipping rates & local routing constraints: flat_fee, rate_per_km, max_radius_km, courier_fee"
+    )
+    return success_response(settings_in)
+

@@ -53,15 +53,14 @@ describe('useAddressStore', () => {
       expect(result.current.addresses).toEqual([])
     })
 
-    it('should have getAddresses return default fallback address initially', () => {
+    it('should have getAddresses return empty list initially', () => {
       const { result } = renderHook(() => useAddressStore())
-      expect(result.current.getAddresses()).toHaveLength(1)
-      expect(result.current.getAddresses()[0].address).toBe('123 Main St, Nairobi, Kenya')
+      expect(result.current.getAddresses()).toHaveLength(0)
     })
 
-    it('should have getDefaultAddress return default fallback address initially', () => {
+    it('should have getDefaultAddress return null initially', () => {
       const { result } = renderHook(() => useAddressStore())
-      expect(result.current.getDefaultAddress()?.address).toBe('123 Main St, Nairobi, Kenya')
+      expect(result.current.getDefaultAddress()).toBeNull()
     })
   })
 

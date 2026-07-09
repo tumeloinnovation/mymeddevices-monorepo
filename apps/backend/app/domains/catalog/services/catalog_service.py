@@ -108,10 +108,6 @@ class CatalogService:
         # Calculate initial completeness
         product.completeness_score = await self._calculate_completeness(product)
 
-        # Auto-detect on_sale
-        if product.compare_at_price and product.price and product.compare_at_price > product.price:
-            product.is_on_sale = True
-
         await self.db.commit()
         product = await self._get_vendor_product(vendor_id, product.id)
 
@@ -138,12 +134,6 @@ class CatalogService:
         if "name" in kwargs and kwargs["name"] is not None:
             base_slug = generate_slug(kwargs["name"])
             product.slug = await self._ensure_unique_slug(base_slug, exclude_id=product_id)
-
-        # Auto-detect on_sale
-        if product.compare_at_price and product.price and product.compare_at_price > product.price:
-            product.is_on_sale = True
-        else:
-            product.is_on_sale = False
 
         # Recalculate completeness
         product.completeness_score = await self._calculate_completeness(product)
@@ -352,6 +342,10 @@ class CatalogService:
 
         result = await self.db.execute(query)
         products = result.scalars().all()
+
+        # Explicitly access category_name to trigger lazy loading before serialization
+        for product in products:
+            _ = product.category_name
 
         return list(products), total
 
@@ -1032,8 +1026,8 @@ class CatalogService:
         elif field == "description":
             return bool(product.description and len(product.description) >= 50)
         elif field == "price":
-            # Can check base_price or price
-            return (product.base_price is not None and product.base_price > 0) or (product.price is not None and product.price > 0)
+            # Check the selling price
+            return product.price is not None and product.price > 0
         elif field == "has_images":
             return image_count > 0
         elif field == "short_description":

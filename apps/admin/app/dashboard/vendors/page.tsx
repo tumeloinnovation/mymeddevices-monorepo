@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, Search, ExternalLink, CheckCircle2, XCircle, Ban, RotateCcw, ShieldAlert, MoreHorizontal, Building2 } from "lucide-react";
+import { Loader2, Search, ExternalLink, CheckCircle2, XCircle, Ban, RotateCcw, ShieldAlert, MoreHorizontal, Building2, Plus } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { useAuthStore, VendorListItem, ApprovalStatus } from "@mymeddevices/shared-core";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { AddVendorModal } from "./add-vendor-modal";
 
 const STATUS_OPTIONS: { label: string; value: ApprovalStatus | "all" }[] = [
   { label: "All", value: "all" },
@@ -62,6 +63,7 @@ export default function VendorsListPage() {
   const [actionType, setActionType] = useState<"approve" | "reject" | "suspend" | "reactivate" | null>(null);
   const [actionReason, setActionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [addVendorModalOpen, setAddVendorModalOpen] = useState(false);
 
   const fetchVendors = useCallback(async () => {
     setLoading(true);
@@ -69,10 +71,18 @@ export default function VendorsListPage() {
       const params: any = { page, page_size: pageSize };
       if (statusFilter !== "all") params.status = statusFilter;
       const result = await listVendorsAdmin(params);
-      setVendors(result.vendors);
-      setTotal(result.total);
-    } catch {
+      
+      // Handle potential wrapped response or missing fields
+      const vendorsData = Array.isArray(result?.vendors) ? result.vendors : [];
+      const totalCount = typeof result?.total === 'number' ? result.total : 0;
+      
+      setVendors(vendorsData);
+      setTotal(totalCount);
+    } catch (err) {
+      console.error("Failed to fetch vendors:", err);
       toast.error("Failed to load vendors");
+      setVendors([]);
+      setTotal(0);
     } finally {
       setLoading(false);
     }
@@ -82,13 +92,13 @@ export default function VendorsListPage() {
     fetchVendors();
   }, [fetchVendors]);
 
-  const filteredVendors = searchQuery
+  const filteredVendors = searchQuery && Array.isArray(vendors)
     ? vendors.filter(v =>
         v.company_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         v.store_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         v.email.toLowerCase().includes(searchQuery.toLowerCase())
       )
-    : vendors;
+    : (Array.isArray(vendors) ? vendors : []);
 
   const totalPages = Math.ceil(total / pageSize);
 
@@ -124,12 +134,13 @@ export default function VendorsListPage() {
     setActionReason("");
   };
 
+  const vendorsList = Array.isArray(vendors) ? vendors : [];
   const counts = {
     all: total,
-    pending: vendors.filter(v => v.approval_status === "pending").length,
-    approved: vendors.filter(v => v.approval_status === "approved").length,
-    suspended: vendors.filter(v => v.approval_status === "suspended").length,
-    rejected: vendors.filter(v => v.approval_status === "rejected").length,
+    pending: vendorsList.filter(v => v.approval_status === "pending").length,
+    approved: vendorsList.filter(v => v.approval_status === "approved").length,
+    suspended: vendorsList.filter(v => v.approval_status === "suspended").length,
+    rejected: vendorsList.filter(v => v.approval_status === "rejected").length,
   };
 
   return (
@@ -140,6 +151,10 @@ export default function VendorsListPage() {
             <h1 className="text-2xl font-bold tracking-tight">Vendors</h1>
             <p className="text-muted-foreground">Manage vendor applications and profiles</p>
           </div>
+          <Button onClick={() => setAddVendorModalOpen(true)} className="gap-2">
+            <Plus className="h-4 w-4" />
+            Add Vendor
+          </Button>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -150,7 +165,7 @@ export default function VendorsListPage() {
               onClick={() => { setStatusFilter(opt.value); setPage(1); }}
             >
               <CardHeader className="p-3">
-                <CardTitle className="text-lg">{totalPages ? (opt.value === "all" ? total : vendors.filter(v => v.approval_status === opt.value).length) : 0}</CardTitle>
+                <CardTitle className="text-lg">{totalPages ? (opt.value === "all" ? total : vendorsList.filter(v => v.approval_status === opt.value).length) : 0}</CardTitle>
               </CardHeader>
               <CardContent className="p-3 pt-0 text-sm text-muted-foreground">
                 {STATUS_COUNT_LABELS[opt.value]}
@@ -316,6 +331,12 @@ export default function VendorsListPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AddVendorModal
+        open={addVendorModalOpen}
+        onOpenChange={setAddVendorModalOpen}
+        onSuccess={fetchVendors}
+      />
     </DashboardLayout>
   );
 }

@@ -1,5 +1,6 @@
 import secrets
 import httpx
+import time
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -7,6 +8,9 @@ from app.domains.auth.models.user import User
 from app.domains.auth.models.otp import OTP
 from app.core.logging import logger
 from app.core.security import settings
+
+_in_memory_attempts = {}
+_in_memory_expiry = {}
 
 
 class OTPService:
@@ -21,6 +25,28 @@ class OTPService:
 
     def __init__(self, db: AsyncSession):
         self.db = db
+        self.redis_client = None
+        import sys
+        is_testing = "pytest" in sys.modules or "unittest" in sys.modules
+        if not is_testing and settings.REDIS_URL:
+            try:
+                import redis.asyncio as aioredis
+                self.redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+            except Exception:
+                pass
+
+    def _increment_in_memory_attempts(self, key: str) -> int:
+        now = time.time()
+        # Clean up expired in-memory keys
+        for k, exp in list(_in_memory_expiry.items()):
+            if exp < now:
+                _in_memory_attempts.pop(k, None)
+                _in_memory_expiry.pop(k, None)
+        
+        _in_memory_attempts[key] = _in_memory_attempts.get(key, 0) + 1
+        if key not in _in_memory_expiry:
+            _in_memory_expiry[key] = now + 900 # 15 minutes
+        return _in_memory_attempts[key]
 
     async def generate_otp(
         self,
@@ -95,11 +121,10 @@ class OTPService:
         if purpose not in self.PURPOSES:
             raise ValueError(f"Invalid purpose. Must be one of: {self.PURPOSES}")
 
-        # Find valid OTP
+        # Find active OTP for this user and purpose
         result = await self.db.execute(
             select(OTP).where(
                 OTP.user_id == user_id,
-                OTP.code == code,
                 OTP.purpose == purpose,
                 OTP.is_used == False
             )
@@ -107,7 +132,7 @@ class OTPService:
         otp = result.scalar_one_or_none()
 
         if not otp:
-            logger.warning(f"Invalid OTP attempt for user {user_id}")
+            logger.warning(f"No active OTP found for user {user_id}, purpose: {purpose}")
             return False
 
         # Check expiry
@@ -115,12 +140,52 @@ class OTPService:
             logger.warning(f"Expired OTP attempt for user {user_id}")
             return False
 
-        # Mark OTP as used
+        # Verify code
+        key = f"otp_attempts:{user_id}:{purpose}"
+        if otp.code != code:
+            # Increment failed attempts
+            attempts = 0
+            if self.redis_client:
+                try:
+                    attempts = await self.redis_client.incr(key)
+                    if attempts == 1:
+                        await self.redis_client.expire(key, 900)
+                except Exception:
+                    attempts = self._increment_in_memory_attempts(key)
+            else:
+                attempts = self._increment_in_memory_attempts(key)
+
+            logger.warning(f"Invalid OTP attempt {attempts}/5 for user {user_id}, purpose: {purpose}")
+
+            if attempts >= 5:
+                # Lockout/invalidate the OTP
+                otp.is_used = True
+                await self.db.commit()
+                # Clear attempts
+                if self.redis_client:
+                    try:
+                        await self.redis_client.delete(key)
+                    except Exception:
+                        pass
+                _in_memory_attempts.pop(key, None)
+                _in_memory_expiry.pop(key, None)
+                logger.error(f"OTP invalidated due to excessive failed attempts for user {user_id}, purpose: {purpose}")
+            return False
+
+        # Success - mark OTP as used
         otp.is_used = True
         await self.db.commit()
 
-        logger.info(f"OTP verified for user {user_id}, purpose: {purpose}")
+        # Clear attempts on success
+        if self.redis_client:
+            try:
+                await self.redis_client.delete(key)
+            except Exception:
+                pass
+        _in_memory_attempts.pop(key, None)
+        _in_memory_expiry.pop(key, None)
 
+        logger.info(f"OTP verified for user {user_id}, purpose: {purpose}")
         return True
 
     async def send_otp_sms(self, phone: str, code: str, purpose: str = "verification"):

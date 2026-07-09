@@ -91,12 +91,18 @@ class EmailNotificationService:
         if purpose == "reset_password":
             title = "Password Reset"
             lead_text = "Use the verification code below to reset your password."
+        elif purpose == "login":
+            title = "Login Verification"
+            lead_text = "Use the verification code below to complete your login."
+        elif purpose == "email_change":
+            title = "Email Change Verification"
+            lead_text = "Use the verification code below to verify your new email address."
         
         html_content = email_templates.otp_html(
             code=otp_code,
             title=title,
             lead_text=lead_text,
-            footer_note="Valid for 15 minutes.",
+            footer_note="If you have any issues, please contact our support team.",
             expiry_minutes=15
         )
         subject = f"Your Verification Code: {otp_code}"

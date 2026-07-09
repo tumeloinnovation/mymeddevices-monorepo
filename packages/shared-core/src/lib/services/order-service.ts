@@ -504,7 +504,7 @@ function mapOrder(raw: any): Order {
   return {
     id: raw.id || raw._id,
     customer_id: raw.customer_id || raw.user_id,
-    order_number: raw.order_number || raw.id?.slice(0, 8) || '',
+    order_number: String(raw.order_number ?? raw.id?.slice(0, 8) ?? ''),
     status: raw.status || 'pending',
     total_amount: String(raw.total_amount ?? raw.total ?? 0),
     currency: raw.currency || 'KES',

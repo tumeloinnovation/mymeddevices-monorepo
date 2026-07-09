@@ -3,8 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
-import useCartStore from '@/lib/store/useCartStore';
-import { useAuthStore } from '@mymeddevices/shared-core';
+import { useAuthStore, useCartStore } from '@mymeddevices/shared-core';
 import { useAddressStore } from '@/lib/store/useAddressStore';
 import { formatCurrency } from '@/lib/utils/utils';
 import { PACKAGING_FEE, SERVICES_FEE } from '@/lib/config/fees';
@@ -26,7 +25,7 @@ export type Address = {
 
 export function useCheckoutLogic() {
     const router = useRouter();
-    const { items, getTotal, clear, hydrated, mergeCart } = useCartStore();
+    const { items, getTotal, clear, hydrated, mergeCart, syncLocalItemsToBackend } = useCartStore();
     const { isAuthenticated, user, hydrated: authHydrated } = useAuthStore();
     const { getDefaultAddress, hydrated: addressHydrated } = useAddressStore();
 
@@ -237,6 +236,7 @@ export function useCheckoutLogic() {
         if (!customerData.name || !customerData.phone || !customerData.email || !delivery) {
             if (!delivery) setActiveStep(0);
             else if (!isAuthenticated) setActiveStep(1);
+            toast.error('Please complete all required fields');
             return;
         }
 
@@ -248,32 +248,97 @@ export function useCheckoutLogic() {
         setIsPending(true);
 
         try {
-            // Get actual cart ID
-            const cartId = typeof window !== 'undefined' ? (localStorage.getItem('cart_id') || 'default-cart') : 'default-cart';
+            // First, sync any local items to backend cart
+            console.log('[Checkout] Starting checkout, local items:', items.length);
+            toast.loading('Syncing cart...', { id: 'cart-sync' });
+            await mergeCart();
+
+            // Get actual cart ID from backend cart
+            const { cartService } = await import('../services/cart-service');
+            let cart = await cartService.getCart();
+            console.log('[Checkout] Backend cart:', cart ? `${cart.id} (active: ${cart.is_active}, items: ${cart.items?.length || 0})` : 'null');
+
+            // Check if cart is valid and active
+            if (!cart || !cart.id || !cart.is_active) {
+                // Cart is invalid or inactive, we need to get a fresh cart
+                console.warn('[Checkout] Cart is invalid or inactive, getting fresh cart');
+                toast.loading('Getting fresh cart...', { id: 'cart-refresh' });
+
+                // Clear the cart token to force creation of new cart
+                if (typeof window !== 'undefined') {
+                    localStorage.removeItem('cart_token');
+                    localStorage.removeItem('guest_token');
+                }
+
+                // Clear the cart token in the store
+                const { setCartToken: clearToken } = useCartStore.getState();
+                clearToken('');
+
+                // Get a fresh cart (this will create a new guest cart if needed)
+                cart = await cartService.getCart();
+
+                // Save the new cart token
+                if (cart?.cart_token) {
+                    useCartStore.getState().setCartToken(cart.cart_token);
+                    if (typeof window !== 'undefined') {
+                        localStorage.setItem('cart_token', cart.cart_token);
+                        localStorage.setItem('guest_token', cart.cart_token);
+                    }
+                }
+
+                console.log('[Checkout] Fresh cart:', cart ? `${cart.id} (active: ${cart.is_active}, items: ${cart.items?.length || 0})` : 'null');
+
+                if (!cart || !cart.is_active) {
+                    throw new Error('Unable to create an active cart. Please try again.');
+                }
+
+                toast.success('Fresh cart ready', { id: 'cart-refresh' });
+            }
+
+            // Now sync local items to the valid/active cart
+            console.log('[Checkout] Syncing local items to backend...');
+            await syncLocalItemsToBackend();
+
+            // Refresh cart to get synced items
+            cart = await cartService.getCart();
+            console.log('[Checkout] Cart after sync:', cart ? `${cart.id} (active: ${cart.is_active}, items: ${cart.items?.length || 0})` : 'null');
+            toast.success('Cart synced', { id: 'cart-sync' });
+
+            if (!cart.items || cart.items.length === 0) {
+                throw new Error('Your cart is empty. Please add items before checkout.');
+            }
 
             // Create order via API
-            const shippingAddress: import('../services/order-service').Address = {
-                first_name: guestCustomer.firstName || 'Guest',
-                last_name: guestCustomer.lastName || '',
+            const shippingAddress = {
+                first_name: guestCustomer.firstName || customerData.name.split(' ')[0] || 'Guest',
+                last_name: guestCustomer.lastName || customerData.name.split(' ').slice(1).join(' ') || '',
                 address_line1: delivery.address,
-                address_line2: delivery.address_2,
+                address_line2: delivery.address_2 || '',
                 city: delivery.city || 'Nairobi',
-                state: delivery.region,
-                postal_code: delivery.postcode,
+                state: delivery.region || 'Nairobi',
+                postal_code: delivery.postcode || '',
                 country: delivery.country || 'Kenya',
-                phone: formattedPhone
+                phone: formattedPhone,
+                latitude: delivery.lat,
+                longitude: delivery.lon
             };
+
+            // Get guest token for non-authenticated users
+            const guestToken = !isAuthenticated ? (typeof window !== 'undefined' ? localStorage.getItem('guest_token') : null) : null;
+
             const order = await orderService.createOrderFromCart(
-                cartId,
+                cart.id,
                 shippingAddress,
-                shippingAddress
+                shippingAddress, // billing same as shipping
+                undefined, // notes
+                guestToken || undefined
             );
 
             const orderId = order.id;
-            const orderNumber = order.order_number;
+            const orderNumber = order.order_number || orderId;
 
             // Handle M-Pesa payment if selected
-            if (paymentMethod === 'mpesa' && orderNumber) {
+            if (paymentMethod === 'mpesa' && orderId) {
                 setIsProcessingMpesa(true);
                 toast.loading('Initializing M-Pesa payment...', { id: 'mpesa-init' });
                 const mpesaPhone = customerData.mpesaPhone
@@ -292,21 +357,15 @@ export function useCheckoutLogic() {
                 }
             }
 
-            toast.success(`Order #${orderNumber || orderId} placed successfully!`);
+            toast.success(`Order #${orderNumber} placed successfully!`);
 
             // Clear cart and redirect
             clear();
             router.push(`/orders/${orderId}`);
-        } catch (error) {
+        } catch (error: any) {
             console.error('Checkout error:', error);
-            toast.error('Failed to place order. Please try again.');
-
-            // Fallback to demo mode if API fails
-            const fallbackOrderId = Math.floor(100000 + Math.random() * 900000);
-            toast.success(`Demo Order #${fallbackOrderId} placed successfully!`);
-
-            clear();
-            router.push(`/orders/${fallbackOrderId}`);
+            const errorMessage = error?.message || 'Failed to place order. Please try again.';
+            toast.error(errorMessage);
         } finally {
             setIsPending(false);
             setIsProcessingMpesa(false);

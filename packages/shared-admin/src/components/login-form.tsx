@@ -95,6 +95,9 @@ export function LoginForm({
 
   const onSubmit = async (data: z.infer<typeof loginSchema>) => {
     try {
+      if (process.env.NODE_ENV === "development") {
+        sessionStorage.removeItem("dev_logged_out")
+      }
       await login({ email: data.email, password: data.password, rememberMe: data.rememberMe }, theme)
       setAuthCookie("1")
       router.push(getDashboardRoute())
@@ -102,6 +105,7 @@ export function LoginForm({
       // Error handled by AuthStore
     }
   }
+
 
   const displayTitle = title || config.title
   const displayDescription = description || config.description

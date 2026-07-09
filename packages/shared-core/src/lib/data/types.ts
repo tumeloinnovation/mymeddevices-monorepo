@@ -39,6 +39,8 @@ export interface Product {
   tax_rate?: number;
   reviews_allowed?: boolean;
   downloadable?: boolean;
+  model_number?: string;
+  specifications?: Record<string, any>;
 }
 
 export interface ProductImage {
@@ -104,6 +106,8 @@ export type OrderStatus =
   | 'processing'
   | 'on-hold'
   | 'completed'
+  | 'shipped'
+  | 'delivered'
   | 'cancelled'
   | 'refunded'
   | 'failed';

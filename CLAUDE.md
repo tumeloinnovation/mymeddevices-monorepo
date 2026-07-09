@@ -129,9 +129,14 @@ All routes are versioned at `/api/v1/`:
 ### Database
 
 - Uses SQLAlchemy 2.0 with async support
-- PostgreSQL in production, SQLite in development
+- PostgreSQL is used (configured via `DATABASE_URL` in `.env`)
 - Connection pooling configured for production
 - Alembic for migrations
+- Reset and initialize development database schema (PostgreSQL), stamp Alembic, and seed default admin/categories:
+  ```bash
+  cd apps/backend
+  PYTHONPATH=. uv run python scripts/initialize_dev_db.py
+  ```
 - Health check at `/health` includes DB and Redis status
 
 ## Frontend Architecture
@@ -168,6 +173,10 @@ Emails use MJML for template generation:
 - Source templates: `apps/backend/templates/emails/`
 - Compiled output: `apps/backend/compiled_emails/`
 - Build with: `pnpm build:emails` or `python3 scripts/build_emails.py`
+- For local SMTP testing, **Mailpit** is installed at `/home/nickm/.local/bin/mailpit`
+  - Start Mailpit: `/home/nickm/.local/bin/mailpit`
+  - SMTP Port: `127.0.0.1:1025`
+  - Web UI Dashboard: `http://localhost:8025`
 
 ## Testing
 

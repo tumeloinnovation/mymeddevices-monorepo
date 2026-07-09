@@ -17,28 +17,53 @@ class VendorService:
         self.db = db
         self.vendor_repo = VendorProfileRepository(db)
 
-    async def get_vendor_profile(self, user_id: str | uuid.UUID) -> Optional[VendorProfile]:
-        """Get vendor profile by user ID"""
-        return await self.vendor_repo.get_by_user_id(user_id)
+    async def get_vendor_profile(self, identifier: str | uuid.UUID) -> Optional[VendorProfile]:
+        """Get vendor profile by user ID or profile ID"""
+        val_uuid = uuid.UUID(identifier) if isinstance(identifier, str) else identifier
+        
+        # Try finding by user ID first
+        profile = await self.vendor_repo.get_by_user_id(val_uuid)
+        if profile:
+            return profile
+            
+        # Fall back to finding by profile ID
+        return await self.vendor_repo.get(val_uuid)
 
     async def create_vendor_profile(
         self,
         user_id: str,
         company_name: Optional[str] = None,
-        vat_number: Optional[str] = None
+        vat_number: Optional[str] = None,
+        address_street: Optional[str] = None,
+        latitude: Optional[float] = None,
+        longitude: Optional[float] = None,
+        place_id: Optional[str] = None
     ) -> VendorProfile:
         """Create initial vendor profile (called after registration)"""
         # Check if profile exists
         existing = await self.get_vendor_profile(user_id)
         if existing:
+            if address_street:
+                existing.address_street = address_street
+            if latitude is not None:
+                existing.latitude = latitude
+            if longitude is not None:
+                existing.longitude = longitude
+            if place_id:
+                existing.place_id = place_id
+            await self.db.commit()
             return existing
 
         profile = VendorProfile(
             user_id=user_id,
-            store_name="New Store",  # Will be updated in settings
+            store_name=company_name or "New Store",
             approval_status="pending",
             company_name=company_name,
-            vat_number=vat_number
+            vat_number=vat_number,
+            address_street=address_street,
+            latitude=latitude,
+            longitude=longitude,
+            place_id=place_id
         )
         profile = await self.vendor_repo.create(profile)
         logger.info(f"Created vendor profile for user {user_id}")
@@ -161,13 +186,12 @@ class VendorService:
         logger.info(f"Vendor {user_id} approved by {approved_by}")
 
         # Send email notification
-        result = await self.db.execute(select(User).where(User.id == user_id))
+        result = await self.db.execute(select(User).where(User.id == profile.user_id))
         user = result.scalar_one_or_none()
         if user:
-            from app.core.email_templates import vendor_notification_html
-            html = vendor_notification_html(
-                "Vendor Account Approved",
-                f"Congratulations, your vendor account for <strong>{profile.company_name}</strong> has been approved.",
+            from app.core.email_templates import vendor_approved_html
+            html = vendor_approved_html(
+                company_name=profile.company_name,
             )
             await send_email(
                 user.email,
@@ -200,7 +224,7 @@ class VendorService:
         logger.info(f"Vendor {user_id} rejected by {approved_by}, reason: {reason}")
 
         # Send email notification
-        result = await self.db.execute(select(User).where(User.id == user_id))
+        result = await self.db.execute(select(User).where(User.id == profile.user_id))
         user = result.scalar_one_or_none()
         if user:
             from app.core.email_templates import vendor_notification_html
@@ -243,7 +267,7 @@ class VendorService:
         logger.info(f"Vendor {user_id} suspended by {suspended_by}, reason: {reason}")
 
         # Send email notification
-        result = await self.db.execute(select(User).where(User.id == user_id))
+        result = await self.db.execute(select(User).where(User.id == profile.user_id))
         user = result.scalar_one_or_none()
         if user:
             from app.core.email_templates import vendor_notification_html

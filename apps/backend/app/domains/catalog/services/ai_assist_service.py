@@ -13,6 +13,136 @@ class AIAssistService:
     Integrated with Google Gemini API using structured JSON schema output mode.
     """
 
+    async def generate_descriptions_from_name_brand(
+        self,
+        product_name: str,
+        brand: str,
+        category: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate AI descriptions from product name and brand (before product creation).
+
+        Args:
+            product_name: The product name
+            brand: The brand name
+            category: Optional category name for context
+
+        Returns:
+            Dict with 'suggestions' containing description and short_description
+        """
+        api_key = catalog_settings.GEMINI_API_KEY
+        category_name = category or "Medical Device"
+        model_name = catalog_settings.GEMINI_MODEL or "gemini-1.5-pro"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+
+        if not api_key:
+            logger.warning("GEMINI_API_KEY not configured. Falling back to stub descriptions.")
+            return await self._generate_stub_descriptions(product_name, brand, category_name)
+
+        prompt = (
+            f"Please generate a product description and short description for a medical device product.\n"
+            f"Product Name: {product_name}\n"
+            f"Brand: {brand}\n"
+            f"Category: {category_name}\n"
+        )
+
+        system_instruction = (
+            "You are an expert AI catalog assistant for MyMedDevices, a medical device e-commerce marketplace. "
+            "Your goal is to generate professional, highly accurate, and compliant product details based on a product name and brand. "
+            "The data you generate must use correct medical device terminology, professional tone, and mention relevant specs. "
+            "Ensure descriptions are comprehensive, covering clinical/intended use, features, and patient safety. "
+            "The short description should be 1-2 sentences perfect for product listings. "
+            "The long description should be detailed, covering specifications, applications, and benefits (3-5 paragraphs). "
+            "Additionally, generate SEO-optimized metadata: a meta title (50-60 characters) and meta description (150-160 characters) "
+            "that accurately represent the product for search engines."
+        )
+
+        payload = {
+            "systemInstruction": {
+                "parts": [{"text": system_instruction}]
+            },
+            "contents": [
+                {"parts": [{"text": prompt}]}
+            ],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseSchema": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "description": {"type": "STRING"},
+                        "short_description": {"type": "STRING"},
+                        "meta_title": {"type": "STRING"},
+                        "meta_description": {"type": "STRING"}
+                    },
+                    "required": ["description", "short_description", "meta_title", "meta_description"]
+                }
+            }
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                data = response.json()
+
+                # Parse output
+                text_out = data["candidates"][0]["content"]["parts"][0]["text"]
+                suggestions = json.loads(text_out)
+
+                logger.info(f"AI assist successfully generated descriptions for product '{product_name}' using Gemini API")
+                return {
+                    "suggestions": suggestions,
+                    "confidence": {
+                        "description": 0.9,
+                        "short_description": 0.9,
+                        "meta_title": 0.9,
+                        "meta_description": 0.9
+                    }
+                }
+
+        except Exception as e:
+            logger.error(f"Failed to generate descriptions using Gemini API: {str(e)}. Falling back to stub.")
+            return await self._generate_stub_descriptions(product_name, brand, category_name)
+
+    async def _generate_stub_descriptions(
+        self,
+        product_name: str,
+        brand: str,
+        category_name: str
+    ) -> Dict[str, Any]:
+        """Fallback template-based descriptions if API call fails or key is missing."""
+        suggestions = {
+            "short_description": (
+                f"Professional {category_name.lower()} by {brand}. "
+                f"High-quality medical equipment designed for healthcare professionals."
+            ),
+            "description": (
+                f"The {product_name} by {brand} represents excellence in medical equipment technology. "
+                f"Designed for healthcare professionals who demand precision and reliability, "
+                f"this {category_name.lower()} delivers exceptional performance in critical care environments.\n\n"
+                f"Key features include advanced diagnostic capabilities, user-friendly interface, "
+                f"and robust construction built to withstand the demands of daily clinical use. "
+                f"The equipment meets international medical device standards and comes with comprehensive manufacturer support.\n\n"
+                f"Ideal for hospitals, clinics, and medical facilities seeking to upgrade their "
+                f"diagnostic capabilities with proven, reliable technology from {brand}."
+            ),
+            "meta_title": f"{product_name} | {brand} - MyMedDevices",
+            "meta_description": (
+                f"Shop {product_name} by {brand}. Professional {category_name.lower()} "
+                f"for healthcare facilities. Quality medical equipment with warranty."
+            )
+        }
+
+        return {
+            "suggestions": suggestions,
+            "confidence": {
+                "description": 0.4,
+                "short_description": 0.4,
+                "meta_title": 0.5,
+                "meta_description": 0.4
+            }
+        }
+
     async def generate_suggestions(
         self,
         product: Product,
@@ -153,11 +283,11 @@ class AIAssistService:
 
             elif field == "specifications" and not product.specifications:
                 suggestions["specifications"] = {
-                    "Material": "Please specify",
-                    "Dimensions": "Please specify",
-                    "Weight": "Please specify",
-                    "Power Source": "Please specify (if applicable)",
-                    "Sterilization": "Please specify method"
+                    "Material": "",
+                    "Dimensions": "",
+                    "Weight": "",
+                    "Power Source": "",
+                    "Sterilization": ""
                 }
                 confidence["specifications"] = 0.2
 
@@ -205,14 +335,6 @@ class AIAssistService:
                 "severity": "error",
                 "message": "Price must be greater than zero"
             })
-
-        if product.compare_at_price and actual_price:
-            if product.compare_at_price <= actual_price:
-                issues.append({
-                    "field": "compare_at_price",
-                    "severity": "warning",
-                    "message": "Compare-at price should be higher than the selling price"
-                })
 
         # Description quality
         if product.description and len(product.description) < 50:

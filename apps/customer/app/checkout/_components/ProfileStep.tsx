@@ -70,20 +70,22 @@ export function ProfileStep({ customer }: ProfileStepProps) {
     setError(null);
 
     try {
-      // Mock Profile Completion
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const updatedUser = {
-        ...user!,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
+      const store = useCheckoutAuthStore.getState();
+      await store.completeRegistration({
+        email: user?.email || '',
+        password: formData.password,
+        first_name: formData.firstName,
+        last_name: formData.lastName,
         phone: formData.phone,
-        displayName: `${formData.firstName} ${formData.lastName}`,
-      };
+      });
 
-      completeCheckoutProfile(updatedUser);
+      // Login the user with their newly set password
+      await store.login({ email: user?.email || '', password: formData.password });
+      
+      // Mark step as complete
+      store.setCheckoutStep('complete');
       toast.success('Profile completed successfully! ');
-    } catch (error) {
+    } catch (error: any) {
       const message = error instanceof Error ? error.message : 'Failed to complete profile';
       setError(message);
       toast.error(message);
@@ -108,9 +110,7 @@ export function ProfileStep({ customer }: ProfileStepProps) {
             Email: <span className="font-medium text-foreground">{user?.email}</span>
           </span>
         </div>
-        <p className="text-xs text-muted-foreground font-medium text-green-600">
-          Demo Mode: All data is saved locally
-        </p>
+
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">

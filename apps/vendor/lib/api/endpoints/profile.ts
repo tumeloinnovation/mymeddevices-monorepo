@@ -7,16 +7,16 @@ import type {
 
 export const profileApi = {
   getStoreProfile: async () => {
-    return await apiClient.get<StoreProfile>('/vendor/profile');
+    return await apiClient.get<StoreProfile>('/vendors/me/profile');
   },
 
   updateStoreProfile: async (data: UpdateStoreProfileDto) => {
-    return await apiClient.put<any>('/vendor/profile', data);
+    return await apiClient.patch<any>('/vendors/me/profile', data);
   },
 
   uploadLogo: async (file: File) => {
     try {
-      return await apiClient.upload<{ logo_url: string }>('/vendor/profile/logo', file);
+      return await apiClient.upload<{ logo_url: string }>('/vendors/me/profile/logo', file);
     } catch {
       return { logo_url: '' };
     }
@@ -24,7 +24,7 @@ export const profileApi = {
 
   updatePolicies: async (policies: StorePolicies) => {
     try {
-      return await apiClient.put<StorePolicies>('/vendor/profile', { policies });
+      return await apiClient.patch<StorePolicies>('/vendors/me/profile', { policies });
     } catch {
       return policies;
     }

@@ -42,7 +42,6 @@ class TypesenseProductDTO:
         self.description = doc.get("description")
         self.short_description = doc.get("short_description")
         self.price = doc.get("price")
-        self.compare_at_price = doc.get("compare_at_price")
         self.currency = doc.get("currency", "KES")
         self.is_on_sale = doc.get("is_on_sale", False)
         self.stock_quantity = doc.get("stock_quantity", 0)
@@ -167,7 +166,6 @@ class TypesenseClient:
                 {"name": "description", "type": "string", "optional": True},
                 {"name": "short_description", "type": "string", "optional": True},
                 {"name": "price", "type": "float", "optional": True, "facet": True},
-                {"name": "compare_at_price", "type": "float", "optional": True},
                 {"name": "currency", "type": "string"},
                 {"name": "is_on_sale", "type": "bool", "facet": True},
                 {"name": "in_stock", "type": "bool", "facet": True},
@@ -235,7 +233,6 @@ class TypesenseClient:
             "description": product.description or "",
             "short_description": product.short_description or "",
             "price": float(product.price) if product.price is not None else None,
-            "compare_at_price": float(product.compare_at_price) if product.compare_at_price is not None else None,
             "currency": product.currency or "KES",
             "is_on_sale": bool(product.is_on_sale),
             "in_stock": product.stock_quantity > 0,

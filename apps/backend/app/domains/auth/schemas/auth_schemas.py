@@ -31,6 +31,10 @@ class VendorUserCreate(BaseModel):
     vat_number: Optional[str] = Field(None, max_length=50, description="Optional corporate VAT or Tax PIN", json_schema_extra={"example": "P051234567Z"})
     first_name: Optional[str] = Field(None, max_length=100, description="Vendor representative first name", json_schema_extra={"example": "Peter"})
     last_name: Optional[str] = Field(None, max_length=100, description="Vendor representative last name", json_schema_extra={"example": "Mwangi"})
+    address_street: str = Field("Nairobi", description="Vendor physical street address", json_schema_extra={"example": "123 Main Street"})
+    latitude: float = Field(-1.3011758537859464, description="Vendor latitude coordinate", json_schema_extra={"example": -1.30117})
+    longitude: float = Field(36.800690681948126, description="Vendor longitude coordinate", json_schema_extra={"example": 36.80069})
+    place_id: Optional[str] = Field(None, description="Google Places ID", json_schema_extra={"example": "ChIJbU59A..."})
 
     @field_validator('phone')
     @classmethod
@@ -61,6 +65,10 @@ class Token(BaseModel):
     token_type: str = Field("bearer", description="Authentication token scheme type")
     expires_in: int = Field(1800, description="Access token lifetime in seconds")
     user: UserResponse = Field(..., description="The authenticated user profile details")
+
+class LoginResponse(Token):
+    message: Optional[str] = Field(None, description="Welcome message for the user")
+
 
 class LoginRequest(BaseModel):
     email: EmailStr = Field(..., description="User's registered email address", json_schema_extra={"example": "user@example.com"})
@@ -156,9 +164,17 @@ class RegisterCompleteRequest(BaseModel):
     last_name: Optional[str] = Field(None, max_length=100)
     phone: Optional[str] = Field(None, max_length=20)
     company_name: Optional[str] = Field(None, max_length=255) # For vendors
+    address_street: Optional[str] = Field(None, max_length=500, description="Vendor physical street address")
+    latitude: Optional[float] = Field(None, description="Physical location latitude coordinate")
+    longitude: Optional[float] = Field(None, description="Physical location longitude coordinate")
+    place_id: Optional[str] = Field(None, max_length=100, description="Google Places ID")
 
     @field_validator('password')
     @classmethod
     def validate_password(cls, v: str) -> str:
         validate_password_field(v)
         return v
+
+class DeleteAllDevicesRequest(BaseModel):
+    current_device_id: str = Field(..., description="Device ID of the current session to keep")
+

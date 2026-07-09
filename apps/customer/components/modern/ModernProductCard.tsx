@@ -66,7 +66,7 @@ export const ModernProductCard: React.FC<ModernProductCardProps> = ({ product })
           "absolute bottom-4 left-4 right-4 transition-opacity duration-300",
           isInCart ? "opacity-100" : "opacity-0 group-hover:opacity-100"
       )}>
-        <Button className="w-full rounded-xl" size="lg" onClick={() => addToCart(product)}>
+        <Button className="w-full rounded-xl" size="lg" onClick={() => addToCart(product as any)}>
           <ShoppingCart className="h-4 w-4 mr-2" />
           {isInCart ? 'Added to Cart' : 'Add to Cart'}
         </Button>

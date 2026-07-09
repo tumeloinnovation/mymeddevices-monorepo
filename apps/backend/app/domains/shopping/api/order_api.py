@@ -28,17 +28,17 @@ async def list_my_orders(
     )
     return success_response({"orders": orders, "total": total})
 
-@router.get("/{order_id}", response_model=ApiSuccessResponse[OrderResponse])
+@router.get("/{order_id_or_number}", response_model=ApiSuccessResponse[OrderResponse])
 async def get_order_details(
-    order_id: uuid.UUID,
+    order_id_or_number: str,
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db)
 ):
-    """Get details of a specific order."""
+    """Get details of a specific order by UUID or order number."""
     service = OrderService(db)
-    order = await service.get_order(order_id)
+    order = await service.get_order(order_id_or_number)
 
-    if not order or order.user_id != current_user.id:
+    if not order or (order.user_id != current_user.id and current_user.role not in ("admin", "worker")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     return success_response(order)
@@ -48,17 +48,17 @@ async def get_order_details(
 # Order Status & Tracking Endpoints
 # ============================================================================
 
-@router.get("/{order_id}/status", response_model=ApiSuccessResponse[dict])
+@router.get("/{order_id_or_number}/status", response_model=ApiSuccessResponse[dict])
 async def get_order_status(
-    order_id: uuid.UUID,
+    order_id_or_number: str,
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db)
 ):
     """Get the current status of an order."""
     service = OrderService(db)
-    order = await service.get_order(order_id)
+    order = await service.get_order(order_id_or_number)
 
-    if not order or order.user_id != current_user.id:
+    if not order or (order.user_id != current_user.id and current_user.role not in ("admin", "worker")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     # Get payment status if payment exists
@@ -67,7 +67,7 @@ async def get_order_status(
         payment_status = order.payment.status
 
     return success_response({
-        "order_id": str(order_id),
+        "order_id": str(order.id),
         "status": order.status,
         "payment_status": payment_status,
         "tracking_number": order.tracking_number if hasattr(order, 'tracking_number') else None,
@@ -75,17 +75,17 @@ async def get_order_status(
     })
 
 
-@router.get("/{order_id}/tracking", response_model=ApiSuccessResponse[dict])
+@router.get("/{order_id_or_number}/tracking", response_model=ApiSuccessResponse[dict])
 async def track_order(
-    order_id: uuid.UUID,
+    order_id_or_number: str,
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db)
 ):
     """Track an order with full history."""
     service = OrderService(db)
-    order = await service.get_order(order_id)
+    order = await service.get_order(order_id_or_number)
 
-    if not order or order.user_id != current_user.id:
+    if not order or (order.user_id != current_user.id and current_user.role not in ("admin", "worker")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     # Build tracking history (simplified - should be from a tracking_history table)
@@ -107,8 +107,8 @@ async def track_order(
         })
 
     return success_response({
-        "order_id": str(order_id),
-        "order_number": order.order_number if hasattr(order, 'order_number') else str(order_id),
+        "order_id": str(order.id),
+        "order_number": order.order_number if hasattr(order, 'order_number') else str(order.id),
         "status": order.status,
         "tracking_number": order.tracking_number if hasattr(order, 'tracking_number') else None,
         "tracking_url": f"https://example.com/track/{order.tracking_number}" if hasattr(order, 'tracking_number') and order.tracking_number else None,
@@ -117,18 +117,18 @@ async def track_order(
     })
 
 
-@router.post("/{order_id}/cancel", response_model=ApiSuccessResponse[OrderResponse])
+@router.post("/{order_id_or_number}/cancel", response_model=ApiSuccessResponse[OrderResponse])
 async def cancel_order(
-    order_id: uuid.UUID,
+    order_id_or_number: str,
     current_user: Annotated[User, Depends(get_current_user)],
     reason: str = None,
     db: AsyncSession = Depends(get_db)
 ):
     """Cancel an order."""
     service = OrderService(db)
-    order = await service.get_order(order_id)
+    order = await service.get_order(order_id_or_number)
 
-    if not order or order.user_id != current_user.id:
+    if not order or (order.user_id != current_user.id and current_user.role not in ("admin", "worker")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     # Check if order can be cancelled
@@ -148,18 +148,18 @@ async def cancel_order(
     return success_response(order)
 
 
-@router.post("/{order_id}/refund", response_model=ApiSuccessResponse[dict])
+@router.post("/{order_id_or_number}/refund", response_model=ApiSuccessResponse[dict])
 async def request_refund(
-    order_id: uuid.UUID,
+    order_id_or_number: str,
     current_user: Annotated[User, Depends(get_current_user)],
     reason: str = None,
     db: AsyncSession = Depends(get_db)
 ):
     """Request a refund for an order."""
     service = OrderService(db)
-    order = await service.get_order(order_id)
+    order = await service.get_order(order_id_or_number)
 
-    if not order or order.user_id != current_user.id:
+    if not order or (order.user_id != current_user.id and current_user.role not in ("admin", "worker")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     # Check if order can be refunded
@@ -177,7 +177,7 @@ async def request_refund(
 
     return success_response({
         "refund_id": str(uuid.uuid4()),
-        "order_id": str(order_id),
+        "order_id": str(order.id),
         "status": "pending",
         "amount": str(order.total_amount) if hasattr(order, 'total_amount') else "0",
     })

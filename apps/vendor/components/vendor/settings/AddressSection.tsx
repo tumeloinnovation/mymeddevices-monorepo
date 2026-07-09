@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { MapPin } from 'lucide-react';
 import AddressAutocomplete from '@/components/maps/AddressAutocomplete';
+import { useGoogleMaps } from '@/components/maps/useGoogleMaps';
 import type { VendorStoreAddress } from '@/lib/data/types';
 
 interface AddressSectionProps {
@@ -15,6 +16,7 @@ interface AddressSectionProps {
 }
 
 export function AddressSection({ address, location, onChange }: AddressSectionProps) {
+    const { ready: mapsReady } = useGoogleMaps();
     const [localAddress, setLocalAddress] = useState<VendorStoreAddress>(address);
 
     const handleFieldChange = (field: keyof VendorStoreAddress, value: string) => {

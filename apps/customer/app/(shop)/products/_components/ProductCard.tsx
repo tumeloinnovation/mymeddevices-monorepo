@@ -96,14 +96,14 @@ interface ProductCardProps {
   };
 
   const handleAddToCart = () => {
-    addToCart(product, quantity);
+    addToCart(product as any, quantity);
   };
 
   const handleWishlistToggle = () => {
     if (isInWishlist(product.id)) {
       removeFromWishlist(product.id);
     } else {
-      addToWishlist(product);
+      addToWishlist(product as any);
     }
   };
 
@@ -111,7 +111,7 @@ interface ProductCardProps {
     if (isInCompare(product.id)) {
       removeFromCompare(product.id);
     } else {
-      addToCompare(product);
+      addToCompare(product as any);
       setIsRelatedModalOpen(true);
     }
   };

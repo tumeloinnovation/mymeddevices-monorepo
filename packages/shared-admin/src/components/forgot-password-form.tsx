@@ -7,10 +7,10 @@ import { useAuthStore } from "@mymeddevices/shared-core"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import Link from "next/link"
 import { useState } from "react"
 import { Mail, Loader2, KeyRound } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 export type DashboardTheme = "admin" | "vendor"
 
@@ -20,6 +20,7 @@ const forgotPasswordSchema = z.object({
 
 interface ForgotPasswordFormProps {
   theme?: DashboardTheme
+  onBackToLogin?: () => void
 }
 
 const THEME_COLORS: Record<
@@ -42,18 +43,24 @@ const THEME_COLORS: Record<
     iconBgClass: "bg-blue-600 shadow-lg shadow-blue-600/25",
   },
   vendor: {
-    button: "bg-orange-600 hover:bg-orange-700 text-white shadow-lg shadow-orange-600/25",
+    button: "bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/25",
     hover: "",
-    accent: "focus-visible:ring-orange-500/20",
-    link: "text-orange-600 hover:text-orange-700",
+    accent: "focus-visible:ring-emerald-500/20",
+    link: "text-emerald-600 hover:text-emerald-700",
     icon: <KeyRound className="h-7 w-7 text-white" />,
-    iconBgClass: "bg-orange-600 shadow-lg shadow-orange-600/25",
+    iconBgClass: "bg-emerald-600 shadow-lg shadow-emerald-600/25",
   },
 }
 
-export function ForgotPasswordForm({ theme = "admin" }: ForgotPasswordFormProps) {
-  const { forgotPassword, isLoading, error } = useAuthStore()
+export function ForgotPasswordForm({ theme = "admin", onBackToLogin }: ForgotPasswordFormProps) {
+  const { forgotPassword, verifyOTP, isLoading, error: authError } = useAuthStore()
   const [success, setSuccess] = useState(false)
+  const [email, setEmail] = useState("")
+  const [otpCode, setOtpCode] = useState("")
+  const [otpError, setOtpError] = useState<string | null>(null)
+  const [verifyingOtp, setVerifyingOtp] = useState(false)
+  
+  const router = useRouter()
   const colors = THEME_COLORS[theme]
   const {
     register,
@@ -66,10 +73,20 @@ export function ForgotPasswordForm({ theme = "admin" }: ForgotPasswordFormProps)
   const onSubmit = async (data: z.infer<typeof forgotPasswordSchema>) => {
     try {
       await forgotPassword(data.email)
+      setEmail(data.email)
       setSuccess(true)
     } catch {
       // Error handled by AuthStore
     }
+  }
+
+  const handleVerifyOtp = async () => {
+    setOtpError(null)
+    setVerifyingOtp(true)
+    // We no longer verify OTP here to avoid consuming it before the reset password action.
+    // The reset-password action will verify the OTP.
+    router.push(`/reset-password?email=${encodeURIComponent(email)}&code=${encodeURIComponent(otpCode)}`)
+    setVerifyingOtp(false)
   }
 
   if (success) {
@@ -80,15 +97,54 @@ export function ForgotPasswordForm({ theme = "admin" }: ForgotPasswordFormProps)
             {colors.icon}
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">Check your email</h1>
-          <p className="mt-2 text-base text-slate-500">We&apos;ve sent password reset instructions to your email.</p>
+          <p className="mt-2 text-base text-slate-500">We&apos;ve sent a password reset OTP to <strong>{email}</strong>. Please enter it below.</p>
         </div>
-        <Button variant="outline" className="h-12 w-full rounded-xl text-base" asChild>
-          <Link href="/login">Back to login</Link>
-        </Button>
-        <div className="mt-12 text-center">
-          <p className="text-xs text-slate-400 leading-relaxed">
-            &copy; {new Date().getFullYear()} MyMedDevices. All rights reserved.
-          </p>
+        
+        <div className="flex flex-col gap-5">
+            {otpError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
+                {otpError}
+                </div>
+            )}
+            <div className="flex flex-col gap-2">
+                <Label htmlFor="otp" className="text-sm font-medium text-slate-700">
+                Verification Code
+                </Label>
+                <Input
+                    id="otp"
+                    type="text"
+                    placeholder="Enter 6-digit code"
+                    className={`h-12 rounded-xl border-slate-200 bg-slate-50/50 text-base transition-all focus-visible:ring-2 ${colors.accent}`}
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value)}
+                />
+            </div>
+            <Button
+                onClick={handleVerifyOtp}
+                className={`h-12 w-full rounded-xl text-base font-semibold shadow-lg transition-all active:scale-[0.98] ${colors.button}`}
+                disabled={verifyingOtp || otpCode.length < 4}
+            >
+                {verifyingOtp ? (
+                <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Verifying...
+                </span>
+                ) : (
+                "Verify Code"
+                )}
+            </Button>
+        </div>
+        
+        <div className="mt-6 text-center">
+          {onBackToLogin ? (
+            <button type="button" onClick={onBackToLogin} className={`text-sm underline-offset-4 ${colors.link} hover:underline cursor-pointer`}>
+              Back to login
+            </button>
+          ) : (
+            <Link href="/login" className={`text-sm underline-offset-4 ${colors.link} hover:underline`}>
+              Back to login
+            </Link>
+          )}
         </div>
       </div>
     )
@@ -107,9 +163,9 @@ export function ForgotPasswordForm({ theme = "admin" }: ForgotPasswordFormProps)
           </p>
         </div>
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-5">
-          {error && (
+          {authError && (
             <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-600">
-              {error}
+              {authError}
             </div>
           )}
 
@@ -146,9 +202,15 @@ export function ForgotPasswordForm({ theme = "admin" }: ForgotPasswordFormProps)
           </Button>
         </form>
         <div className="mt-6 text-center">
-          <Link href="/login" className={`text-sm text-slate-400 underline-offset-4 ${colors.link} hover:underline`}>
-            Back to login
-          </Link>
+          {onBackToLogin ? (
+            <button type="button" onClick={onBackToLogin} className={`text-sm underline-offset-4 ${colors.link} hover:underline cursor-pointer`}>
+              Back to login
+            </button>
+          ) : (
+            <Link href="/login" className={`text-sm underline-offset-4 ${colors.link} hover:underline`}>
+              Back to login
+            </Link>
+          )}
         </div>
 
         <div className="mt-12 text-center">

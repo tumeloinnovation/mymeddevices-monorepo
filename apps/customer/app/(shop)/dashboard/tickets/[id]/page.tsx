@@ -172,14 +172,14 @@ export default function TicketDetailPage({ params }: { params: Promise<{ id: str
         </Card>
       )}
 
-      {ticket.attachments && ticket.attachments.length > 0 && (
+      {(ticket as any).attachments && (ticket as any).attachments.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="text-lg">Attachments</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
-              {ticket.attachments.map((att) => (
+              {(ticket as any).attachments.map((att: any) => (
                 <a key={att.id} href={att.file_url} target="_blank" rel="noopener noreferrer"
                    className="flex items-center gap-2 text-sm text-blue-600 hover:underline">
                   <Paperclip className="h-4 w-4" />

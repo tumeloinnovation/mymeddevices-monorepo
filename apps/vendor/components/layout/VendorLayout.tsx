@@ -39,7 +39,6 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
           isCollapsible: true,
           children: [
             { label: 'Products', href: '/vendor/products', icon: Package },
-            { label: 'Inventory', href: '/vendor/inventory', icon: Warehouse },
           ],
         },
         {
@@ -84,7 +83,7 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
     {
       label: 'Marketplace',
       items: [
-        { label: 'Open Marketplace', href: 'http://localhost:3000', icon: Globe },
+        { label: 'Open Marketplace', href: 'http://localhost:3000', icon: Globe, target: '_blank' },
       ],
     },
   ];

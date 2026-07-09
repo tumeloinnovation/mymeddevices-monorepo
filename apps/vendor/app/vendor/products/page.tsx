@@ -94,10 +94,6 @@ export default function ProductsPage() {
           await catalogApi.verifyProduct(product.id);
           toast.success('Product submitted for review');
           break;
-        case 'publish':
-          await catalogApi.publishProduct(product.id);
-          toast.success('Product published to storefront');
-          break;
         case 'archive':
           await catalogApi.archiveProduct(product.id);
           toast.success('Product archived');
@@ -134,7 +130,8 @@ export default function ProductsPage() {
         actions.push({ label: 'Submit for Review', action: 'verify', icon: <Send className="h-4 w-4" /> });
         break;
       case 'pending_review':
-        actions.push({ label: 'Publish to Storefront', action: 'publish', icon: <Globe className="h-4 w-4" /> });
+        // Vendor cannot publish - only admin can approve and publish
+        // No actions available while pending review
         break;
       case 'published':
         actions.push({ label: 'Archive', action: 'archive', icon: <Archive className="h-4 w-4" /> });
@@ -181,14 +178,14 @@ export default function ProductsPage() {
       ),
     },
     {
-      accessorKey: 'price',
+      accessorKey: 'base_price',
       header: 'Price',
       cell: ({ row }) => {
         const formatted = new Intl.NumberFormat('en-KE', {
           style: 'currency',
           currency: 'KES',
           minimumFractionDigits: 0,
-        }).format(row.original.price ?? 0);
+        }).format(row.original.base_price ?? row.original.price ?? 0);
         return <div className="font-semibold">{formatted}</div>;
       },
     },
@@ -238,57 +235,56 @@ export default function ProductsPage() {
     },
     {
       id: 'actions',
+      header: 'Actions',
       cell: ({ row }) => {
         const product = row.original;
         const isLoading = actionLoading?.endsWith(product.id);
         const statusActions = getStatusActions(product);
 
         return (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" className="h-8 w-8 p-0" disabled={!!isLoading}>
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 px-2"
+              asChild
+            >
+              <Link href={`/vendor/products/${product.id}`}>
+                <Eye className="h-3.5 w-3.5" />
+              </Link>
+            </Button>
+
+            {statusActions.map(({ label, action, icon }) => (
+              <Button
+                key={action}
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2"
+                onClick={() => handleLifecycleAction(action, product)}
+                disabled={!!actionLoading}
+                title={label}
+              >
+                {isLoading && actionLoading === `${action}-${product.id}` ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <MoreHorizontal className="h-4 w-4" />
+                  <span className="sr-only">{label}</span>
                 )}
+                {icon}
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuLabel className="text-xs font-medium text-slate-500">Actions</DropdownMenuLabel>
-              <DropdownMenuItem asChild>
-                <Link href={`/vendor/products/${product.id}`}>
-                  <Eye className="mr-2 h-4 w-4" />
-                  View Details
-                </Link>
-              </DropdownMenuItem>
+            ))}
 
-              {statusActions.length > 0 && <DropdownMenuSeparator />}
-              {statusActions.map(({ label, action, icon }) => (
-                <DropdownMenuItem
-                  key={action}
-                  onClick={() => handleLifecycleAction(action, product)}
-                  disabled={!!actionLoading}
-                >
-                  {icon}
-                  <span className="ml-2">{label}</span>
-                </DropdownMenuItem>
-              ))}
-
-              {product.status === 'draft' && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => setDeleteDialog(product)}
-                    className="text-rose-600 focus:text-rose-600 focus:bg-rose-50"
-                  >
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    Delete Product
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            {product.status === 'draft' && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-rose-600 hover:text-rose-600 hover:bg-rose-50"
+                onClick={() => setDeleteDialog(product)}
+                title="Delete Product"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
         );
       },
     },

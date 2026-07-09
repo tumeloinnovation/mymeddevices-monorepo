@@ -38,15 +38,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
+import Link from "next/link"
 
 // --- Mock Data ---
 
 const KPI_DATA = [
-  { title: "Total Revenue", value: "$45,231.89", trend: "+20.1%", trendType: "up" as const, icon: DollarSign },
+  { title: "Total Revenue", value: "Ksh 5,650,000", trend: "+20.1%", trendType: "up" as const, icon: DollarSign },
   { title: "Active Customers", value: "+2,350", trend: "+180.1%", trendType: "up" as const, icon: Users },
   { title: "Products Sold", value: "+12,234", trend: "+19%", trendType: "up" as const, icon: Package },
   { title: "Conversion Rate", value: "3.2%", trend: "-4%", trendType: "down" as const, icon: Activity },
-  { title: "Revenue Growth", value: "+$12,403", trend: "+12%", trendType: "up" as const, icon: TrendingUp },
+  { title: "Revenue Growth", value: "+Ksh 1,550,000", trend: "+12%", trendType: "up" as const, icon: TrendingUp },
 ]
 
 const SALES_DATA = [
@@ -59,24 +60,24 @@ const SALES_DATA = [
 ]
 
 const RECENT_TRANSACTIONS = [
-  { id: "1", type: "Credit Card", status: "Completed", date: "2024-03-12 10:45", amount: "$120.50", methodIcon: CreditCard },
-  { id: "2", type: "Apple Pay", status: "Pending", date: "2024-03-12 09:30", amount: "$45.00", methodIcon: Apple },
-  { id: "3", type: "Credit Card", status: "Completed", date: "2024-03-11 16:20", amount: "$210.00", methodIcon: CreditCard },
-  { id: "4", type: "Apple Pay", status: "Failed", date: "2024-03-11 14:15", amount: "$89.99", methodIcon: Apple },
+  { id: "1", type: "Credit Card", status: "Completed", date: "2024-03-12 10:45", amount: "Ksh 15,500", methodIcon: CreditCard },
+  { id: "2", type: "M-Pesa Mobile", status: "Pending", date: "2024-03-12 09:30", amount: "Ksh 5,800", methodIcon: Apple },
+  { id: "3", type: "Credit Card", status: "Completed", date: "2024-03-11 16:20", amount: "Ksh 27,000", methodIcon: CreditCard },
+  { id: "4", type: "M-Pesa Mobile", status: "Failed", date: "2024-03-11 14:15", amount: "Ksh 11,500", methodIcon: Apple },
 ]
 
 const POPULAR_PRODUCTS = [
-  { name: "Wireless Headphones", price: "$199.00", image: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=100&h=100&fit=crop", sales: 120 },
-  { name: "Smart Watch", price: "$299.00", image: "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=100&h=100&fit=crop", sales: 85 },
-  { name: "Leather Backpack", price: "$149.00", image: "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=100&h=100&fit=crop", sales: 64 },
+  { name: "Surgical Scalpels Kit", price: "Ksh 24,900", image: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=100&h=100&fit=crop", sales: 120 },
+  { name: "Patient Vital Sign Monitor", price: "Ksh 85,000", image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?w=100&h=100&fit=crop", sales: 85 },
+  { name: "Portable Ultrasound Scanner", price: "Ksh 49,500", image: "https://images.unsplash.com/photo-1581594693702-fbdc51b2763b?w=100&h=100&fit=crop", sales: 64 },
 ]
 
 const RECENT_ORDERS = [
-  { id: "ORD-7392", customer: "John Doe", email: "john@example.com", product: "Wireless Headphones", amount: "$199.00", status: "Shipped", date: "2024-03-12", method: "Express" },
-  { id: "ORD-7391", customer: "Jane Smith", email: "jane@example.com", product: "Smart Watch", amount: "$299.00", status: "Processing", date: "2024-03-12", method: "Standard" },
-  { id: "ORD-7390", customer: "Robert Brown", email: "robert@example.com", product: "Leather Backpack", amount: "$149.00", status: "Delivered", date: "2024-03-11", method: "Next Day" },
-  { id: "ORD-7389", customer: "Alice Johnson", email: "alice@example.com", product: "Smart Watch", amount: "$299.00", status: "Cancelled", date: "2024-03-11", method: "Standard" },
-  { id: "ORD-7388", customer: "Michael Wilson", email: "michael@example.com", product: "Wireless Headphones", amount: "$199.00", status: "Shipped", date: "2024-03-10", method: "Express" },
+  { id: "ORD-7392", customer: "John Doe", email: "john@example.com", product: "Surgical Scalpels Kit", amount: "Ksh 24,900", status: "Shipped", date: "2024-03-12", method: "Express" },
+  { id: "ORD-7391", customer: "Jane Smith", email: "jane@example.com", product: "Patient Vital Sign Monitor", amount: "Ksh 85,000", status: "Processing", date: "2024-03-12", method: "Standard" },
+  { id: "ORD-7390", customer: "Robert Brown", email: "robert@example.com", product: "Portable Ultrasound Scanner", amount: "Ksh 49,500", status: "Delivered", date: "2024-03-11", method: "Next Day" },
+  { id: "ORD-7389", customer: "Alice Johnson", email: "alice@example.com", product: "Patient Vital Sign Monitor", amount: "Ksh 85,000", status: "Cancelled", date: "2024-03-11", method: "Standard" },
+  { id: "ORD-7388", customer: "Michael Wilson", email: "michael@example.com", product: "Surgical Scalpels Kit", amount: "Ksh 24,900", status: "Shipped", date: "2024-03-10", method: "Express" },
 ]
 
 const SPARKLINE_DATA = [
@@ -222,7 +223,7 @@ export default function ShopNowDashboard() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Net Profit</p>
-                  <p className="text-2xl font-bold">$12,403</p>
+                  <p className="text-2xl font-bold">Ksh 1,550,000</p>
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Active Discounts</p>
@@ -230,7 +231,7 @@ export default function ShopNowDashboard() {
                 </div>
                 <div className="space-y-1">
                   <p className="text-sm text-muted-foreground">Avg. Order Value</p>
-                  <p className="text-2xl font-bold">$87.50</p>
+                  <p className="text-2xl font-bold">Ksh 11,200</p>
                 </div>
               </div>
               <div className="h-[200px] w-full">
@@ -273,11 +274,11 @@ export default function ShopNowDashboard() {
               <div className="w-full space-y-4 mt-4">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Target</span>
-                  <span className="font-medium">$50,000.00</span>
+                  <span className="font-medium">Ksh 10,000,000</span>
                 </div>
                 <Progress value={78} className="h-2" />
                 <p className="text-xs text-center text-muted-foreground">
-                  You are <span className="text-foreground font-medium">$12,342</span> away from your monthly goal.
+                  You are <span className="text-foreground font-medium">Ksh 2,450,000</span> away from your monthly goal.
                 </p>
               </div>
             </CardContent>
@@ -524,19 +525,19 @@ export default function ShopNowDashboard() {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">MacBook Pro</TableCell>
-                    <TableCell className="py-2 text-xs text-muted-foreground">Electronics</TableCell>
-                    <TableCell className="py-2 text-xs font-bold text-right">$45,200</TableCell>
+                    <TableCell className="py-2 text-xs font-medium">Dental X-Ray Scanner</TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">Imaging</TableCell>
+                    <TableCell className="py-2 text-xs font-bold text-right">Ksh 5,650,000</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">iPhone 15</TableCell>
-                    <TableCell className="py-2 text-xs text-muted-foreground">Mobile</TableCell>
-                    <TableCell className="py-2 text-xs font-bold text-right">$38,150</TableCell>
+                    <TableCell className="py-2 text-xs font-medium">Anaesthesia Machine</TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">Surgical</TableCell>
+                    <TableCell className="py-2 text-xs font-bold text-right">Ksh 4,760,000</TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">iPad Air</TableCell>
-                    <TableCell className="py-2 text-xs text-muted-foreground">Tablets</TableCell>
-                    <TableCell className="py-2 text-xs font-bold text-right">$12,400</TableCell>
+                    <TableCell className="py-2 text-xs font-medium">Surgical Scalpels Kit</TableCell>
+                    <TableCell className="py-2 text-xs text-muted-foreground">Surgical</TableCell>
+                    <TableCell className="py-2 text-xs font-bold text-right">Ksh 1,550,000</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>
@@ -559,21 +560,21 @@ export default function ShopNowDashboard() {
                 </TableHeader>
                 <TableBody>
                   <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">AirPods Pro</TableCell>
+                    <TableCell className="py-2 text-xs font-medium">Disposable Syringes (Box)</TableCell>
                     <TableCell className="py-2 text-xs">1,240</TableCell>
                     <TableCell className="py-2 text-xs text-emerald-500 font-bold text-right flex items-center justify-end gap-1">
                       <ArrowUpRight className="size-3" /> 24%
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">MagSafe Charger</TableCell>
+                    <TableCell className="py-2 text-xs font-medium">Surgical Gloves (Box)</TableCell>
                     <TableCell className="py-2 text-xs">850</TableCell>
                     <TableCell className="py-2 text-xs text-rose-500 font-bold text-right flex items-center justify-end gap-1">
                       <ArrowDownRight className="size-3" /> 5%
                     </TableCell>
                   </TableRow>
                   <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">USB-C Cable</TableCell>
+                    <TableCell className="py-2 text-xs font-medium">Sterile Gauze Bandages</TableCell>
                     <TableCell className="py-2 text-xs">640</TableCell>
                     <TableCell className="py-2 text-xs text-emerald-500 font-bold text-right flex items-center justify-end gap-1">
                       <ArrowUpRight className="size-3" /> 12%

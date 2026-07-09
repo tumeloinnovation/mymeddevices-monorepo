@@ -20,63 +20,62 @@ import {
   Building2,
   FileEdit,
   Clock,
+  MoreVertical,
 } from "lucide-react";
 import { Product, ProductStatus } from "@mymeddevices/shared-core";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 
 const STATUS_CONFIG: Record<
   ProductStatus,
-  { label: string; icon: any; color: string; bg: string; border: string }
+  { label: string; icon: any }
 > = {
   draft: {
     label: "Draft",
     icon: FileEdit,
-    color: "text-gray-700 dark:text-gray-400",
-    bg: "bg-gray-50 dark:bg-gray-900/40",
-    border: "border-gray-200 dark:border-gray-800",
   },
   pending_review: {
-    label: "Pending Review",
+    label: "Pending",
     icon: Clock,
-    color: "text-amber-700 dark:text-amber-400",
-    bg: "bg-amber-50 dark:bg-amber-950/40",
-    border: "border-amber-200 dark:border-amber-800",
   },
   published: {
     label: "Published",
     icon: CheckCircle2,
-    color: "text-emerald-700 dark:text-emerald-400",
-    bg: "bg-emerald-50 dark:bg-emerald-950/40",
-    border: "border-emerald-200 dark:border-emerald-800",
   },
   archived: {
     label: "Archived",
-    icon: Package,
-    color: "text-slate-700 dark:text-slate-400",
-    bg: "bg-slate-50 dark:bg-slate-900/40",
-    border: "border-slate-200 dark:border-slate-800",
+    icon: Archive,
   },
 };
 
 function StatusBadge({ status }: { status: ProductStatus }) {
   const cfg = STATUS_CONFIG[status];
   const Icon = cfg.icon;
+
+  const variants = {
+    draft: "bg-muted text-muted-foreground",
+    pending_review: "bg-warning/15 text-warning border border-warning/20",
+    published: "bg-success/15 text-success border border-success/20",
+    archived: "bg-muted text-muted-foreground",
+  };
+
   return (
-    <Badge
-      variant="outline"
-      className={`${cfg.bg} ${cfg.color} ${cfg.border} flex w-fit items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium leading-tight`}
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+        variants[status]
+      }`}
     >
       <Icon className="h-2.5 w-2.5" />
       {cfg.label}
-    </Badge>
+    </span>
   );
 }
 
@@ -114,7 +113,7 @@ export function ProductsTable({
       columnHelper.accessor((row) => row, {
         id: "product",
         header: () => (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Product Details
           </span>
         ),
@@ -122,7 +121,7 @@ export function ProductsTable({
           const product = getValue();
           return (
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded-lg border border-muted bg-muted/20">
+              <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded bg-muted/20 border">
                 {product.images?.[0] ? (
                   <img
                     src={product.images[0].url}
@@ -131,19 +130,19 @@ export function ProductsTable({
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center">
-                    <Package className="h-4 w-4 text-muted-foreground/30" />
+                    <Package className="h-3.5 w-3.5 text-muted-foreground/30" />
                   </div>
                 )}
               </div>
               <div className="flex flex-col min-w-0">
                 <Link
                   href={`/dashboard/catalog/products/${product.id}`}
-                  className="truncate max-w-[220px] text-sm font-semibold text-foreground hover:text-primary transition-colors"
+                  className="truncate max-w-[220px] text-sm font-medium text-foreground hover:text-primary transition-colors"
                 >
                   {product.name}
                 </Link>
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[10px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+                  <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
                     {product.sku || "NO-SKU"}
                   </span>
                   {product.brand && (
@@ -166,23 +165,20 @@ export function ProductsTable({
       columnHelper.accessor("category_name", {
         id: "category",
         header: () => (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Category
           </span>
         ),
         cell: ({ getValue }) => (
-          <Badge
-            variant="secondary"
-            className="text-[10px] font-medium px-2 py-0.5 bg-muted"
-          >
+          <span className="text-xs text-muted-foreground">
             {getValue() || "General"}
-          </Badge>
+          </span>
         ),
       }),
       columnHelper.accessor("stock_quantity", {
         id: "stock",
         header: () => (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
             Stock
           </span>
         ),
@@ -194,17 +190,21 @@ export function ProductsTable({
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
                 <div
-                  className={`h-2 w-2 rounded-full ${isLow ? "bg-amber-500 animate-pulse" : "bg-emerald-500"}`}
+                  className={`h-1.5 w-1.5 rounded-full ${
+                    isLow ? "bg-warning" : "bg-success"
+                  }`}
                 />
                 <span
-                  className={`text-xs font-semibold ${isLow ? "text-amber-600" : "text-foreground"}`}
+                  className={`text-xs font-medium tabular-nums ${
+                    isLow ? "text-warning" : "text-foreground"
+                  }`}
                 >
                   {qty} units
                 </span>
               </div>
               {isLow && (
-                <span className="text-[9px] uppercase tracking-[0.15em] font-bold text-amber-500 mt-0.5">
-                  Restock needed
+                <span className="text-[9px] uppercase tracking-[0.15em] font-medium text-warning mt-0.5">
+                  Low stock
                 </span>
               )}
             </div>
@@ -214,207 +214,50 @@ export function ProductsTable({
       columnHelper.accessor("price", {
         id: "price",
         header: () => (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Price
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
+            Price (KES)
           </span>
         ),
         cell: ({ row }) => {
           const price = row.original.price || 0;
-          const compare = row.original.compare_at_price;
-          const currency = row.original.currency;
           return (
-            <div className="flex flex-col">
-              <span className="text-sm font-semibold">
-                {formatCurrency(price, currency)}
-              </span>
-              {compare && (
-                <span className="text-[10px] text-muted-foreground line-through">
-                  {formatCurrency(compare, currency)}
-                </span>
-              )}
-            </div>
+            <span className="text-sm font-medium tabular-nums text-foreground">
+              {formatCurrency(price, "KES")}
+            </span>
           );
         },
       }),
       columnHelper.accessor("status", {
         id: "status",
         header: () => (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-center">
             Status
           </span>
         ),
-        cell: ({ getValue }) => <StatusBadge status={getValue()} />,
+        cell: ({ getValue }) => (
+          <div className="flex justify-center">
+            <StatusBadge status={getValue()} />
+          </div>
+        ),
       }),
       columnHelper.accessor((row) => row, {
         id: "actions",
-        header: () => (
-          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Actions
-          </span>
-        ),
+        header: () => null,
         cell: ({ getValue }) => {
           const product = getValue();
           const isLoading = actionLoadingId === product.id;
 
           return (
-            <div className="flex items-center justify-end gap-0.5">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 hover:bg-muted-foreground/10"
-                      disabled={isLoading}
-                      asChild
-                    >
-                      <Link href={`/dashboard/catalog/products/${product.id}`}>
-                        <Edit className="h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Edit product</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 hover:bg-muted-foreground/10"
-                      disabled={isLoading}
-                      asChild
-                    >
-                      <Link href={`/dashboard/catalog/products/${product.id}`}>
-                        <Eye className="h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Preview / view</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-
-              {product.status === "draft" && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 hover:bg-emerald-50 hover:text-emerald-600"
-                        disabled={isLoading}
-                        onClick={() => onQuickAction(product.id, "verify")}
-                      >
-                        {isLoading ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        )}
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Submit for review</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+            <div className="flex items-center justify-end">
+              {isLoading ? (
+                <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              ) : (
+                <RowActions
+                  product={product}
+                  onQuickAction={onQuickAction}
+                  onDelete={onDelete}
+                />
               )}
-
-              {product.status === "pending_review" && (
-                <>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 hover:bg-emerald-50 hover:text-emerald-600"
-                          disabled={isLoading}
-                          onClick={() => onQuickAction(product.id, "publish")}
-                        >
-                          {isLoading ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          ) : (
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                          )}
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Approve & publish</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 hover:bg-red-50 hover:text-red-600"
-                          disabled={isLoading}
-                          onClick={() => onQuickAction(product.id, "reject")}
-                        >
-                          <XCircle className="h-3.5 w-3.5" />
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent>Reject</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </>
-              )}
-
-              {product.status === "published" && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 hover:bg-slate-100 hover:text-slate-600"
-                        disabled={isLoading}
-                        onClick={() => onQuickAction(product.id, "archive")}
-                      >
-                        <Archive className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Archive</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-
-              {product.status === "archived" && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 hover:bg-muted-foreground/10"
-                        disabled={isLoading}
-                        onClick={() => onQuickAction(product.id, "unarchive")}
-                      >
-                        <Package className="h-3.5 w-3.5" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Restore to draft</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 hover:bg-red-50 hover:text-red-600"
-                      disabled={isLoading}
-                      onClick={() => onDelete(product)}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Delete permanently</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
             </div>
           );
         },
@@ -433,9 +276,13 @@ export function ProductsTable({
 
   if (isLoading && products.length === 0) {
     return (
-      <div className="space-y-3 p-6">
-        {Array.from({ length: 8 }).map((_, i) => (
-          <Skeleton key={i} className="h-12 w-full rounded-lg" />
+      <div className="border rounded-lg overflow-hidden">
+        <div className="h-[34px] bg-muted/30 border-b" />
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div
+            key={i}
+            className="h-[36px] border-b last:border-0 animate-pulse bg-muted/20"
+          />
         ))}
       </div>
     );
@@ -443,12 +290,12 @@ export function ProductsTable({
 
   if (products.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center">
-        <div className="h-16 w-16 rounded-full bg-muted/30 flex items-center justify-center mb-4">
+      <div className="border rounded-lg p-12 text-center">
+        <div className="h-16 w-16 rounded-full bg-muted/30 flex items-center justify-center mb-4 mx-auto">
           <Package className="h-8 w-8 text-muted-foreground/30" />
         </div>
-        <h3 className="text-base font-bold">No products found</h3>
-        <p className="text-sm text-muted-foreground mt-1 max-w-sm">
+        <h3 className="text-sm font-medium text-foreground mb-1">No products found</h3>
+        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
           Try adjusting your filters or search query.
         </p>
       </div>
@@ -456,16 +303,20 @@ export function ProductsTable({
   }
 
   return (
-    <div>
+    <div className="border rounded-lg overflow-hidden">
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-y bg-muted/30">
+              <tr key={headerGroup.id} className="h-[34px] bg-muted/30">
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className="px-4 py-3 text-left"
+                    className={`px-4 text-left ${
+                      header.id === "price" ? "text-right" : ""
+                    } ${
+                      header.id === "status" ? "text-center" : ""
+                    }`}
                   >
                     {header.isPlaceholder
                       ? null
@@ -482,10 +333,17 @@ export function ProductsTable({
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="group border-b last:border-0 hover:bg-muted/20 transition-colors"
+                className="h-[36px] border-b last:border-0 hover:bg-muted/30 transition-colors"
               >
                 {row.getVisibleCells().map((cell) => (
-                  <td key={cell.id} className="px-4 py-3">
+                  <td
+                    key={cell.id}
+                    className={`px-4 ${
+                      cell.column.id === "price" ? "text-right" : ""
+                    } ${
+                      cell.column.id === "status" ? "text-center" : ""
+                    }`}
+                  >
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
                 ))}
@@ -497,23 +355,17 @@ export function ProductsTable({
 
       {/* Pagination */}
       {total > 0 && (
-        <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 bg-muted/10 border-t gap-3">
-          <p className="text-[11px] font-medium text-muted-foreground">
-            Showing{" "}
-            <span className="text-foreground">
-              {(page - 1) * pageSize + 1}
-            </span>{" "}
-            to{" "}
-            <span className="text-foreground">
-              {Math.min(page * pageSize, total)}
-            </span>{" "}
-            of <span className="text-foreground">{total}</span> products
+        <div className="flex items-center justify-between px-4 py-2 bg-muted/10 border-t">
+          <p className="text-[11px] text-muted-foreground tabular-nums">
+            Showing <span className="text-foreground">{(page - 1) * pageSize + 1}</span> to{" "}
+            <span className="text-foreground">{Math.min(page * pageSize, total)}</span> of{" "}
+            <span className="text-foreground">{total}</span> products
           </p>
           <div className="flex items-center gap-1.5">
             <Button
               variant="outline"
               size="sm"
-              className="h-7 px-2.5 text-xs font-medium"
+              className="h-8 px-2.5 text-xs"
               disabled={page === 1 || isLoading}
               onClick={() => onPageChange(page - 1)}
             >
@@ -528,7 +380,7 @@ export function ProductsTable({
                   key={pageNum}
                   variant={page === pageNum ? "default" : "ghost"}
                   size="icon"
-                  className="h-7 w-7 text-xs font-medium"
+                  className="h-8 w-8 text-xs font-medium"
                   onClick={() => onPageChange(pageNum)}
                 >
                   {pageNum}
@@ -538,7 +390,7 @@ export function ProductsTable({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 px-2.5 text-xs font-medium"
+              className="h-8 px-2.5 text-xs"
               disabled={page * pageSize >= total || isLoading}
               onClick={() => onPageChange(page + 1)}
             >
@@ -548,5 +400,90 @@ export function ProductsTable({
         </div>
       )}
     </div>
+  );
+}
+
+// Row Actions Component
+function RowActions({
+  product,
+  onQuickAction,
+  onDelete,
+}: {
+  product: Product;
+  onQuickAction: (id: string, action: "verify" | "publish" | "archive" | "unarchive" | "reject") => void;
+  onDelete: (product: Product) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="icon-sm" variant="ghost" className="h-7 w-7">
+          <MoreVertical className="h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-40">
+        <DropdownMenuItem asChild>
+          <Link href={`/dashboard/catalog/products/${product.id}`} className="cursor-pointer">
+            <Edit className="h-3.5 w-3.5 mr-1.5" />
+            Edit
+          </Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
+          <Link href={`/dashboard/catalog/products/${product.id}`} className="cursor-pointer">
+            <Eye className="h-3.5 w-3.5 mr-1.5" />
+            View details
+          </Link>
+        </DropdownMenuItem>
+
+        {product.status === "draft" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onQuickAction(product.id, "verify")}>
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-success" />
+              Submit for review
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {product.status === "pending_review" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onQuickAction(product.id, "publish")}>
+              <CheckCircle2 className="h-3.5 w-3.5 mr-1.5 text-success" />
+              Approve & publish
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onQuickAction(product.id, "reject")}>
+              <XCircle className="h-3.5 w-3.5 mr-1.5 text-warning" />
+              Reject
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {product.status === "published" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onQuickAction(product.id, "archive")}>
+              <Archive className="h-3.5 w-3.5 mr-1.5" />
+              Archive
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {product.status === "archived" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onQuickAction(product.id, "unarchive")}>
+              <Package className="h-3.5 w-3.5 mr-1.5" />
+              Restore to draft
+            </DropdownMenuItem>
+          </>
+        )}
+
+        <DropdownMenuSeparator />
+        <DropdownMenuItem className="text-destructive" onClick={() => onDelete(product)}>
+          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+          Delete
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

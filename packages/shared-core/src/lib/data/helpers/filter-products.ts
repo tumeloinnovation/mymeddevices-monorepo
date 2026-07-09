@@ -62,8 +62,12 @@ export function filterProducts(products: Product[], params: ProductFilterParams)
     }
 
     // Status filter
-    if (params.status && product.status !== params.status) {
-      return false;
+    if (params.status) {
+      const normalizedParamStatus = params.status === 'publish' ? 'published' : params.status;
+      const normalizedProdStatus = product.status === 'publish' ? 'published' : product.status;
+      if (normalizedProdStatus !== normalizedParamStatus) {
+        return false;
+      }
     }
 
     // IDs filter

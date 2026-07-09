@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { toast } from 'sonner';
-import type { Product } from '@/lib/data/types';
+import type { Product } from '../../types/catalog';
 import { cartService, type Cart, type CartItem } from '../services/cart-service';
 
 // ============================================================================
@@ -11,6 +11,10 @@ import { cartService, type Cart, type CartItem } from '../services/cart-service'
 // ============================================================================
 
 interface LocalCartItem extends Partial<Product> {
+  id?: string;
+  price?: number;
+  stock_quantity?: number;
+  manage_stock?: boolean;
   quantity: number;
 }
 
@@ -40,6 +44,7 @@ interface CartState {
 
   // Backend sync actions
   syncWithBackend: () => Promise<void>;
+  syncLocalItemsToBackend: () => Promise<void>;
   addItemToBackend: (productId: string, quantity?: number, notes?: string) => Promise<void>;
   updateItemInBackend: (itemId: string, update: { quantity?: number; notes?: string }) => Promise<void>;
   removeItemFromBackend: (itemId: string) => Promise<void>;
@@ -66,6 +71,25 @@ interface CartState {
  * - Guest cart token management
  * - Optimistic updates with rollback
  */
+let syncQueue: Promise<any> = Promise.resolve();
+let pendingOps = 0;
+
+const queueSync = <T,>(operation: () => Promise<T>): Promise<T> => {
+  pendingOps++;
+  const nextPromise = syncQueue.then(async () => {
+    try {
+      return await operation();
+    } catch (err) {
+      console.error("Queue operation failed:", err);
+      throw err;
+    } finally {
+      pendingOps--;
+    }
+  });
+  syncQueue = nextPromise.catch(() => {});
+  return nextPromise;
+};
+
 const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
@@ -150,8 +174,8 @@ const useCartStore = create<CartState>()(
           const currentQuantity = existingItem?.quantity || 0;
 
           // Check stock if managed
-          if (product.manage_stock) {
-            const stockQuantity = Number(product.stock_quantity) || 0;
+          if ((product as any).manage_stock) {
+            const stockQuantity = Number((product as any).stock_quantity) || 0;
             const availableStock = stockQuantity - currentQuantity;
             if (availableStock < validQuantity) {
               toast.error(`Only ${availableStock} items available in stock`);
@@ -167,6 +191,13 @@ const useCartStore = create<CartState>()(
               )
             : [...state.items, { ...product, quantity: validQuantity }];
 
+          // Sync to backend asynchronously via queueSync
+          queueSync(async () => {
+            await get().addItemToBackend(String(product.id), validQuantity);
+          }).catch((err) => {
+            console.error('Failed to sync item to backend:', err);
+          });
+
           toast.success(`${product.name} added to cart`);
           return { items: updatedItems };
         });
@@ -179,6 +210,16 @@ const useCartStore = create<CartState>()(
           }
 
           if (quantity <= 0) {
+            // Remove item if quantity is 0 or less
+            queueSync(async () => {
+              const currentState = get();
+              const item = currentState.cart?.items?.find(i => i.product_id === String(productId));
+              if (item) {
+                await currentState.removeItemFromBackend(item.id);
+              }
+            }).catch((err) => {
+              console.error('Failed to remove item from backend:', err);
+            });
             return {
               items: state.items.filter((item) => String(item.id) !== String(productId)),
             };
@@ -196,6 +237,20 @@ const useCartStore = create<CartState>()(
             }
           }
 
+          // Sync to backend asynchronously via queueSync
+          queueSync(async () => {
+            const currentState = get();
+            const backendItem = currentState.cart?.items?.find(i => i.product_id === String(productId));
+            if (backendItem) {
+              await currentState.updateItemInBackend(backendItem.id, { quantity: validQuantity });
+            } else {
+              console.warn(`Backend item not found for product ${productId} during update. Trying to add instead.`);
+              await currentState.addItemToBackend(String(productId), validQuantity);
+            }
+          }).catch((err) => {
+            console.error('Failed to update item in backend:', err);
+          });
+
           return {
             items: state.items.map((item) =>
               String(item.id) === String(productId)
@@ -209,9 +264,22 @@ const useCartStore = create<CartState>()(
       removeItem: (productId: number | string) => {
         if (!productId) return;
 
-        set((state) => ({
-          items: state.items.filter((item) => String(item.id) !== String(productId)),
-        }));
+        set((state) => {
+          // Sync to backend asynchronously via queueSync
+          queueSync(async () => {
+            const currentState = get();
+            const backendItem = currentState.cart?.items?.find(i => i.product_id === String(productId));
+            if (backendItem) {
+              await currentState.removeItemFromBackend(backendItem.id);
+            }
+          }).catch((err) => {
+            console.error('Failed to remove item from backend:', err);
+          });
+
+          return {
+            items: state.items.filter((item) => String(item.id) !== String(productId)),
+          };
+        });
       },
 
       clear: () => {
@@ -235,25 +303,83 @@ const useCartStore = create<CartState>()(
 
           const cart = await cartService.getCart(state.cartToken || undefined);
 
-          // Convert backend cart items to local format for backward compatibility
+          // Save cart token for future requests
+          if (cart?.cart_token && cart.cart_token !== state.cartToken) {
+            state.setCartToken(cart.cart_token);
+          }
+
+           // Convert backend cart items to local format for backward compatibility
           const localItems: LocalCartItem[] = cart.items.map((item) => ({
             ...item.product,
             id: item.product_id,
             quantity: item.quantity,
-            price: item.unit_price || item.product?.price || '0',
+            price: Number(item.unit_price || item.product?.price || 0),
           }));
 
-          set({
-            cart,
-            items: localItems,
-            isSyncing: false,
-          });
+          if (pendingOps === 0) {
+            set({
+              cart,
+              items: localItems,
+              isSyncing: false,
+            });
+          } else {
+            set({
+              cart,
+              isSyncing: false,
+            });
+          }
         } catch (error) {
           console.error('Failed to sync cart:', error);
           set({
             isSyncing: false,
             error: error instanceof Error ? error.message : 'Failed to sync cart',
           });
+        }
+      },
+
+      syncLocalItemsToBackend: async () => {
+        const state = get();
+
+        // Skip if already syncing or no local items
+        if (state.isSyncing || state.items.length === 0) {
+          return;
+        }
+
+        try {
+          set({ isSyncing: true, error: null });
+
+          // First, sync with backend to get current cart state
+          await get().syncWithBackend();
+
+          // Get updated state
+          const currentState = get();
+          const backendItems = currentState.cart?.items || [];
+
+          // For each local item, check if it exists in backend
+          for (const localItem of state.items) {
+            const productId = String(localItem.id);
+            const backendItem = backendItems.find((bi) => bi.product_id === productId);
+
+            if (backendItem) {
+              // Update quantity if different
+              if (backendItem.quantity !== localItem.quantity) {
+                await get().updateItemInBackend(backendItem.id, { quantity: localItem.quantity });
+              }
+            } else {
+              // Add new item to backend
+              await get().addItemToBackend(productId, localItem.quantity);
+            }
+          }
+
+          // Final sync to get updated cart
+          await get().syncWithBackend();
+        } catch (error) {
+          console.error('Failed to sync local items to backend:', error);
+          set({
+            isSyncing: false,
+            error: error instanceof Error ? error.message : 'Failed to sync items to backend',
+          });
+          throw error;
         }
       },
 

@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema"
 import * as z from "zod"
-import { useAuthStore } from "@mymeddevices/shared-core"
+import { useAuthStore, systemService, type ShippingSettings } from "@mymeddevices/shared-core"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Input } from "@/components/ui/input"
 import { toast } from "sonner"
@@ -33,12 +33,48 @@ function InfoRow({ label, value }: { label: string; value?: string | null }) {
   )
 }
 
-type Tab = "account" | "security"
+type Tab = "account" | "security" | "shipping"
 
 export default function SettingsPage() {
   const { user, changePassword, isLoading } = useAuthStore()
   const [activeTab, setActiveTab] = useState<Tab>("account")
   const [saving, setSaving] = useState(false)
+
+  const [shippingSettings, setShippingSettings] = useState<ShippingSettings | null>(null)
+  const [loadingSettings, setLoadingSettings] = useState(false)
+  const [updatingSettings, setUpdatingSettings] = useState(false)
+
+  useEffect(() => {
+    if (activeTab === "shipping" && !shippingSettings) {
+      loadShippingSettings()
+    }
+  }, [activeTab])
+
+  const loadShippingSettings = async () => {
+    setLoadingSettings(true)
+    try {
+      const data = await systemService.getShippingSettings()
+      setShippingSettings(data)
+    } catch {
+      toast.error("Failed to load shipping settings")
+    } finally {
+      setLoadingSettings(false)
+    }
+  }
+
+  const handleShippingSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!shippingSettings) return
+    setUpdatingSettings(true)
+    try {
+      await systemService.updateShippingSettings(shippingSettings)
+      toast.success("Shipping settings updated successfully")
+    } catch {
+      toast.error("Failed to update shipping settings")
+    } finally {
+      setUpdatingSettings(false)
+    }
+  }
 
   const {
     register,
@@ -65,6 +101,7 @@ export default function SettingsPage() {
   const tabs: { key: Tab; label: string }[] = [
     { key: "account", label: "Account" },
     { key: "security", label: "Security" },
+    { key: "shipping", label: "Shipping Logistics" },
   ]
 
   return (
@@ -182,6 +219,92 @@ export default function SettingsPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "shipping" && (
+          <div className="max-w-2xl">
+            <div className="border-2 border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
+              <div className="px-4 py-2.5 border-b-2 border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
+                <h3 className="text-xs font-semibold uppercase tracking-widest text-zinc-600 dark:text-zinc-400">
+                  Shipping & Delivery Logistics Settings
+                </h3>
+              </div>
+              {loadingSettings ? (
+                <div className="p-8 text-center text-xs text-zinc-500 dark:text-zinc-400">
+                  Loading settings...
+                </div>
+              ) : !shippingSettings ? (
+                <div className="p-8 text-center text-xs text-rose-500 font-medium">
+                  Failed to load settings. Please try again.
+                </div>
+              ) : (
+                <form onSubmit={handleShippingSubmit} className="p-4 space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <FieldWrap label="Nairobi Flat Fee (KES)">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={shippingSettings.flat_fee}
+                        onChange={(e) => setShippingSettings({ ...shippingSettings, flat_fee: parseFloat(e.target.value) || 0 })}
+                        className="rounded-none border-2 focus-visible:border-amber-500 focus-visible:ring-0"
+                        required
+                      />
+                    </FieldWrap>
+
+                    <FieldWrap label="Nairobi Distance Rate (KES per KM)">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={shippingSettings.rate_per_km}
+                        onChange={(e) => setShippingSettings({ ...shippingSettings, rate_per_km: parseFloat(e.target.value) || 0 })}
+                        className="rounded-none border-2 focus-visible:border-amber-500 focus-visible:ring-0"
+                        required
+                      />
+                    </FieldWrap>
+
+                    <FieldWrap label="Max Nairobi Rider Radius (KM)">
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="1"
+                        value={shippingSettings.max_radius_km}
+                        onChange={(e) => setShippingSettings({ ...shippingSettings, max_radius_km: parseFloat(e.target.value) || 0 })}
+                        className="rounded-none border-2 focus-visible:border-amber-500 focus-visible:ring-0"
+                        required
+                      />
+                    </FieldWrap>
+
+                    <FieldWrap label="Outside Nairobi Courier Flat Fee (KES)">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={shippingSettings.courier_fee}
+                        onChange={(e) => setShippingSettings({ ...shippingSettings, courier_fee: parseFloat(e.target.value) || 0 })}
+                        className="rounded-none border-2 focus-visible:border-amber-500 focus-visible:ring-0"
+                        required
+                      />
+                    </FieldWrap>
+                  </div>
+
+                  <div className="mt-4 pt-4 border-t-2 border-zinc-200 dark:border-zinc-800 flex items-center justify-between">
+                    <span className="text-xs text-zinc-400 dark:text-zinc-500">
+                      Settings apply immediately to new orders and cart calculations.
+                    </span>
+                    <button
+                      type="submit"
+                      disabled={updatingSettings}
+                      className="text-xs font-semibold uppercase tracking-widest px-4 py-2 border-2 border-zinc-800 dark:border-zinc-200 bg-zinc-800 dark:bg-zinc-200 text-white dark:text-zinc-900 hover:bg-zinc-700 dark:hover:bg-zinc-300 disabled:opacity-40 transition-colors"
+                    >
+                      {updatingSettings ? "Saving..." : "Save Settings"}
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
           </div>
         )}

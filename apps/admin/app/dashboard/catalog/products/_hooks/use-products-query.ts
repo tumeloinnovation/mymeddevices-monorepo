@@ -51,7 +51,7 @@ export function useCategories() {
 
 export function useVendors() {
   return useQuery({
-    queryKey: ["admin", "vendors", "overview"],
+    queryKey: ["admin", "vendors", "overview-map"],
     queryFn: async () => {
       const data = await usersService.getVendorsOverview({
         page: 1,

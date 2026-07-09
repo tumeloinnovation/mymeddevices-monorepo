@@ -26,7 +26,7 @@ class CartProductResponse(BaseModel):
     id: uuid.UUID
     sku: Optional[str] = None
     name: str
-    price: Optional[float] = None
+    price: Optional[int] = None
     images: List[ProductImageResponse] = []
     stock_quantity: int
 
@@ -40,7 +40,7 @@ class CartItemResponse(BaseModel):
     cart_id: uuid.UUID
     product_id: uuid.UUID
     quantity: int
-    unit_price: Optional[float] = None
+    unit_price: Optional[int] = None
     notes: Optional[str] = None
     substitution_allowed: bool
     product: CartProductResponse
@@ -80,14 +80,17 @@ class GuestCartResponse(BaseModel):
 class CartTotalsResponse(BaseModel):
     """Cart totals with breakdown."""
     cart_id: uuid.UUID
-    subtotal: float
-    discount_amount: float = 0.0
-    tax_amount: float = 0.0
-    shipping_amount: float = 0.0
-    total: float
+    subtotal: int
+    discount_amount: int = 0
+    tax_amount: int = 0
+    shipping_amount: int = 0
+    total: int
     currency: str = "KES"
     item_count: int
     applied_discounts: List[dict] = []
+    logistics_type: Optional[str] = None
+    calculated_distance_km: Optional[float] = 0.0
+    route_coordinates: Optional[List[List[float]]] = []
 
 
 class CartValidationError(BaseModel):
@@ -107,8 +110,8 @@ class CartValidationResponse(BaseModel):
     item_count: int
     errors: List[CartValidationError] = []
     warnings: List[CartValidationError] = []
-    subtotal: float
-    estimated_total: float
+    subtotal: int
+    estimated_total: int
 
 
 class CartMergeRequest(BaseModel):

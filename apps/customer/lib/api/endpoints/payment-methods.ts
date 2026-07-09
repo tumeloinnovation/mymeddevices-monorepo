@@ -193,7 +193,7 @@ export const customerPaymentMethodsApi = {
    */
   async setDefault(methodId: string): Promise<PaymentMethod> {
     try {
-      const response = await apiClient.post<any>(`/payment-methods/${methodId}/set-default`);
+      const response = await apiClient.post<any>(`/payment-methods/${methodId}/set-default`, {});
 
       if (response && response.data) {
         toast.success('Default payment method updated');

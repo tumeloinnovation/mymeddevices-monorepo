@@ -43,6 +43,22 @@ interface ApiSuccessResponse<T> {
 
 type ApiResponse<T> = ApiSuccessResponse<T> | ApiErrorResponse;
 
+function sanitize(val: any): any {
+  if (val === null || val === undefined) return val;
+  if (typeof val !== 'object') return val;
+  if (Array.isArray(val)) return val.map(sanitize);
+  const sanitized: Record<string, any> = {};
+  const sensitiveKeys = ['password', 'password_hash', 'otp', 'token', 'refresh_token', 'access_token', 'code', 'credentials'];
+  for (const key of Object.keys(val)) {
+    if (sensitiveKeys.includes(key.toLowerCase())) {
+      sanitized[key] = '[REDACTED]';
+    } else {
+      sanitized[key] = sanitize(val[key]);
+    }
+  }
+  return sanitized;
+}
+
 // ============================================================================
 // CSRF Token Management
 // ============================================================================
@@ -327,9 +343,43 @@ export const apiClient = {
             }
           }
 
+          const isAuthOrOtp = options.endpoint.includes('/auth/') || options.endpoint.includes('/otp/');
+          let responseData: any = null;
+          if (isAuthOrOtp && response.ok) {
+            try {
+              const clone = response.clone();
+              const contentType = response.headers.get('content-type');
+              if (contentType?.includes('application/json')) {
+                responseData = await clone.json();
+              } else {
+                responseData = await clone.text();
+              }
+            } catch (e) {
+              responseData = 'Unparseable response body';
+            }
+          }
+
+          if (isAuthOrOtp) {
+            console.log(`[AUTH LOG] Request details:`, {
+              endpoint: options.endpoint,
+              payload: sanitize(options.body || options.data || options.params || null),
+              status: response.status,
+              response: sanitize(responseData),
+            });
+          }
+
           const data = await this.parseResponse<T>(response);
           return data;
-        } catch (error) {
+        } catch (error: any) {
+          const isAuthOrOtp = options.endpoint.includes('/auth/') || options.endpoint.includes('/otp/');
+          if (isAuthOrOtp) {
+            console.log(`[AUTH LOG] Request failed:`, {
+              endpoint: options.endpoint,
+              payload: sanitize(options.body || options.data || options.params || null),
+              status: error.status || 'unknown',
+              response: sanitize(error.message || error),
+            });
+          }
           if (attempts === maxAttempts - 1) {
             throw error;
           }

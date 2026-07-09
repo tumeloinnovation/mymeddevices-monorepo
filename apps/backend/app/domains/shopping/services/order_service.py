@@ -1,12 +1,12 @@
 import uuid
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func
 from sqlalchemy.orm import selectinload
 
 from app.core.logging import logger
 from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
-from app.domains.shopping.models.order import Order, OrderItem, OrderStatus
+from app.domains.shopping.models.order import Order, OrderItem, OrderStatus, OrderTimelineEvent
 from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.services.cart_calculation_service import CartCalculationService
 from app.domains.auth.models.user import User
@@ -63,17 +63,41 @@ class CheckoutService:
 
         # 2. Calculate final totals (snapshot)
         calc_service = CartCalculationService(self.db)
-        totals = await calc_service.calculate_totals(cart_id)
+        totals = await calc_service.calculate_totals(cart_id, shipping_address)
+
+        # Get next sequential order number
+        max_order_num_stmt = select(func.max(Order.order_number))
+        max_order_num_result = await self.db.execute(max_order_num_stmt)
+        max_order_num = max_order_num_result.scalar() or 100000
+        next_order_num = max_order_num + 1
+
+        # Auto-assign nearest active driver if company rider delivery
+        assigned_driver_id = None
+        if totals.get("logistics_type") == "company_rider":
+            driver_stmt = select(User).where(User.role == "driver", User.is_active == True)
+            driver_result = await self.db.execute(driver_stmt)
+            drivers = driver_result.scalars().all()
+            if drivers:
+                assigned_driver_id = drivers[0].id
+
+        # Update shipping address with calculated logistics metadata
+        updated_shipping_address = dict(shipping_address) if shipping_address else {}
+        updated_shipping_address["logistics_type"] = totals.get("logistics_type", "courier")
+        updated_shipping_address["calculated_distance_km"] = totals.get("calculated_distance_km", 0.0)
+        updated_shipping_address["route_coordinates"] = totals.get("route_coordinates", [])
+        if assigned_driver_id:
+            updated_shipping_address["assigned_driver_id"] = str(assigned_driver_id)
 
         # 3. Create Order record
         order = Order(
             id=uuid.uuid4(),
+            order_number=next_order_num,
             user_id=user_id,
             guest_token=guest_token,
             status=OrderStatus.PENDING,
             total_amount=totals["total"],
             currency="KES",
-            shipping_address=shipping_address,
+            shipping_address=updated_shipping_address,
             notes=notes,
             idempotency_key=idempotency_key or str(uuid.uuid4())
         )
@@ -96,8 +120,8 @@ class CheckoutService:
                 product_id=item.product_id,
                 vendor_id=item.product.vendor_id,
                 quantity=item.quantity,
-                unit_price=item.product.price, # Snapshot price
-                subtotal=item.product.price * item.quantity
+                unit_price=round(item.product.price), # Snapshot price
+                subtotal=round(item.product.price * item.quantity)
             )
             self.db.add(order_item)
 
@@ -120,12 +144,23 @@ class CheckoutService:
         )
         self.db.add(outbox_event)
 
+        # 7. Create Order Timeline Event
+        timeline_event = OrderTimelineEvent(
+            id=uuid.uuid4(),
+            order_id=order.id,
+            status=OrderStatus.PENDING.value,
+            message="Order placed successfully",
+            created_by=user_id
+        )
+        self.db.add(timeline_event)
+
         # Commit happens ONCE at the end now
         await self.db.commit()
         
-        # Reload with items and user for response
+        # Reload with items (and their products) and user for response
         stmt = select(Order).where(Order.id == order.id).options(
-            selectinload(Order.items)
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.timeline_events)
         )
         if order.user_id:
             stmt = stmt.options(selectinload(Order.user))
@@ -139,11 +174,35 @@ class OrderService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_order(self, order_id: uuid.UUID) -> Optional[Order]:
-        stmt = select(Order).where(Order.id == order_id).options(
+    async def get_order(self, identifier: Any) -> Optional[Order]:
+        order_uuid = None
+        order_number = None
+
+        if isinstance(identifier, uuid.UUID):
+            order_uuid = identifier
+        elif isinstance(identifier, int):
+            order_number = identifier
+        elif isinstance(identifier, str):
+            try:
+                order_uuid = uuid.UUID(identifier)
+            except ValueError:
+                if identifier.isdigit():
+                    order_number = int(identifier)
+
+        if not order_uuid and order_number is None:
+            return None
+
+        stmt = select(Order).options(
             selectinload(Order.items).selectinload(OrderItem.product),
-            selectinload(Order.user)
+            selectinload(Order.user),
+            selectinload(Order.timeline_events)
         )
+        
+        if order_uuid:
+            stmt = stmt.where(Order.id == order_uuid)
+        else:
+            stmt = stmt.where(Order.order_number == order_number)
+            
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -180,7 +239,8 @@ class OrderService:
         total = total_result.scalar_one()
 
         stmt = select(Order).options(
-            selectinload(Order.items).selectinload(OrderItem.product)
+            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.user)
         )
 
         for condition in conditions:
@@ -219,6 +279,14 @@ class OrderService:
                 status=OutboxStatus.PENDING
             )
             self.db.add(event)
+
+            timeline_event = OrderTimelineEvent(
+                id=uuid.uuid4(),
+                order_id=order_id,
+                status=new_status_enum.value,
+                message=f"Order status updated to {new_status_enum.value}"
+            )
+            self.db.add(timeline_event)
 
         await self.db.commit()
         return await self.get_order(order_id)

@@ -57,7 +57,7 @@ export function useGoogleMaps(
       const err = new Error(
         "Google Maps API key not provided. Set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your environment."
       );
-      console.error("[useGoogleMaps]", err.message);
+      console.warn("[useGoogleMaps]", err.message);
       setError(err);
       return;
     }

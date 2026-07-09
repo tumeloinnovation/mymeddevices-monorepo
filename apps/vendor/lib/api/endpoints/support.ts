@@ -9,19 +9,23 @@ import type {
 
 export const supportApi = {
   getTickets: async (params: TicketListParams) => {
-    return await apiClient.get<PaginatedResponse<SupportTicket>>('/vendor/support/tickets', { params: params as any });
+    return await apiClient.get<PaginatedResponse<SupportTicket>>('/tickets', { params: params as any });
   },
 
   getTicket: async (id: string) => {
-    return await apiClient.get<SupportTicketDetail>(`/vendor/support/tickets/${id}`);
+    return await apiClient.get<SupportTicketDetail>(`/tickets/${id}`);
   },
 
   createTicket: async (data: { subject: string; category: string; message: string }) => {
-    return await apiClient.post<SupportTicket>('/vendor/support/tickets', data);
+    return await apiClient.post<SupportTicket>('/tickets', {
+      subject: data.subject,
+      category: data.category,
+      description: data.message,
+    });
   },
 
   replyToTicket: async (id: string, message: string) => {
-    const response = await apiClient.post(`/vendor/orders/${id}/replies`, { message }) as any;
+    const response = await apiClient.post(`/tickets/${id}/replies`, { content: message }) as any;
     return response.success;
   },
 

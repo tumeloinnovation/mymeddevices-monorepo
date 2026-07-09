@@ -30,10 +30,10 @@ class RateLimiter:
         self._requests: defaultdict[str, deque[tuple[float, int]]] = defaultdict(deque)
         # Configuration: {endpoint_key: (max_requests, window_seconds)}
         self._default_limits = {
-            "login": (5, 300),  # 5 requests per 5 minutes
-            "register": (3, 3600),  # 3 requests per hour
-            "otp": (5, 300),  # 5 OTP requests per 5 minutes
-            "password_reset": (3, 3600),  # 3 password resets per hour
+            "login": (10, 300),  # 10 requests per 5 minutes
+            "register": (10, 3600),  # 10 requests per hour
+            "otp": (10, 300),  # 10 OTP requests per 5 minutes
+            "password_reset": (10, 300),  # 10 password resets per 5 minutes
             "guest_login": (10, 3600),  # 10 guest logins per hour
         }
         self._limits = self._default_limits.copy()
@@ -82,6 +82,10 @@ class RateLimiter:
                 logger.debug("Rate limits refreshed from database.")
         except Exception as e:
             logger.error(f"Failed to refresh rate limits from DB: {e}")
+            try:
+                await db.rollback()
+            except Exception as rollback_err:
+                logger.error(f"Failed to rollback session after rate limit refresh error: {rollback_err}")
             # Fallback to defaults if something goes wrong and we have no limits
             if not self._limits:
                 self._limits = self._default_limits.copy()

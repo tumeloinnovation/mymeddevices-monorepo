@@ -55,8 +55,6 @@ class ProductCreate(BaseModel):
     # Pricing
     base_price: Optional[float] = Field(None, ge=0)
     price: Optional[float] = Field(None, ge=0)
-    sale_price: Optional[float] = Field(None, ge=0)
-    compare_at_price: Optional[float] = Field(None, ge=0)
     cost_price: Optional[float] = Field(None, ge=0)
     currency: str = "KES"
 
@@ -99,8 +97,6 @@ class ProductUpdate(BaseModel):
     # Pricing
     base_price: Optional[float] = Field(None, ge=0)
     price: Optional[float] = Field(None, ge=0)
-    sale_price: Optional[float] = Field(None, ge=0)
-    compare_at_price: Optional[float] = Field(None, ge=0)
     cost_price: Optional[float] = Field(None, ge=0)
     currency: Optional[str] = None
 
@@ -157,8 +153,6 @@ class ProductResponse(BaseModel):
     markup_price: Optional[float] = None
     commission_fee: Optional[float] = None
     price: Optional[float] = None
-    sale_price: Optional[float] = None
-    compare_at_price: Optional[float] = None
     cost_price: Optional[float] = None
     currency: str
 
@@ -239,10 +233,8 @@ class StorefrontProductResponse(BaseModel):
     description: Optional[str] = None
     short_description: Optional[str] = None
 
-    # Pricing (NO cost_price)
+    # Pricing
     price: Optional[float] = None
-    sale_price: Optional[float] = None
-    compare_at_price: Optional[float] = None
     currency: str
     is_on_sale: bool
 
@@ -302,6 +294,13 @@ class AIAssistRequest(BaseModel):
         default=["description", "short_description", "specifications", "tags", "meta_title", "meta_description"],
         description="Which fields to generate suggestions for"
     )
+
+
+class AIDescriptionRequest(BaseModel):
+    """Request AI to generate product descriptions from name and brand"""
+    product_name: str = Field(..., description="Product name")
+    brand: str = Field(..., description="Brand name")
+    category: Optional[str] = Field(None, description="Category name (optional)")
 
 
 class AIAssistResponse(BaseModel):

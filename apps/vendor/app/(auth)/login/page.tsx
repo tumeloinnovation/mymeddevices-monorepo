@@ -11,10 +11,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { toast } from 'sonner';
 import Link from 'next/link';
 import {
-  Loader2, Lock, Mail, Eye, EyeOff, Store,
+  Loader2, Lock, Mail, Store,
   Package, ClipboardList, Building, Phone, KeyRound, ArrowLeft
 } from 'lucide-react';
+import { ForgotPasswordForm } from "@mymeddevices/shared-admin";
 import { useAuth } from '@/lib/hooks/use-auth';
+import AddressAutocomplete from '@/components/maps/AddressAutocomplete';
+import { useGoogleMaps } from '@/components/maps/useGoogleMaps';
 
 function getSafeReturnUrl(returnUrl: string | null): string | null {
   if (!returnUrl) return null;
@@ -48,8 +51,8 @@ function AuthFlow({
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, register, initiateRegistration, completeRegistration, verifyOtp, forgotPassword, isAuthenticated } = useAuth();
+  const { ready: mapsReady } = useGoogleMaps();
   
-  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   
@@ -61,7 +64,11 @@ function AuthFlow({
   const [regCompany, setRegCompany] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regVat, setRegVat] = useState('');
-  const [showRegPassword, setShowRegPassword] = useState(false);
+
+  const [regAddressStreet, setRegAddressStreet] = useState('');
+  const [regLatitude, setRegLatitude] = useState<number | null>(null);
+  const [regLongitude, setRegLongitude] = useState<number | null>(null);
+  const [regPlaceId, setRegPlaceId] = useState('');
   
   // OTP fields
   const [otpCode, setOtpCode] = useState('');
@@ -157,6 +164,12 @@ function AuthFlow({
       return;
     }
 
+    if (!regAddressStreet || regLatitude === null || regLongitude === null) {
+      setError('Store physical address selection is required.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
       await completeRegistration({
         email: regEmail,
@@ -165,6 +178,10 @@ function AuthFlow({
         company_name: regCompany,
         first_name: regFirstName || undefined,
         last_name: regLastName || undefined,
+        address_street: regAddressStreet,
+        latitude: regLatitude,
+        longitude: regLongitude,
+        place_id: regPlaceId || undefined,
       });
       
       setMode('success');
@@ -177,6 +194,10 @@ function AuthFlow({
       setOtpCode('');
       setRegFirstName('');
       setRegLastName('');
+      setRegAddressStreet('');
+      setRegLatitude(null);
+      setRegLongitude(null);
+      setRegPlaceId('');
     } catch (err: any) {
       const message = err?.response?.data?.detail || err?.message || 'Profile completion failed.';
       setError(message);
@@ -210,8 +231,8 @@ function AuthFlow({
 
   if (mode === 'success') {
     return (
-      <Card className="border-none shadow-none bg-transparent">
-        <CardContent className="p-0 text-center space-y-6">
+      <Card className="border-none shadow-none bg-transparent ring-0">
+        <CardContent className="p-0 text-center space-y-6 border-none">
           <div className="mx-auto w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center">
             <Package className="h-10 w-10 text-emerald-600" />
           </div>
@@ -233,66 +254,13 @@ function AuthFlow({
   }
 
   if (mode === 'forgot-password') {
-    return (
-      <Card className="border-none shadow-none bg-transparent">
-        <CardContent className="p-0">
-          <form onSubmit={handleForgotSubmit} className="space-y-5">
-            {error && (
-              <Alert variant="destructive" className="py-3 rounded-xl">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="forgot-email" className="text-sm font-medium">Email Address</Label>
-              <div className="relative">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/75" />
-                <Input
-                  id="forgot-email"
-                  type="email"
-                  placeholder="vendor@example.com"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  className="pl-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              className="w-full h-12 rounded-xl text-base font-semibold shadow-lg shadow-emerald-600/25 bg-emerald-600 hover:bg-emerald-700 text-white transition-all active:scale-[0.98]"
-              disabled={isLoading || !forgotEmail.trim()}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                  Sending link...
-                </>
-              ) : (
-                'Send reset link'
-              )}
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => setMode('login')}
-              className="w-full text-sm text-emerald-600 hover:text-emerald-700 font-semibold flex items-center justify-center gap-1.5"
-              disabled={isLoading}
-            >
-              <ArrowLeft className="h-4 w-4" /> Back to Sign In
-            </button>
-          </form>
-        </CardContent>
-      </Card>
-    );
+    return <ForgotPasswordForm theme="vendor" onBackToLogin={() => setMode('login')} />;
   }
 
   if (mode === 'register') {
     return (
-      <Card className="border-none shadow-none bg-transparent">
-        <CardContent className="p-0">
+      <Card className="border-none shadow-none bg-transparent ring-0">
+        <CardContent className="p-0 border-none">
           <form onSubmit={handleRegisterSubmit} className="space-y-4">
             {error && (
               <Alert variant="destructive" className="py-3 rounded-xl">
@@ -353,8 +321,8 @@ function AuthFlow({
 
   if (mode === 'profile') {
     return (
-      <Card className="border-none shadow-none bg-transparent">
-        <CardContent className="p-0">
+      <Card className="border-none shadow-none bg-transparent ring-0">
+        <CardContent className="p-0 border-none">
           <form onSubmit={handleProfileSubmit} className="space-y-4">
             {error && (
               <Alert variant="destructive" className="py-3 rounded-xl">
@@ -406,6 +374,24 @@ function AuthFlow({
                 />
               </div>
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-sm font-medium">Store Physical Address *</Label>
+              <AddressAutocomplete
+                onPlaceSelected={(place) => {
+                  setRegAddressStreet(place.formatted_address || place.address_1 || place.name || '');
+                  setRegLatitude(place.lat);
+                  setRegLongitude(place.lng);
+                  setRegPlaceId(place.place_id);
+                }}
+                placeholder="Search store address..."
+                countryRestriction={['ke', 'ug', 'tz']}
+              />
+              {regAddressStreet && (
+                <p className="text-xs text-emerald-600 font-medium">
+                  Selected: {regAddressStreet} ({regLatitude?.toFixed(4)}, {regLongitude?.toFixed(4)})
+                </p>
+              )}
+            </div>
 
             <div className="space-y-1.5">
               <Label htmlFor="regPassword" className="text-sm font-medium">Create Password *</Label>
@@ -413,25 +399,14 @@ function AuthFlow({
                 <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/75" />
                 <Input
                   id="regPassword"
-                  type={showRegPassword ? 'text' : 'password'}
+                  type="password"
                   placeholder="••••••••"
                   value={regPassword}
                   onChange={(e) => setRegPassword(e.target.value)}
-                  className="pl-11 pr-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20"
+                  className="pl-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20"
                   required
                   disabled={isLoading}
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowRegPassword(!showRegPassword)}
-                  className="absolute right-3.5 top-0 h-full flex items-center text-muted-foreground/75 hover:text-foreground transition-colors z-10"
-                >
-                  {showRegPassword ? (
-                    <EyeOff className="h-5 w-5" />
-                  ) : (
-                    <Eye className="h-5 w-5" />
-                  )}
-                </button>
               </div>
             </div>
 
@@ -457,8 +432,8 @@ function AuthFlow({
 
   if (mode === 'otp') {
     return (
-      <Card className="border-none shadow-none bg-transparent">
-        <CardContent className="p-0">
+      <Card className="border-none shadow-none bg-transparent ring-0">
+        <CardContent className="p-0 border-none">
           <form onSubmit={handleOtpSubmit} className="space-y-5">
             {error && (
               <Alert variant="destructive" className="py-3 rounded-xl">
@@ -482,9 +457,6 @@ function AuthFlow({
                   disabled={isLoading}
                 />
               </div>
-              <p className="text-xs text-muted-foreground/80 leading-relaxed mt-2 p-3 bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100/50 dark:border-emerald-900/20 rounded-xl">
-                <strong>Demo Testing:</strong> Since this is a demo environment, please inspect the backend server logs/console output to find the randomly generated 6-digit OTP code.
-              </p>
             </div>
 
             <Button
@@ -518,8 +490,8 @@ function AuthFlow({
 
   // Login Mode
   return (
-    <Card className="border-none shadow-none bg-transparent">
-      <CardContent className="p-0">
+    <Card className="border-none shadow-none bg-transparent ring-0">
+      <CardContent className="p-0 border-none">
         <form onSubmit={handleLoginSubmit} className="space-y-5">
           {error && (
             <Alert variant="destructive" className="py-3 rounded-xl">
@@ -560,25 +532,14 @@ function AuthFlow({
               <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/75" />
               <Input
                 id="password"
-                type={showPassword ? 'text' : 'password'}
+                type="password"
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="pl-11 pr-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20"
+                className="pl-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20"
                 required
                 disabled={isLoading}
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-muted-foreground/75 hover:text-foreground transition-colors"
-              >
-                {showPassword ? (
-                  <EyeOff className="h-5 w-5" />
-                ) : (
-                  <Eye className="h-5 w-5" />
-                )}
-              </button>
             </div>
           </div>
 
@@ -617,11 +578,10 @@ function AuthFlow({
 }
 
 export default function LoginPage() {
-  const [mode, setMode] = useState<'login' | 'register' | 'otp' | 'forgot-password'>('login');
+  const [mode, setMode] = useState<'login' | 'register' | 'otp' | 'profile' | 'success' | 'forgot-password'>('login');
   
-  // Keep credentials prefilled at the top level so they can be set by the registration OTP flow
-  const [email, setEmail] = useState('vendor@example.com');
-  const [password, setPassword] = useState('vendor123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   let title = 'Welcome back';
   let desc = 'Enter your credentials to access the vendor portal';
@@ -636,8 +596,8 @@ export default function LoginPage() {
     desc = 'Enter the 6-digit OTP code sent to your registered email';
     icon = <KeyRound className="h-7 w-7 text-white" />;
   } else if (mode === 'forgot-password') {
-    title = 'Reset your password';
-    desc = "Enter the email address associated with your account and we'll send you a link to reset your password.";
+    title = 'Forgot password?';
+    desc = "Enter your email and we'll send you instructions to reset your password.";
     icon = <KeyRound className="h-7 w-7 text-white" />;
   }
 
@@ -723,17 +683,19 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          <div className="text-center lg:text-left mb-8">
-            <div className="hidden lg:inline-flex items-center justify-center w-14 h-14 bg-emerald-600 rounded-2xl mb-6 shadow-lg shadow-emerald-600/25 transition-transform duration-300">
-              {icon}
+          {mode !== 'forgot-password' && (
+            <div className="text-center lg:text-left mb-8">
+              <div className="hidden lg:inline-flex items-center justify-center w-14 h-14 bg-emerald-600 rounded-2xl mb-6 shadow-lg shadow-emerald-600/25 transition-transform duration-300">
+                {icon}
+              </div>
+              <h1 className="text-3xl font-bold mb-2 tracking-tight transition-all duration-300">
+                {title}
+              </h1>
+              <p className="text-muted-foreground transition-all duration-300">
+                {desc}
+              </p>
             </div>
-            <h1 className="text-3xl font-bold mb-2 tracking-tight transition-all duration-300">
-              {title}
-            </h1>
-            <p className="text-muted-foreground transition-all duration-300">
-              {desc}
-            </p>
-          </div>
+          )}
 
           <Suspense fallback={<div className="h-48 flex items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-emerald-600" /></div>}>
             <AuthFlow 

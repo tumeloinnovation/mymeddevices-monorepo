@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
 import useCartStore from '@/lib/store/useCartStore'
@@ -13,11 +13,32 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { formatCurrency } from '@/lib/utils/utils'
 import { PACKAGING_FEE, SERVICES_FEE } from '@/lib/config/fees'
 import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft, Package, TrendingUp } from 'lucide-react'
+import { customerService } from '@/lib/services/customer-service'
+import { useAuthStore } from '@/lib/store/useAuthStore'
 
 export default function CartPage() {
   const { items, hydrated, getTotal, updateQuantity, removeItem, clear } = useCartStore()
+  const { isAuthenticated } = useAuthStore()
   const [couponCode, setCouponCode] = useState('')
   const [couponApplied, setCouponApplied] = useState(false)
+  const [hasPrimaryAddress, setHasPrimaryAddress] = useState(false)
+
+  useEffect(() => {
+    async function checkAddress() {
+      if (!isAuthenticated) {
+        setHasPrimaryAddress(false)
+        return
+      }
+      try {
+        const addrs = await customerService.getAddresses()
+        const hasPrimary = addrs.some((a: any) => a.isDefault || a.is_default)
+        setHasPrimaryAddress(hasPrimary)
+      } catch (err) {
+        setHasPrimaryAddress(false)
+      }
+    }
+    checkAddress()
+  }, [isAuthenticated])
 
   if (!hydrated) {
     return (
@@ -47,7 +68,7 @@ export default function CartPage() {
 
   const subtotal = getTotal()
   const shipping = subtotal >= 50000 ? 0 : 500
-  const total = subtotal + shipping + PACKAGING_FEE + SERVICES_FEE
+  const total = subtotal + (hasPrimaryAddress ? shipping : 0) + PACKAGING_FEE + SERVICES_FEE
 
   const handleApplyCoupon = () => {
     if (!couponCode.trim()) return
@@ -83,13 +104,13 @@ export default function CartPage() {
               <div className="divide-y">
                 {items.map((item) => {
                   const itemTotal = Number(item.price) * item.quantity
-                  const itemId = item.id as number
+                  const itemId = item.id as string
                   return (
                     <div key={itemId} className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
                       <div className="relative h-20 w-20 rounded-lg overflow-hidden bg-muted shrink-0">
-                        {item.images?.[0]?.src ? (
+                        {item.images?.[0]?.url ? (
                           <Image
-                            src={item.images[0].src}
+                            src={item.images[0].url}
                             alt={item.name || ''}
                             fill
                             className="object-cover"
@@ -211,16 +232,20 @@ export default function CartPage() {
                 <span className="text-muted-foreground">Subtotal</span>
                 <span className="font-medium">Ksh {formatCurrency(subtotal)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Shipping</span>
-                <span className="font-medium">
-                  {shipping === 0 ? 'Free' : `Ksh ${formatCurrency(shipping)}`}
-                </span>
-              </div>
-              {shipping > 0 && (
-                <p className="text-xs text-muted-foreground -mt-2">
-                  Free shipping on orders over Ksh 50,000
-                </p>
+              {hasPrimaryAddress && (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Shipping</span>
+                    <span className="font-medium">
+                      {shipping === 0 ? 'Free' : `Ksh ${formatCurrency(shipping)}`}
+                    </span>
+                  </div>
+                  {shipping > 0 && (
+                    <p className="text-xs text-muted-foreground -mt-2">
+                      Free shipping on orders over Ksh 50,000
+                    </p>
+                  )}
+                </>
               )}
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Packaging Fee</span>

@@ -124,12 +124,17 @@ async def remove_cart_item(
 @router.get("/totals", response_model=ApiSuccessResponse[CartTotalsResponse])
 async def get_cart_totals(
     cart_id: uuid.UUID,
+    lat: float = None,
+    lon: float = None,
     db: AsyncSession = Depends(get_db)
 ):
     """Calculate and return cart totals."""
     calc_service = CartCalculationService(db)
     try:
-        totals = await calc_service.calculate_totals(cart_id)
+        shipping_address = None
+        if lat is not None and lon is not None:
+            shipping_address = {"latitude": lat, "longitude": lon}
+        totals = await calc_service.calculate_totals(cart_id, shipping_address)
         # Ensure cart_id is in response as expected by schema
         totals["cart_id"] = cart_id
         return success_response(totals)

@@ -55,6 +55,18 @@ def vendor_notification_html(title: str, message: str, detail: Optional[str] = N
     )
 
 
+def vendor_approved_html(company_name: str, dashboard_url: Optional[str] = None) -> str:
+    return render_email_template(
+        "vendor_approved.html",
+        {
+            "title": "Vendor Account Approved",
+            "company_name": company_name,
+            "dashboard_url": dashboard_url or f"{settings.SITE_URL}/vendor/dashboard",
+            "preheader": f"Congratulations! Your vendor account for {company_name} has been approved.",
+        },
+    )
+
+
 def new_device_login_html(
     user_name: str,
     device: str,

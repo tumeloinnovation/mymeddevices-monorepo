@@ -35,14 +35,18 @@ export function EmailStep({ onGuestCheckout }: EmailStepProps) {
     setError(null);
 
     try {
-      // Mock OTP sending
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const store = useCheckoutAuthStore.getState();
+      await store.initiateRegistration({ email, role: 'customer' });
       setStoreEmail(email);
-      toast.success('Verification code sent! ');
-    } catch (error) {
+    } catch (error: any) {
       const message = error instanceof Error ? error.message : 'Failed to send verification code';
-      setError(message);
-      toast.error(message);
+      if (message.includes('already exists') || message.includes('already registered')) {
+        toast.error('An account already exists with this email. Redirecting to login...');
+        useCheckoutAuthStore.getState().setCheckoutStep('login');
+      } else {
+        setError(message);
+        toast.error(message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -58,9 +62,7 @@ export function EmailStep({ onGuestCheckout }: EmailStepProps) {
         <p className="text-sm text-muted-foreground">
           Enter your email to continue securely with your order
         </p>
-        <p className="text-xs text-muted-foreground font-medium text-orange-600">
-          Demo Mode: Any 6-digit code will work
-        </p>
+
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-4">

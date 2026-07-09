@@ -23,8 +23,6 @@ export const productCreateSchema = z.object({
   box_type: z.string().max(50).optional(),
   price: positiveNumber,
   cost_price: nonNegativeNumber.optional(),
-  compare_at_price: positiveNumber.optional(),
-  discount_percentage: z.number().min(0).max(100).optional(),
   tax_class: z.string().max(50).optional(),
   stock_quantity: nonNegativeNumber.int().default(0),
   is_active: z.boolean().optional().default(true),

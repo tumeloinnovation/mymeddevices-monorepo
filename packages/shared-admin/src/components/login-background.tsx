@@ -33,14 +33,14 @@ const customerShapes = [
 ]
 
 const vendorShapes = [
-  { className: "rounded-full bg-orange-400/10", w: 320, h: 320, x: -8, y: -12, d: 12, del: 0 },
-  { className: "rounded-[40%_60%_70%_30%/40%_50%_60%_50%] bg-amber-400/10", w: 240, h: 240, x: 65, y: -8, d: 10, del: 1 },
-  { className: "rounded-[30%_70%_50%_50%] bg-orange-300/10", w: 180, h: 180, x: 75, y: 55, d: 14, del: 2 },
-  { className: "rotate-45 rounded-lg bg-amber-300/10", w: 120, h: 120, x: 8, y: 42, d: 9, del: 0.5 },
-  { className: "rounded-full bg-yellow-400/10", w: 200, h: 200, x: 35, y: 75, d: 11, del: 3 },
-  { className: "rounded-[50%_50%_50%_50%/60%_40%_40%_60%] bg-orange-300/10", w: 100, h: 100, x: 55, y: 28, d: 8, del: 1.5 },
+  { className: "rounded-full bg-emerald-400/10", w: 320, h: 320, x: -8, y: -12, d: 12, del: 0 },
+  { className: "rounded-[40%_60%_70%_30%/40%_50%_60%_50%] bg-emerald-400/10", w: 240, h: 240, x: 65, y: -8, d: 10, del: 1 },
+  { className: "rounded-[30%_70%_50%_50%] bg-emerald-300/10", w: 180, h: 180, x: 75, y: 55, d: 14, del: 2 },
+  { className: "rotate-45 rounded-lg bg-emerald-300/10", w: 120, h: 120, x: 8, y: 42, d: 9, del: 0.5 },
+  { className: "rounded-full bg-emerald-400/10", w: 200, h: 200, x: 35, y: 75, d: 11, del: 3 },
+  { className: "rounded-[50%_50%_50%_50%/60%_40%_40%_60%] bg-emerald-300/10", w: 100, h: 100, x: 55, y: 28, d: 8, del: 1.5 },
   { className: "rounded-[60%_40%_30%_70%/50%_60%_40%_50%] bg-white/[0.03]", w: 280, h: 280, x: -5, y: 50, d: 13, del: 0.8 },
-  { className: "rounded-2xl bg-amber-400/10", w: 80, h: 80, x: 85, y: 80, d: 7, del: 2.5 },
+  { className: "rounded-2xl bg-emerald-400/10", w: 80, h: 80, x: 85, y: 80, d: 7, del: 2.5 },
 ]
 
 function FloatingShape({ s }: { s: (typeof adminShapes)[number] }) {
@@ -123,14 +123,14 @@ const THEME_CONFIG: Record<
   },
   vendor: {
     shapes: vendorShapes,
-    bgGradient: "from-slate-900 via-orange-950 to-amber-950",
+    bgGradient: "from-slate-900 via-emerald-950 to-emerald-950",
     contentGradient: "bg-white",
-    titleColor: "text-orange-300",
-    subtitleColor: "text-orange-200/60",
-    textColor: "text-orange-200/50",
-    featureColor: "text-orange-200/50",
-    bulletColor: "bg-orange-400/60",
-    copyrightColor: "text-orange-200/25",
+    titleColor: "text-emerald-300",
+    subtitleColor: "text-emerald-200/60",
+    textColor: "text-emerald-200/50",
+    featureColor: "text-emerald-200/50",
+    bulletColor: "bg-emerald-400/60",
+    copyrightColor: "text-emerald-200/25",
     title: "Vendor",
     subtitle: "Portal",
     description:

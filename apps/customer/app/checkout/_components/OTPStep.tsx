@@ -51,25 +51,11 @@ export function OTPStep({ onBack }: OTPStepProps) {
     setError(null);
 
     try {
-      // Mock OTP Verification
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      toast.success('Email verified successfully! ');
-
-      // Mock user data
-      const mockUser: AuthUser = {
-        id: 123,
-        email: email,
-        displayName: email.split('@')[0],
-        firstName: '',
-        lastName: '',
-        phone: '',
-        role: 'customer',
-        is_active: true,
-      };
-
-      setOTPVerified(mockUser);
-    } catch (error) {
+      const store = useCheckoutAuthStore.getState();
+      await store.verifyOTP(email, otp, 'verification');
+      // Transition to profile setup step since we are registering
+      setOTPVerified();
+    } catch (error: any) {
       const message = error instanceof Error ? error.message : 'Verification failed';
       setError(message);
       toast.error(message);
@@ -84,13 +70,12 @@ export function OTPStep({ onBack }: OTPStepProps) {
 
     setIsLoading(true);
     try {
-      // Mock resend
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast.success('New code sent to your email ');
+      const store = useCheckoutAuthStore.getState();
+      await store.initiateRegistration({ email, role: 'customer' });
       setResendCooldown(60); // 60 second cooldown
       setExpiryTime(300); // Reset expiry
       setOtp('');
-    } catch (error) {
+    } catch (error: any) {
       const message = error instanceof Error ? error.message : 'Failed to resend code';
       toast.error(message);
     } finally {
@@ -202,7 +187,7 @@ export function OTPStep({ onBack }: OTPStepProps) {
       </div>
 
       <p className="text-xs text-center text-muted-foreground">
-        Enter any 6-digit code to continue.
+        Please check your spam folder if you do not receive the email.
       </p>
     </div>
   );

@@ -52,6 +52,17 @@ class AddressSchema(BaseModel):
     longitude: Optional[float] = None
     place_id: Optional[str] = None  # Google Places ID
 
+    @field_validator('country')
+    @classmethod
+    def validate_country_code(cls, v: str) -> str:
+        """Validate and normalize country code to 2-letter ISO 3166-1 alpha-2 format"""
+        if not v:
+            return "KE"  # Default to Kenya
+        v = v.upper().strip()
+        if len(v) != 2 or not v.isalpha():
+            raise ValueError('country must be a valid 2-letter ISO country code (e.g., "KE", "US", "UG")')
+        return v.upper()
+
 
 class PaymentDetailsSchema(BaseModel):
     """Payment and payout details"""
@@ -150,6 +161,54 @@ class VendorApprovalRequest(BaseModel):
     """Admin request to approve/reject vendor"""
     action: str = Field(..., pattern=r"^(approve|reject|suspend)$")
     reason: Optional[str] = None  # Required for rejection
+
+
+class AdminCreateVendorRequest(BaseModel):
+    """Admin request to create a new vendor"""
+    email: EmailStr
+    password: str = Field(..., min_length=8)
+    company_name: str = Field(..., min_length=2, max_length=255)
+    store_name: str = Field(..., min_length=2, max_length=255)
+    store_description: Optional[str] = None
+    business_email: Optional[EmailStr] = None
+    business_phone: Optional[str] = None
+    phone: Optional[str] = Field(None, pattern=r"^(\+254|0)[1-9]\d{8}$")  # Kenyan phone format
+    vat_number: Optional[str] = Field(None, max_length=50)
+
+    # Address
+    address_street: Optional[str] = None
+    address_city: Optional[str] = None
+    address_region: Optional[str] = None
+    address_country: str = "KE"
+
+    # Payment details (optional)
+    mpesa_phone: Optional[str] = None
+    mpesa_business_name: Optional[str] = None
+    mpesa_till_number: Optional[str] = None
+    mpesa_paybill_number: Optional[str] = None
+
+    # Approval status (default: pending, but can be set to approved for trusted vendors)
+    approval_status: str = Field("pending", pattern=r"^(pending|approved|suspended|rejected)$")
+    auto_approve: bool = False  # If true, sets status to approved immediately
+
+    @field_validator('phone', 'mpesa_phone', 'business_phone')
+    @classmethod
+    def normalize_phone(cls, v: Optional[str]) -> Optional[str]:
+        """Normalize phone number to +254 format"""
+        if v and v.startswith('0'):
+            return '+254' + v[1:]
+        return v
+
+    @field_validator('address_country')
+    @classmethod
+    def validate_country_code(cls, v: str) -> str:
+        """Validate and normalize country code to 2-letter ISO 3166-1 alpha-2 format"""
+        if not v:
+            return "KE"  # Default to Kenya
+        v = v.upper().strip()
+        if len(v) != 2 or not v.isalpha():
+            raise ValueError('address_country must be a valid 2-letter ISO country code (e.g., "KE", "US", "UG")')
+        return v.upper()
 
 
 class VendorStatusResponse(BaseModel):

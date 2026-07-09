@@ -27,7 +27,6 @@ interface PricingSummary {
   product_id: string;
   price: string;
   cost_price: string | null;
-  compare_at_price: string | null;
   markup_percentage: number | null;
   profit_margin: number;
 }
@@ -51,7 +50,7 @@ interface PaginatedResponse<T> {
 // Product Service
 // ============================================================================
 
-import { SEED_PRODUCTS } from '../data/seed/products';
+
 
 /**
  * Product service for API integration
@@ -64,31 +63,6 @@ export const productService = {
     params: ProductQueryParams = {}
   ): Promise<PaginatedResponse<Product>> {
     try {
-      // Fallback to seed data if API is not available or explicitly requested
-      const useSeedData = process.env.NEXT_PUBLIC_USE_SEED_DATA === 'true' || !process.env.NEXT_PUBLIC_API_URL;
-      
-      if (useSeedData) {
-        console.log('[ProductService] Using seed data for getProducts');
-        let products = [...SEED_PRODUCTS];
-        
-        // Basic filtering for demo purposes
-        if (params.q) {
-          const q = params.q.toLowerCase();
-          products = products.filter(p => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
-        }
-        
-        if (params.category) {
-          products = products.filter(p => p.categories.some(c => c.slug === params.category || c.name === params.category));
-        }
-
-        const total = products.length;
-        const page = params.page || 1;
-        const limit = params.limit || 20;
-        const start = (page - 1) * limit;
-        const items = products.slice(start, start + limit);
-
-        return { items, total, page, limit };
-      }
 
       // Use storefront endpoint for public browsing (no auth required)
       const response = await apiClient.get<any>('/storefront/products', {
@@ -435,14 +409,14 @@ export function calculateDiscountPercentage(
  * Check if product is in stock
  */
 export function isInStock(product: Product): boolean {
-  return product.status === 'publish' && product.stock_status === 'instock';
+  return (product.status as string === 'publish' || product.status as string === 'published') && product.stock_status === 'instock';
 }
 
 /**
  * Get stock status text
  */
 export function getStockStatus(product: Product): string {
-  if (product.status !== 'publish') {
+  if (product.status as string !== 'publish' && product.status as string !== 'published') {
     return 'Unavailable';
   }
 

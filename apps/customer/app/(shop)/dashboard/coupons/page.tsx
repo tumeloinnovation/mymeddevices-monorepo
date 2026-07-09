@@ -42,7 +42,7 @@ export default function CouponsPage() {
     }
   };
 
-  const isExpired = (validUntil: string | null) => {
+  const isExpired = (validUntil: string | null | undefined) => {
     if (!validUntil) return false;
     return new Date(validUntil) < new Date();
   };
@@ -141,7 +141,7 @@ export default function CouponsPage() {
                     <span className="text-sm">Coupon #{usage.coupon_id.slice(0, 8)}</span>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium">-KES {formatCurrency(usage.discount_amount)}</p>
+                    <p className="text-sm font-medium">-KES {formatCurrency(usage.discount_value ?? 0)}</p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(usage.used_at).toLocaleDateString()}
                     </p>

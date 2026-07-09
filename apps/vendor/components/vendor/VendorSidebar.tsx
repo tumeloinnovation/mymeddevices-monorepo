@@ -40,12 +40,7 @@ const vendorRoutes: VendorRoute[] = [
         icon: <ShoppingBag className="h-5 w-5" />,
         link: "/vendor/orders",
     },
-    {
-        id: "inventory",
-        title: "Inventory",
-        icon: <Warehouse className="h-5 w-5" />,
-        link: "/vendor/inventory",
-    },
+
     // {
     //     id: "settings",
     //     title: "Settings",

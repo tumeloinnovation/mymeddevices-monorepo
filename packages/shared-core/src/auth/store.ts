@@ -7,6 +7,7 @@ import type {
   AuthUser,
   LoginCredentials,
   RegisterData,
+  CompleteRegistrationData,
   LoginResponse,
   TokenResponse,
   UserRole,
@@ -21,6 +22,8 @@ import type {
   DeleteAccountData,
   CustomerUser,
   VendorUser,
+  CreateVendorData,
+  VendorProfileResponse,
 } from './types';
 
 const DEMO_CUSTOMER: CustomerUser = {
@@ -81,6 +84,7 @@ export interface AuthState {
   getRateLimits: () => Promise<Record<string, [number, number]>>;
   updateRateLimits: (limits: Record<string, [number, number]>) => Promise<void>;
   listVendorsAdmin: (params?: { status?: string; page?: number; page_size?: number }) => Promise<VendorListResponse>;
+  createVendor: (data: CreateVendorData) => Promise<VendorProfileResponse>;
   approveVendor: (vendorId: string) => Promise<void>;
   rejectVendor: (vendorId: string, reason: string) => Promise<void>;
   suspendVendor: (vendorId: string, reason: string) => Promise<void>;
@@ -110,12 +114,12 @@ export interface AuthState {
   apiFetch: (endpoint: string, init?: RequestInit) => Promise<Response>;
 
   initiateRegistration: (data: { email: string; role: string }) => Promise<void>;
-  completeRegistration: (data: any) => Promise<void>;
+  completeRegistration: (data: CompleteRegistrationData) => Promise<void>;
 }
 
-function normalizeUser(user: any): any {
-  if (!user || typeof user !== 'object') return user;
-  const normalized = { ...user };
+function normalizeUser(user: Record<string, any> | null | undefined): AuthUser | null {
+  if (!user || typeof user !== 'object') return null;
+  const normalized = { ...user } as Record<string, any>;
   if ('is_vendor_verified' in normalized && !('isVendorVerified' in normalized)) {
     normalized.isVendorVerified = normalized.is_vendor_verified;
   }
@@ -128,7 +132,7 @@ function normalizeUser(user: any): any {
   if ('last_name' in normalized && !('lastName' in normalized)) {
     normalized.lastName = normalized.last_name;
   }
-  return normalized;
+  return normalized as AuthUser;
 }
 
 function getOrCreateDeviceId(): string {
@@ -268,7 +272,6 @@ export const useAuthStore = create<AuthState>()(
             userKeys: normalizedUser ? Object.keys(normalizedUser) : [],
           });
         } catch (error: any) {
-          console.error('❌ [AuthStore] Login failed:', error);
           set({ isLoading: false, error: error.message });
           throw error;
         }
@@ -439,7 +442,8 @@ export const useAuthStore = create<AuthState>()(
       getVendorStatus: async () => {
         set({ isLoading: true, error: null });
         try {
-          const status = await apiClient.get<VendorStatus>('/vendors/me/status');
+          const result = await apiClient.get<any>('/vendors/me/status');
+          const status = result?.data || result;
           set({ vendorStatus: status, isLoading: false });
           return status;
         } catch (error: any) {
@@ -450,8 +454,8 @@ export const useAuthStore = create<AuthState>()(
 
       getSystemStatus: async () => {
         try {
-          const result = await apiClient.get<{ smtp: { host: string; port: number; enabled: boolean }; sms: { sender_id: string; enabled: boolean } }>('/system/status');
-          return result;
+          const result = await apiClient.get<any>('/system/status');
+          return result?.data || result;
         } catch (error: any) {
           toast.error('Failed to fetch system status');
           throw error;
@@ -460,8 +464,8 @@ export const useAuthStore = create<AuthState>()(
 
       getRateLimits: async () => {
         try {
-          const result = await apiClient.get<Record<string, [number, number]>>('/admin/system/rate-limits');
-          return result;
+          const result = await apiClient.get<any>('/admin/system/rate-limits');
+          return result?.data || result;
         } catch (error: any) {
           toast.error('Failed to fetch rate limits');
           throw error;
@@ -480,11 +484,22 @@ export const useAuthStore = create<AuthState>()(
 
       listVendorsAdmin: async (params) => {
         try {
-          const result = await apiClient.get<VendorListResponse>('/vendors/admin/list', {
+          const result = await apiClient.get<any>('/vendors/admin/list', {
             params: params || {},
           });
-          return result;
+          return result?.data || result;
         } catch (error: any) {
+          throw error;
+        }
+      },
+
+      createVendor: async (data) => {
+        try {
+          const result = await apiClient.post<any>('/vendors/admin/create', data);
+          toast.success('Vendor created successfully');
+          return result?.data || result;
+        } catch (error: any) {
+          toast.error(error.message || 'Failed to create vendor');
           throw error;
         }
       },
@@ -758,7 +773,7 @@ export const useAuthStore = create<AuthState>()(
       getDashboardRoute: () => {
         const state = get();
         if (!state.user) return '/';
-        if (state.isAdmin()) return '/admin/dashboard';
+        if (state.isAdmin()) return '/dashboard';
         if (state.isVendor()) return '/vendor/dashboard';
         return '/dashboard';
       },

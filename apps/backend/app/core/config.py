@@ -72,7 +72,7 @@ class Settings(BaseSettings):
     MARKUP_THRESHOLD_MEDIUM: float = 50000.0
     COMMISSION_FEE_PERCENT: float = 2.0
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-pro"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
     UPLOAD_DIR: str = "static/uploads/products"
     AVATAR_UPLOAD_DIR: str = "static/uploads/avatars"
 

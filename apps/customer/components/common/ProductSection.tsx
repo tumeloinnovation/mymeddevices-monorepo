@@ -35,7 +35,14 @@ export const ProductSection: FC<ProductSectionProps> = ({
   error = null,
   layout = 'scroll',
 }) => {
+  const [mounted, setMounted] = React.useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const showLoading = !mounted || loading;
 
   const scroll = (direction: 'left' | 'right') => {
     if (!scrollRef.current) return;
@@ -70,7 +77,7 @@ export const ProductSection: FC<ProductSectionProps> = ({
           onRetry={() => window.location.reload()}
           retryLabel="Reload"
         />
-      ) : loading ? (
+      ) : showLoading ? (
         <div className={layout === 'grid' 
           ? `grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 ${gridClassName}`
           : `flex gap-2 overflow-x-auto overflow-y-hidden scroll-smooth hide-scrollbar snap-x snap-mandatory ${gridClassName}`

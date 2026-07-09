@@ -1,4 +1,5 @@
 import { apiClient } from './api-client';
+import { AdminCustomerCreateInput } from '../lib/validation/admin';
 
 // ============================================================================
 // Types
@@ -46,6 +47,19 @@ export interface CustomerDetail {
   is_verified: boolean;
   joined_date: string;
   last_login?: string;
+  loyalty_tier?: string;
+  loyalty_points?: number;
+  notes?: string;
+  avatar_url?: string;
+  email_order_updates?: boolean;
+  email_promotions?: boolean;
+  email_newsletter?: boolean;
+  email_security?: boolean;
+  sms_order_updates?: boolean;
+  sms_promotions?: boolean;
+  sms_security?: boolean;
+  language?: string;
+  timezone?: string;
 }
 
 export interface StaffMember {
@@ -139,6 +153,14 @@ export const usersService = {
     return apiClient.patch(`/admin/users/customers/${id}/status`, null, {
       params: { action }
     });
+  },
+
+  async createCustomer(data: AdminCustomerCreateInput): Promise<{
+    id: string;
+    email: string;
+    message: string;
+  }> {
+    return apiClient.post('/admin/users/customers', data);
   },
 
   // ============================================================================
