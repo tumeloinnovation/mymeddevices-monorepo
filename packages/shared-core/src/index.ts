@@ -16,4 +16,6 @@ export * from './loading';
 export { SkipNav } from './skip-nav';
 export * from './lib/utils/utils';
 export { useCheckoutAuthStore } from './lib/store/useAuthStore';
-export { default as useCartStore } from './lib/store/useCartStore';
+export { useCartStore, CART_STORAGE_KEY } from './lib/store/useCartStore';
+export type { Cart, CartItem } from './lib/services/cart-service';
+export type { Cart as ShoppingCart } from './services/shopping-service';

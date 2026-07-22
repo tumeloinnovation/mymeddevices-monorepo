@@ -12,8 +12,7 @@ interface CategoryDetailPageProps {
 const CategoryDetailPage: React.FC<CategoryDetailPageProps> = ({ slug }) => {
   const router = useRouter();
   const { data: category, isLoading: categoryLoading, isError: categoryError } = useCategoryBySlug(slug);
-  const { data: productsResponse, isLoading: productsLoading, isError: productsError } = useCategoryProducts(slug);
-  const products = productsResponse?.items || [];
+  const { data: products, isLoading: productsLoading, isError: productsError } = useCategoryProducts(slug);
 
   // Redirect to 404 if category doesn't exist (client-side handling)
   useEffect(() => {

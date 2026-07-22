@@ -32,11 +32,30 @@ export const productCreateSchema = z.object({
 
 export const productUpdateSchema = productCreateSchema.partial();
 
+// Helper to validate URLs or base64 data URIs
+const urlOrDataUri = z.string().max(200000).optional().or(z.literal('')).refine(
+  (val) => {
+    if (!val || val === '') return true;
+    // Check if it's a valid base64 data URI
+    if (val.startsWith('data:image/')) {
+      return /^data:image\/(png|jpeg|jpg|gif|webp);base64,[a-zA-Z0-9+/=]+$/.test(val);
+    }
+    // Check if it's a valid URL
+    try {
+      new URL(val);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+  { message: "Must be a valid URL or base64 image data URI" }
+);
+
 export const brandSchema = z.object({
   name: z.string().min(1).max(255),
   slug: slugSchema.optional(),
   description: z.string().max(1000).optional(),
-  logo_url: z.string().url().max(500).optional().or(z.literal('')),
+  logo_url: urlOrDataUri,
   website_url: z.string().url().max(500).optional().or(z.literal('')),
   is_active: z.boolean().optional(),
 });

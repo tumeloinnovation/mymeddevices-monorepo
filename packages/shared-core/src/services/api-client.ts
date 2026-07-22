@@ -336,6 +336,12 @@ export const apiClient = {
         } else if (errorData.detail) {
           if (typeof errorData.detail === 'string') {
             errorMessage = errorData.detail;
+          } else if (Array.isArray(errorData.detail)) {
+            errorMessage = errorData.detail.map((e: any) => {
+              if (typeof e === 'string') return e;
+              const field = e.loc ? e.loc[e.loc.length - 1] : '';
+              return `${field ? field + ': ' : ''}${e.msg || JSON.stringify(e)}`;
+            }).join(', ');
           } else if (typeof errorData.detail === 'object' && errorData.detail.error) {
             errorMessage = errorData.detail.error;
           } else {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Search,
   Plus,
@@ -13,6 +13,9 @@ import {
   X,
   MoreVertical,
   Filter,
+  Upload,
+  Link as LinkIcon,
+  Image as ImageIcon,
 } from "lucide-react";
 import { catalogService, Brand } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -52,9 +55,11 @@ import * as z from "zod";
 
 const brandFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  slug: z.string().optional(),
+  slug: z.string()
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug must contain only lowercase letters, numbers, and hyphens")
+    .optional(),
   description: z.string().optional(),
-  logo_url: z.string().url("Invalid URL").optional().or(z.literal("")),
+  logo_url: z.string().max(200000).optional().or(z.literal("")),
   website_url: z.string().url("Invalid URL").optional().or(z.literal("")),
   is_active: z.boolean().optional(),
 });
@@ -78,6 +83,9 @@ export default function BrandsPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [logoInputMode, setLogoInputMode] = useState<"url" | "upload">("url");
+  const [uploadedLogoUrl, setUploadedLogoUrl] = useState<string>("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const form = useForm<BrandFormData>({
     resolver: standardSchemaResolver(brandFormSchema),
@@ -95,18 +103,29 @@ export default function BrandsPage() {
   const nameValue = form.watch("name");
   const slugValue = form.watch("slug");
   const [userEditedSlug, setUserEditedSlug] = useState(false);
+  const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!editingBrand && !userEditedSlug && nameValue) {
+      // Generate slug matching backend pattern: only lowercase letters, numbers, and hyphens
       const generatedSlug = nameValue
         .toLowerCase()
         .trim()
-        .replace(/[^\w\s-]/g, "")
-        .replace(/\s+/g, "-")
-        .replace(/-+/g, "-");
+        .replace(/[^a-z0-9\s-]/g, "")  // Remove invalid characters
+        .replace(/\s+/g, "-")           // Convert spaces to hyphens
+        .replace(/-+/g, "-")            // Remove consecutive hyphens
+        .replace(/^-+|-+$/g, "");       // Remove leading/trailing hyphens
       form.setValue("slug", generatedSlug);
+      // Clear slug error if it exists
+      if (apiErrors.slug) {
+        setApiErrors((prev) => {
+          const newErrors = { ...prev };
+          delete newErrors.slug;
+          return newErrors;
+        });
+      }
     }
-  }, [nameValue, editingBrand, userEditedSlug, form]);
+  }, [nameValue, editingBrand, userEditedSlug, form, apiErrors]);
 
   const fetchBrands = async () => {
     setLoading(true);
@@ -230,14 +249,49 @@ export default function BrandsPage() {
     setStatusFilter("all");
   };
 
-  const hasActiveFilters = search || statusFilter !== "all";
+  // File upload handler - converts image to base64
+  const handleFileUpload = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) { // 5MB limit
+      toast.error('Image must be smaller than 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (result) {
+        setUploadedLogoUrl(result);
+        form.setValue('logo_url', result);
+      }
+    };
+    reader.onerror = () => {
+      toast.error('Failed to read image file');
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const clearUploadedLogo = () => {
+    setUploadedLogoUrl("");
+    form.setValue("logo_url", "");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const hasActiveFilters = !!search || statusFilter !== "all";
 
   const onSubmit = async (data: BrandFormData) => {
     setSubmitting(true);
+    setApiErrors({}); // Clear previous API errors
     try {
       const payload = {
         ...data,
         slug: data.slug || undefined,
+        description: data.description || undefined,
         logo_url: data.logo_url || undefined,
         website_url: data.website_url || undefined,
       };
@@ -254,9 +308,44 @@ export default function BrandsPage() {
       setEditingBrand(null);
       form.reset();
       fetchBrands();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to save brand:", error);
-      toast.error(editingBrand ? "Failed to update brand" : "Failed to create brand");
+
+      // Try to extract field-level errors from the error message
+      const errorMsg = error?.message || String(error);
+      const fieldErrors: Record<string, string> = {};
+
+      // Parse common error patterns from backend
+      if (errorMsg.includes("slug")) {
+        if (errorMsg.includes("already exists") || errorMsg.includes("duplicate")) {
+          fieldErrors.slug = "This slug is already in use. Please choose a different one.";
+        } else if (errorMsg.includes("pattern") || errorMsg.includes("invalid")) {
+          fieldErrors.slug = "Invalid slug format. Use only lowercase letters, numbers, and hyphens.";
+        } else {
+          fieldErrors.slug = "Slug validation failed";
+        }
+      }
+      if (errorMsg.includes("name")) {
+        if (errorMsg.includes("already exists")) {
+          fieldErrors.name = "A brand with this name already exists.";
+        } else {
+          fieldErrors.name = "Name validation failed";
+        }
+      }
+      if (errorMsg.includes("logo_url") || errorMsg.includes("logo")) {
+        fieldErrors.logo_url = "Invalid logo URL or image too large";
+      }
+      if (errorMsg.includes("website_url") || errorMsg.includes("website")) {
+        fieldErrors.website_url = "Invalid website URL";
+      }
+
+      if (Object.keys(fieldErrors).length > 0) {
+        setApiErrors(fieldErrors);
+        toast.error("Please fix the form errors");
+      } else {
+        // Generic error - apiClient already shows toast, so just log it
+        console.error("Brand creation error:", errorMsg);
+      }
     } finally {
       setSubmitting(false);
     }
@@ -265,6 +354,9 @@ export default function BrandsPage() {
   const handleEdit = (brand: Brand) => {
     setEditingBrand(brand);
     setUserEditedSlug(true);
+    setLogoInputMode("url");
+    setUploadedLogoUrl("");
+    setApiErrors({}); // Clear API errors
     form.reset({
       name: brand.name,
       slug: brand.slug,
@@ -273,6 +365,11 @@ export default function BrandsPage() {
       website_url: brand.website_url || "",
       is_active: brand.is_active,
     });
+    // Detect if existing logo is a base64 data URI
+    if (brand.logo_url?.startsWith('data:image/')) {
+      setLogoInputMode("upload");
+      setUploadedLogoUrl(brand.logo_url);
+    }
     setSheetOpen(true);
   };
 
@@ -290,6 +387,9 @@ export default function BrandsPage() {
   const openCreateSheet = () => {
     setEditingBrand(null);
     setUserEditedSlug(false);
+    setLogoInputMode("url");
+    setUploadedLogoUrl("");
+    setApiErrors({}); // Clear API errors
     form.reset({
       name: "",
       slug: "",
@@ -575,10 +675,13 @@ export default function BrandsPage() {
                   id="name"
                   {...form.register("name")}
                   placeholder="e.g. Medtronic"
-                  className={form.formState.errors.name ? "border-destructive" : ""}
+                  className={form.formState.errors.name || apiErrors.name ? "border-destructive" : ""}
                 />
                 {form.formState.errors.name && (
                   <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
+                )}
+                {apiErrors.name && !form.formState.errors.name && (
+                  <p className="text-xs text-destructive">{apiErrors.name}</p>
                 )}
               </div>
 
@@ -589,10 +692,26 @@ export default function BrandsPage() {
                   id="slug"
                   {...form.register("slug")}
                   placeholder="medtronic"
-                  className="font-mono text-sm"
-                  onChange={() => setUserEditedSlug(true)}
+                  className={`font-mono text-sm ${form.formState.errors.slug || apiErrors.slug ? "border-destructive" : ""}`}
+                  onChange={() => {
+                    setUserEditedSlug(true);
+                    // Clear slug API error when user edits it
+                    if (apiErrors.slug) {
+                      setApiErrors((prev) => {
+                        const newErrors = { ...prev };
+                        delete newErrors.slug;
+                        return newErrors;
+                      });
+                    }
+                  }}
                 />
                 <p className="text-xs text-muted-foreground">Auto-generated from name (edit to customize)</p>
+                {form.formState.errors.slug && (
+                  <p className="text-xs text-destructive">{form.formState.errors.slug.message}</p>
+                )}
+                {apiErrors.slug && !form.formState.errors.slug && (
+                  <p className="text-xs text-destructive">{apiErrors.slug}</p>
+                )}
               </div>
 
               {/* Description */}
@@ -609,24 +728,117 @@ export default function BrandsPage() {
 
               {/* URLs */}
               <div className="space-y-1.5">
-                <Label className="text-sm text-muted-foreground font-medium">Online Presence</Label>
+                <Label className="text-sm text-muted-foreground font-medium">Brand Logo</Label>
+
+                {/* Logo Input Mode Toggle */}
+                <div className="flex items-center gap-2 mb-3">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={logoInputMode === "url" ? "default" : "outline"}
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setLogoInputMode("url");
+                      setUploadedLogoUrl("");
+                    }}
+                  >
+                    <LinkIcon className="h-3 w-3 mr-1" />
+                    From URL
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={logoInputMode === "upload" ? "default" : "outline"}
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      setLogoInputMode("upload");
+                      form.setValue("logo_url", uploadedLogoUrl || "");
+                    }}
+                  >
+                    <Upload className="h-3 w-3 mr-1" />
+                    Upload Image
+                  </Button>
+                </div>
+
                 <div className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="logo_url" className="text-xs text-muted-foreground">Logo URL</Label>
-                    <Input
-                      id="logo_url"
-                      {...form.register("logo_url")}
-                      placeholder="https://example.com/logo.png"
-                      className="text-sm font-mono"
-                    />
-                  </div>
+                  {/* URL Input Mode */}
+                  {logoInputMode === "url" && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="logo_url" className="text-xs text-muted-foreground">Logo URL</Label>
+                      <Input
+                        id="logo_url"
+                        {...form.register("logo_url")}
+                        placeholder="https://example.com/logo.png"
+                        className={`text-sm font-mono ${apiErrors.logo_url ? "border-destructive" : ""}`}
+                        onChange={(e) => {
+                          form.setValue("logo_url", e.target.value);
+                          setUploadedLogoUrl("");
+                          // Clear logo API error when user edits it
+                          if (apiErrors.logo_url) {
+                            setApiErrors((prev) => {
+                              const newErrors = { ...prev };
+                              delete newErrors.logo_url;
+                              return newErrors;
+                            });
+                          }
+                        }}
+                      />
+                      {apiErrors.logo_url && (
+                        <p className="text-xs text-destructive">{apiErrors.logo_url}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* File Upload Mode */}
+                  {logoInputMode === "upload" && (
+                    <div className="space-y-1.5">
+                      <Label htmlFor="logo_upload" className="text-xs text-muted-foreground">Upload Image</Label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          ref={fileInputRef}
+                          id="logo_upload"
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileUpload(file);
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
+                          Choose Image
+                        </Button>
+                        <span className="text-xs text-muted-foreground">
+                          {uploadedLogoUrl ? "Image selected" : "PNG, JPG, GIF, WebP up to 5MB"}
+                        </span>
+                        {uploadedLogoUrl && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 text-xs"
+                            onClick={clearUploadedLogo}
+                          >
+                            Clear
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Logo Preview */}
-                  {form.watch("logo_url") && (
+                  {(form.watch("logo_url") || uploadedLogoUrl) && (
                     <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
                       <div className="h-12 w-12 rounded bg-background flex items-center justify-center overflow-hidden">
                         <img
-                          src={form.watch("logo_url")}
+                          src={form.watch("logo_url") || uploadedLogoUrl}
                           alt="Logo preview"
                           className="h-full w-full object-contain p-1"
                           onError={(e) => {
@@ -646,8 +858,21 @@ export default function BrandsPage() {
                       id="website_url"
                       {...form.register("website_url")}
                       placeholder="https://example.com"
-                      className="text-sm font-mono"
+                      className={`text-sm font-mono ${apiErrors.website_url ? "border-destructive" : ""}`}
+                      onChange={() => {
+                        // Clear website API error when user edits it
+                        if (apiErrors.website_url) {
+                          setApiErrors((prev) => {
+                            const newErrors = { ...prev };
+                            delete newErrors.website_url;
+                            return newErrors;
+                          });
+                        }
+                      }}
                     />
+                    {apiErrors.website_url && (
+                      <p className="text-xs text-destructive">{apiErrors.website_url}</p>
+                    )}
                   </div>
                 </div>
               </div>

@@ -113,7 +113,7 @@ export const cartService = {
       const params = cartToken ? { cart_token: cartToken } : undefined;
       const response = await apiClient.get<any>('/shopping/cart/my', { params });
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         return response.data;
       }
 
@@ -126,15 +126,16 @@ export const cartService = {
 
   /**
    * Add item to cart
+   * Returns the full cart with items and cart_token
    */
-  async addItem(item: CartItemAdd, cartToken?: string): Promise<CartItem> {
+  async addItem(item: CartItemAdd, cartToken?: string): Promise<Cart> {
     try {
       const params = cartToken ? { cart_token: cartToken } : undefined;
       const response = await apiClient.post<any>('/shopping/cart/items', item, {
         params,
       });
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         toast.success('Item added to cart');
         return response.data;
       }
@@ -162,7 +163,7 @@ export const cartService = {
         params,
       });
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         toast.success(`${response.data.added_count} items added to cart`);
         return response.data;
       }
@@ -175,24 +176,25 @@ export const cartService = {
     }
   },
 
-  /**
-   * Update cart item
-   */
   async updateItem(
     itemId: string,
-    update: CartItemUpdate
+    update: CartItemUpdate,
+    cartToken?: string
   ): Promise<CartItem> {
     try {
       const response = await apiClient.patch<any>(
         `/shopping/cart/items/${itemId}`,
-        update
+        update,
+        {
+          params: cartToken ? { cart_token: cartToken } : undefined,
+        }
       );
-
-      if (response && response.data) {
+ 
+      if (response?.success && response.data) {
         toast.success('Cart updated');
         return response.data;
       }
-
+ 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to update cart item:', error);
@@ -200,13 +202,15 @@ export const cartService = {
       throw error;
     }
   },
-
+ 
   /**
    * Remove item from cart
    */
-  async removeItem(itemId: string): Promise<void> {
+  async removeItem(itemId: string, cartToken?: string): Promise<void> {
     try {
-      await apiClient.delete(`/shopping/cart/items/${itemId}`);
+      await apiClient.delete(`/shopping/cart/items/${itemId}`, {
+        params: cartToken ? { cart_token: cartToken } : undefined,
+      });
       toast.success('Item removed from cart');
     } catch (error) {
       console.error('Failed to remove item from cart:', error);
@@ -224,7 +228,7 @@ export const cartService = {
         body: itemIds,
       });
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         toast.success(`${response.data.removed_count} items removed`);
         return response.data;
       }
@@ -247,7 +251,7 @@ export const cartService = {
         params,
       });
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         toast.success('Cart cleared');
         return response.data;
       }
@@ -269,7 +273,7 @@ export const cartService = {
         params: { cart_id: cartId },
       });
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         return response.data;
       }
 
@@ -289,7 +293,7 @@ export const cartService = {
         params: { cart_id: cartId },
       });
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         return response.data;
       }
 
@@ -313,7 +317,7 @@ export const cartService = {
         merge_method: mergeMethod,
       });
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         toast.success('Cart merged successfully');
         return response.data;
       }
@@ -339,7 +343,7 @@ export const cartService = {
         }
       );
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         toast.success('Coupon applied successfully');
         return response.data;
       }
@@ -386,7 +390,7 @@ export const cartService = {
         params: { name, description },
       });
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         toast.success('Cart saved successfully');
         return response.data;
       }
@@ -416,7 +420,7 @@ export const cartService = {
         params: { offset, limit },
       });
 
-      if (response && response.data && response.data.saved_carts) {
+      if (response?.success && response.data?.saved_carts) {
         return response.data.saved_carts;
       }
 
@@ -445,7 +449,7 @@ export const cartService = {
         { params: { replace } }
       );
 
-      if (response && response.data) {
+      if (response?.success && response.data) {
         toast.success('Cart restored successfully');
         return response.data;
       }

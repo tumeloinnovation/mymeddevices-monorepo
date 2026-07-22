@@ -32,23 +32,42 @@ async def get_my_cart(
 ):
     """Retrieve the current active cart for a user or guest."""
     user_id = current_user.id if current_user else None
-    
-    service = CartService(db)
-    cart = await service.get_or_create_cart(
-        user_id=user_id,
-        cart_token=cart_token
-    )
 
-    # Load items
-    cart_with_items = await service.get_by_id(cart.id)
-    if not cart_with_items:
-        # Fallback if get_by_id failed (should not happen for a newly created cart)
-        return success_response(cart)
+    try:
+        service = CartService(db)
+        cart = await service.get_or_create_cart(
+            user_id=user_id,
+            cart_token=cart_token
+        )
 
-    return success_response(cart_with_items)
+        # Load items
+        cart_with_items = await service.get_by_id(cart.id)
+        if not cart_with_items:
+            # Fallback if get_by_id failed (should not happen for a newly created cart)
+            return success_response(cart)
+
+        return success_response(cart_with_items)
+    except Exception as e:
+        # Log the error for debugging
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error fetching cart: {str(e)}", exc_info=True)
+
+        # If cart_token is invalid, return a 400 with a clear message
+        if "cart" in str(e).lower() or "token" in str(e).lower():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid or expired cart token. Please refresh the page and try again."
+            )
+
+        # For other errors, return a 500 with a generic message
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="An error occurred while fetching your cart. Please try again."
+        )
 
 
-@router.post("/items", response_model=ApiSuccessResponse[CartItemResponse])
+@router.post("/items", response_model=ApiSuccessResponse[CartResponse])
 async def add_cart_item(
     item_in: CartItemCreate,
     cart_token: Optional[str] = Query(None),
@@ -58,18 +77,23 @@ async def add_cart_item(
     """Add an item to the current cart."""
     user_id = current_user.id if current_user else None
     service = CartService(db)
-    
+
     cart = await service.get_or_create_cart(
         user_id=user_id,
         cart_token=cart_token
     )
 
     try:
-        cart_item = await service.add_item(
+        await service.add_item(
             cart_id=cart.id,
             **item_in.model_dump()
         )
-        return success_response(cart_item)
+        # Return the full cart with items and cart_token
+        cart_with_items = await service.get_by_id(cart.id)
+        if not cart_with_items:
+            # Fallback if get_by_id failed - return the cart object we have
+            return success_response(cart)
+        return success_response(cart_with_items)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -78,20 +102,36 @@ async def add_cart_item(
 async def update_cart_item(
     item_id: uuid.UUID,
     item_in: CartItemUpdate,
-    db: AsyncSession = Depends(get_db)
+    cart_token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user)
 ):
     """Update a specific item in the cart."""
-    # We should ideally verify ownership, but for now we'll follow legacy patterns
-    # and use the item_id directly.
     from app.domains.shopping.models.cart import CartItem
     from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     
-    stmt = select(CartItem).where(CartItem.id == item_id)
+    stmt = select(CartItem).where(CartItem.id == item_id).options(selectinload(CartItem.cart))
     result = await db.execute(stmt)
     item = result.scalar_one_or_none()
     
     if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart item not found")
+        
+    # Check ownership
+    is_owner = False
+    if item.cart.user_id:
+        if current_user and current_user.id == item.cart.user_id:
+            is_owner = True
+    else:
+        if cart_token and item.cart.cart_token == cart_token:
+            is_owner = True
+            
+    if not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this cart item"
+        )
     
     update_data = item_in.model_dump(exclude_unset=True)
     for key, value in update_data.items():
@@ -105,19 +145,39 @@ async def update_cart_item(
 @router.delete("/items/{item_id}", status_code=status.HTTP_200_OK)
 async def remove_cart_item(
     item_id: uuid.UUID,
-    db: AsyncSession = Depends(get_db)
+    cart_token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user)
 ):
     """Remove an item from the cart."""
     from app.domains.shopping.models.cart import CartItem
-    from sqlalchemy import delete
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
     
-    stmt = delete(CartItem).where(CartItem.id == item_id)
+    stmt = select(CartItem).where(CartItem.id == item_id).options(selectinload(CartItem.cart))
     result = await db.execute(stmt)
-    await db.commit()
+    item = result.scalar_one_or_none()
     
-    if result.rowcount == 0:
+    if not item:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart item not found")
-    
+        
+    # Check ownership
+    is_owner = False
+    if item.cart.user_id:
+        if current_user and current_user.id == item.cart.user_id:
+            is_owner = True
+    else:
+        if cart_token and item.cart.cart_token == cart_token:
+            is_owner = True
+            
+    if not is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify this cart item"
+        )
+        
+    await db.delete(item)
+    await db.commit()
     return success_response({"message": "Item removed from cart"})
 
 
@@ -216,20 +276,44 @@ async def add_cart_items_bulk(
 @router.delete("/items/bulk", response_model=ApiSuccessResponse[dict])
 async def remove_cart_items_bulk(
     item_ids: List[uuid.UUID] = Body(..., embed=True),
-    db: AsyncSession = Depends(get_db)
+    cart_token: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user)
 ):
     """Remove multiple items from the cart."""
     from app.domains.shopping.models.cart import CartItem
-    from sqlalchemy import delete, in_
+    from sqlalchemy import select
+    from sqlalchemy.orm import selectinload
 
-    stmt = delete(CartItem).where(CartItem.id.in_(item_ids))
+    stmt = select(CartItem).where(CartItem.id.in_(item_ids)).options(selectinload(CartItem.cart))
     result = await db.execute(stmt)
+    items = result.scalars().all()
+
+    if not items:
+        return success_response({"removed_count": 0})
+
+    # Verify ownership for all items being deleted
+    for item in items:
+        is_owner = False
+        if item.cart.user_id:
+            if current_user and current_user.id == item.cart.user_id:
+                is_owner = True
+        else:
+            if cart_token and item.cart.cart_token == cart_token:
+                is_owner = True
+
+        if not is_owner:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You do not have permission to modify this cart item"
+            )
+
+    for item in items:
+        await db.delete(item)
     await db.commit()
 
-    removed_count = result.rowcount
-
     return success_response({
-        "removed_count": removed_count,
+        "removed_count": len(items),
     })
 
 

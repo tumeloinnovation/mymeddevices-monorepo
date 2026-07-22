@@ -37,7 +37,7 @@ export function BottomBar() {
   const featuredProducts = useProducts({ featured: true, per_page: 10 });
 
   // Fetch new arrivals
-  const newArrivalProducts = useProducts({ orderby: 'date', order: 'desc', per_page: 10 });
+  const newArrivalProducts = useProducts({ orderby: 'date', per_page: 10 });
 
   const renderProductCards = (products: Product[]) => {
     return (
@@ -46,7 +46,7 @@ export function BottomBar() {
           <div className="flex h-full flex-col">
             <div className="p-4 flex items-center justify-center h-28 bg-muted/50">
               <Image
-                src={product.images?.[0]?.src || '/images/placeholder.png'}
+                src={product.images?.[0]?.src || '/logos/logo-portrait.png'}
                 alt={product.name}
                 width={100}
                 height={100}

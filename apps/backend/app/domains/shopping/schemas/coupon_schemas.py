@@ -25,6 +25,10 @@ class CouponCreate(BaseModel):
     first_purchase_only: bool = False
     one_time_per_user: bool = True
 
+    # Category and product restrictions
+    category_ids: Optional[List[str]] = None
+    product_ids: Optional[List[uuid.UUID]] = None
+
 
 class CouponUpdate(BaseModel):
     """Schema for updating a coupon (admin only)."""
@@ -40,6 +44,10 @@ class CouponUpdate(BaseModel):
     min_order_value: Optional[float] = None
     max_discount_amount: Optional[float] = None
     global_usage_limit: Optional[int] = None
+
+    # Category and product restrictions
+    category_ids: Optional[List[str]] = None
+    product_ids: Optional[List[uuid.UUID]] = None
 
 
 class CouponResponse(BaseModel):
@@ -61,6 +69,10 @@ class CouponResponse(BaseModel):
     min_order_value: Optional[float] = None
     max_discount_amount: Optional[float] = None
     global_usage_limit: Optional[int] = None
+
+    # Category and product restrictions
+    category_ids: Optional[List[str]] = None
+    product_ids: Optional[List[uuid.UUID]] = None
     
     created_at: datetime
     updated_at: datetime
@@ -78,6 +90,17 @@ class CouponResponse(BaseModel):
             data.min_order_value = float(r.min_order_value) if r.min_order_value else None
             data.max_discount_amount = float(r.max_discount_amount) if r.max_discount_amount else None
             data.global_usage_limit = r.global_usage_limit
+        
+        if hasattr(data, "categories") and data.categories:
+            data.category_ids = [c.category for c in data.categories]
+        else:
+            data.category_ids = []
+            
+        if hasattr(data, "products") and data.products:
+            data.product_ids = [p.product_id for p in data.products]
+        else:
+            data.product_ids = []
+            
         return data
 
 

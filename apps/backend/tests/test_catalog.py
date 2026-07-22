@@ -165,9 +165,81 @@ async def test_admin_manage_categories(client: AsyncClient, admin_token: str, db
     assert len(root_cats) == 1
     assert len(root_cats[0]["children"]) == 1
     assert root_cats[0]["children"][0]["id"] == sub_data["id"]
+    # 4. Clear parent_id (make it root category)
+    update_payload = {
+        "parent_id": None
+    }
+    update_resp = await client.patch(f"/api/v1/catalog/categories/{sub_data['id']}", json=update_payload, headers=headers)
+    assert update_resp.status_code == 200
+    updated_data = update_resp.json()
+    assert updated_data["parent_id"] is None
 
 
-# ============================================================================
+@pytest.mark.asyncio
+async def test_category_validation_and_cycles(client: AsyncClient, admin_token: str, db: AsyncSession):
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    
+    # 1. Create a root category A
+    resp_a = await client.post("/api/v1/catalog/categories", json={
+        "name": "Category A",
+        "slug": "category-a",
+        "is_active": True
+    }, headers=headers)
+    assert resp_a.status_code == 201
+    cat_a = resp_a.json()
+
+    # 2. Create subcategory B with parent A
+    resp_b = await client.post("/api/v1/catalog/categories", json={
+        "name": "Category B",
+        "slug": "category-b",
+        "parent_id": cat_a["id"],
+        "is_active": True
+    }, headers=headers)
+    assert resp_b.status_code == 201
+    cat_b = resp_b.json()
+
+    # 3. Create sub-subcategory C with parent B
+    resp_c = await client.post("/api/v1/catalog/categories", json={
+        "name": "Category C",
+        "slug": "category-c",
+        "parent_id": cat_b["id"],
+        "is_active": True
+    }, headers=headers)
+    assert resp_c.status_code == 201
+    cat_c = resp_c.json()
+
+    # 4. Attempt to create category with invalid parent UUID -> 400
+    import uuid
+    invalid_uuid = str(uuid.uuid4())
+    resp_invalid = await client.post("/api/v1/catalog/categories", json={
+        "name": "Category Invalid Parent",
+        "slug": "cat-invalid-parent",
+        "parent_id": invalid_uuid,
+        "is_active": True
+    }, headers=headers)
+    assert resp_invalid.status_code == 400
+    assert "Parent category not found" in resp_invalid.json()["detail"]
+
+    # 5. Attempt to update category parent to invalid UUID -> 400
+    resp_invalid_update = await client.patch(f"/api/v1/catalog/categories/{cat_c['id']}", json={
+        "parent_id": invalid_uuid
+    }, headers=headers)
+    assert resp_invalid_update.status_code == 400
+    assert "Parent category not found" in resp_invalid_update.json()["detail"]
+
+    # 6. Attempt to make a category its own parent -> 400
+    resp_self_parent = await client.patch(f"/api/v1/catalog/categories/{cat_a['id']}", json={
+        "parent_id": cat_a["id"]
+    }, headers=headers)
+    assert resp_self_parent.status_code == 400
+    assert "cannot be its own parent" in resp_self_parent.json()["detail"]
+
+    # 7. Attempt to create cycle (set A's parent to C, when C is descendant of A) -> 400
+    resp_cycle = await client.patch(f"/api/v1/catalog/categories/{cat_a['id']}", json={
+        "parent_id": cat_c["id"]
+    }, headers=headers)
+    assert resp_cycle.status_code == 400
+    assert "Circular reference detected" in resp_cycle.json()["detail"]
 # PRODUCT CRUD & PRICING TESTS
 # ============================================================================
 
@@ -425,4 +497,131 @@ async def test_admin_publish_on_behalf_of_vendor(client: AsyncClient, admin_toke
         # Clean up local file created by test
         if os.path.exists(local_filepath):
             os.remove(local_filepath)
+
+
+@pytest.mark.asyncio
+async def test_delete_product_restrictions(client: AsyncClient, vendor_token: str, sample_category: Category):
+    headers = {"Authorization": f"Bearer {vendor_token}"}
+    
+    # 1. Create a draft product and verify it can be deleted
+    product_data = {
+        "name": "Product for Deletion",
+        "category_id": str(sample_category.id),
+        "base_price": 1000.0,
+        "sku": "DEL-SKU-1"
+    }
+    response = await client.post("/api/v1/catalog/products", json=product_data, headers=headers)
+    assert response.status_code == 201
+    product_id = response.json()["id"]
+
+    # 2. Deletion should succeed for draft
+    del_resp = await client.delete(f"/api/v1/catalog/products/{product_id}", headers=headers)
+    assert del_resp.status_code == 204
+
+    # 3. Trying to delete a non-existent product should return 404 Not Found
+    del_non_existent = await client.delete(f"/api/v1/catalog/products/{product_id}", headers=headers)
+    assert del_non_existent.status_code == 404
+
+    # 4. Create a published product
+    pub_product_data = {
+        "name": "Published Product for Delete Test",
+        "category_id": str(sample_category.id),
+        "base_price": 2000.0,
+        "description": "This is a detailed description of the published product for testing deletion restrictions.",
+        "short_description": "Published delete test",
+        "sku": "DEL-SKU-2",
+        "specifications": {"type": "test"}
+    }
+    response = await client.post("/api/v1/catalog/products", json=pub_product_data, headers=headers)
+    pub_product_id = response.json()["id"]
+
+    # Add mock image
+    from io import BytesIO
+    files = {"file": ("test.png", BytesIO(b"fake image bytes"), "image/png")}
+    img_resp = await client.post(f"/api/v1/catalog/products/{pub_product_id}/images", files=files, headers=headers)
+    local_filename = img_resp.json()["url"].split("/")[-1]
+    local_filepath = os.path.join(catalog_settings.UPLOAD_DIR, local_filename)
+
+    try:
+        # Verify & Publish
+        await client.post(f"/api/v1/catalog/products/{pub_product_id}/verify", headers=headers)
+        await client.post(f"/api/v1/catalog/products/{pub_product_id}/publish", headers=headers)
+
+        # 5. Trying to delete the published product should return 400 Bad Request
+        del_pub_resp = await client.delete(f"/api/v1/catalog/products/{pub_product_id}", headers=headers)
+        assert del_pub_resp.status_code == 400
+        assert "Only draft products can be deleted" in del_pub_resp.json()["detail"]
+    finally:
+        if os.path.exists(local_filepath):
+            os.remove(local_filepath)
+
+
+@pytest.mark.asyncio
+async def test_sku_uniqueness(client: AsyncClient, vendor_token: str, sample_category: Category):
+    headers = {"Authorization": f"Bearer {vendor_token}"}
+    
+    # 1. Create a product with SKU "SKU-UNIQUE-1"
+    product_data_1 = {
+        "name": "Product SKU One",
+        "category_id": str(sample_category.id),
+        "base_price": 1000.0,
+        "sku": "SKU-UNIQUE-1"
+    }
+    response = await client.post("/api/v1/catalog/products", json=product_data_1, headers=headers)
+    assert response.status_code == 201
+
+    # 2. Try to create another product with the same SKU "SKU-UNIQUE-1" -> Should fail with 400
+    product_data_2 = {
+        "name": "Product SKU Two",
+        "category_id": str(sample_category.id),
+        "base_price": 1500.0,
+        "sku": "SKU-UNIQUE-1"
+    }
+    response2 = await client.post("/api/v1/catalog/products", json=product_data_2, headers=headers)
+    assert response2.status_code == 400
+    assert "already exists" in response2.json()["detail"]
+
+    # 3. Create a product with different SKU "SKU-UNIQUE-2"
+    product_data_3 = {
+        "name": "Product SKU Three",
+        "category_id": str(sample_category.id),
+        "base_price": 2000.0,
+        "sku": "SKU-UNIQUE-2"
+    }
+    response3 = await client.post("/api/v1/catalog/products", json=product_data_3, headers=headers)
+    assert response3.status_code == 201
+    prod_3_id = response3.json()["id"]
+
+    # 4. Try to update product 3's SKU to "SKU-UNIQUE-1" -> Should fail with 400
+    update_payload = {"sku": "SKU-UNIQUE-1"}
+    up_resp = await client.patch(f"/api/v1/catalog/products/{prod_3_id}", json=update_payload, headers=headers)
+    assert up_resp.status_code == 400
+    assert "already exists" in up_resp.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_products_rate_limiting(client: AsyncClient):
+    from app.core.rate_limiting import rate_limiter
+    rate_limiter.clear()
+    
+    original_limit = rate_limiter._limits.get("products_get")
+    rate_limiter._limits["products_get"] = (5, 60)
+
+    try:
+        # Send 5 storefront product list requests
+        for _ in range(5):
+            response = await client.get("/api/v1/storefront/products")
+            assert response.status_code == 200
+
+        # 6th request should fail with 429 Too Many Requests
+        response = await client.get("/api/v1/storefront/products")
+        assert response.status_code == 429
+        data = response.json()
+        assert "Rate limit exceeded" in data["detail"]["error"]
+    finally:
+        if original_limit:
+            rate_limiter._limits["products_get"] = original_limit
+        else:
+            rate_limiter._limits.pop("products_get", None)
+        rate_limiter.clear()
 

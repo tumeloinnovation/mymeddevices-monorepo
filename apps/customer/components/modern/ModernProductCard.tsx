@@ -13,7 +13,7 @@ interface ModernProductCardProps {
 }
 
 export const ModernProductCard: React.FC<ModernProductCardProps> = ({ product }) => {
-  const [imgSrc, setImgSrc] = useState(product?.images?.[0]?.src || '/logo.png');
+  const [imgSrc, setImgSrc] = useState(product?.images?.[0]?.src || (product?.images?.[0] as any)?.url || '/logos/logo-portrait.png');
   const price = product ? parseFloat(product.on_sale ? product.sale_price : product.price) : 0;
   
   const addToCart = useCartStore((state) => state.addItem);
@@ -32,7 +32,7 @@ export const ModernProductCard: React.FC<ModernProductCardProps> = ({ product })
           src={imgSrc}
           alt={product.name}
           fill
-          onError={() => setImgSrc('/logo.png')}
+          onError={() => setImgSrc('/logos/logo-portrait.png')}
           className="object-contain p-4 transition-transform duration-500 group-hover:scale-105"
           sizes="(max-width: 768px) 50vw, 25vw"
         />

@@ -25,7 +25,7 @@ export type Address = {
 
 export function useCheckoutLogic() {
     const router = useRouter();
-    const { items, getTotal, clear, hydrated, mergeCart, syncLocalItemsToBackend } = useCartStore();
+    const { items, getTotal, clearLocalOnly, hydrated, mergeCart, syncLocalItemsToBackend, cart } = useCartStore();
     const { isAuthenticated, user, hydrated: authHydrated } = useAuthStore();
     const { getDefaultAddress, hydrated: addressHydrated } = useAddressStore();
 
@@ -148,36 +148,85 @@ export function useCheckoutLogic() {
         }, 300);
     }, []);
 
-    // Mock Fetch shipping rates
+    // Fetch shipping rates from backend API
     const fetchShippingRates = useCallback(async (region: string, subtotal: number) => {
         setShippingLoading(true);
         setCalculateRequested(false);
-        
-        // Simulate API delay
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const cost = region.toLowerCase().includes('nairobi') ? 250 : 500;
-        setShipping(cost);
-        setShippingMethod({
-            methodId: 'flat_rate',
-            methodName: 'Flat Rate',
-            zoneId: 1,
-            zoneName: 'Default Zone',
-        });
-        setCalculateRequested(true);
-        setShippingLoading(false);
-    }, []);
+
+        try {
+            // Get cart from store
+            const currentCart = useCartStore.getState().cart;
+            if (!currentCart || !currentCart.id) {
+                // Fallback to default values if cart is not available
+                console.warn('[Checkout] No cart available for shipping calculation');
+                setShipping(0);
+                setShippingMethod({
+                    methodId: 'flat_rate',
+                    methodName: 'Flat Rate',
+                    zoneId: 1,
+                    zoneName: 'Default Zone',
+                });
+                setCalculateRequested(true);
+                setShippingLoading(false);
+                return;
+            }
+
+            // Get delivery coordinates
+            const lat = delivery?.lat;
+            const lon = delivery?.lon;
+
+            if (!lat || !lon) {
+                console.warn('[Checkout] No delivery coordinates available');
+                setShipping(0);
+                setCalculateRequested(true);
+                setShippingLoading(false);
+                return;
+            }
+
+            // Call backend API to calculate shipping
+            const { apiClient } = await import('@mymeddevices/core/lib/services/api-client');
+            const response = await apiClient.get<any>(`/shopping/cart/totals?cart_id=${currentCart.id}&lat=${lat}&lon=${lon}`);
+
+            if (response && response.data) {
+                const shippingAmount = response.data.shipping_amount || 0;
+                setShipping(shippingAmount);
+                setShippingMethod({
+                    methodId: 'calculated',
+                    methodName: 'Calculated Shipping',
+                    zoneId: 1,
+                    zoneName: region || 'Default Zone',
+                });
+                console.log('[Checkout] Shipping calculated:', shippingAmount);
+            } else {
+                throw new Error('Invalid response from shipping API');
+            }
+        } catch (error) {
+            console.error('[Checkout] Shipping calculation error:', error);
+            // Fallback to default values on error
+            const cost = region.toLowerCase().includes('nairobi') ? 250 : 500;
+            setShipping(cost);
+            setShippingMethod({
+                methodId: 'flat_rate',
+                methodName: 'Flat Rate',
+                zoneId: 1,
+                zoneName: 'Default Zone',
+            });
+        } finally {
+            setCalculateRequested(true);
+            setShippingLoading(false);
+        }
+    }, [delivery]);
 
     const subtotal = getTotal();
 
     // Coupon Handlers
     const handleApplyCoupon = async () => {
         if (!couponCode.trim()) return;
-        
+
         setIsApplyingCoupon(true);
         try {
-            // Get cart ID from localStorage or generate one
-            const cartId = typeof window !== 'undefined' ? (localStorage.getItem('cart_id') || 'default-cart') : 'default-cart';
+            // Get cart ID from the cart store
+            const cartId = cart?.id || 'default-cart';
             const result = await shoppingService.applyCoupon(cartId, couponCode);
             
             if (result.success && result.data.is_valid) {
@@ -196,7 +245,7 @@ export function useCheckoutLogic() {
 
     const handleRemoveCoupon = async () => {
         try {
-            const cartId = typeof window !== 'undefined' ? (localStorage.getItem('cart_id') || 'default-cart') : 'default-cart';
+            const cartId = cart?.id || 'default-cart';
             await shoppingService.removeCoupon(cartId);
             setAppliedCoupon(null);
             setCouponCode('');
@@ -207,10 +256,10 @@ export function useCheckoutLogic() {
     };
 
     useEffect(() => {
-        if (delivery && delivery.region && subtotal > 0) {
+        if (hydrated && cart?.id && delivery && delivery.region && subtotal > 0) {
             fetchShippingRates(delivery.region, subtotal);
         }
-    }, [subtotal, delivery, fetchShippingRates]);
+    }, [hydrated, cart?.id, subtotal, delivery, fetchShippingRates]);
 
     // Handlers
     const handleAuthComplete = async () => {
@@ -253,9 +302,8 @@ export function useCheckoutLogic() {
             toast.loading('Syncing cart...', { id: 'cart-sync' });
             await mergeCart();
 
-            // Get actual cart ID from backend cart
-            const { cartService } = await import('../services/cart-service');
-            let cart = await cartService.getCart();
+            // Get cart from store (mergeCart already synced)
+            let cart = useCartStore.getState().cart;
             console.log('[Checkout] Backend cart:', cart ? `${cart.id} (active: ${cart.is_active}, items: ${cart.items?.length || 0})` : 'null');
 
             // Check if cart is valid and active
@@ -271,11 +319,14 @@ export function useCheckoutLogic() {
                 }
 
                 // Clear the cart token in the store
-                const { setCartToken: clearToken } = useCartStore.getState();
+                const { setCartToken: clearToken, syncWithBackend } = useCartStore.getState();
                 clearToken('');
 
-                // Get a fresh cart (this will create a new guest cart if needed)
-                cart = await cartService.getCart();
+                // Sync with backend (this will create a new guest cart if needed)
+                await syncWithBackend({ force: true });
+
+                // Get the fresh cart from store
+                cart = useCartStore.getState().cart;
 
                 // Save the new cart token
                 if (cart?.cart_token) {
@@ -299,8 +350,11 @@ export function useCheckoutLogic() {
             console.log('[Checkout] Syncing local items to backend...');
             await syncLocalItemsToBackend();
 
-            // Refresh cart to get synced items
-            cart = await cartService.getCart();
+            // Get the updated cart from the store (syncLocalItemsToBackend already synced)
+            const syncedCart = useCartStore.getState().cart;
+            if (syncedCart) {
+                cart = syncedCart;
+            }
             console.log('[Checkout] Cart after sync:', cart ? `${cart.id} (active: ${cart.is_active}, items: ${cart.items?.length || 0})` : 'null');
             toast.success('Cart synced', { id: 'cart-sync' });
 
@@ -327,7 +381,7 @@ export function useCheckoutLogic() {
             const guestToken = !isAuthenticated ? (typeof window !== 'undefined' ? localStorage.getItem('guest_token') : null) : null;
 
             const order = await orderService.createOrderFromCart(
-                cart.id,
+                cart,
                 shippingAddress,
                 shippingAddress, // billing same as shipping
                 undefined, // notes
@@ -359,12 +413,22 @@ export function useCheckoutLogic() {
 
             toast.success(`Order #${orderNumber} placed successfully!`);
 
-            // Clear cart and redirect
-            clear();
+            // Clear cart locally and redirect
+            clearLocalOnly();
             router.push(`/orders/${orderId}`);
         } catch (error: any) {
             console.error('Checkout error:', error);
-            const errorMessage = error?.message || 'Failed to place order. Please try again.';
+            let errorMessage = error?.message || 'Failed to place order. Please try again.';
+
+            // Handle duplicate checkout attempts more gracefully
+            if (errorMessage.includes('no longer active') || errorMessage.includes('already been checked out')) {
+                errorMessage = 'This order has already been processed. Redirecting to your orders...';
+                // Redirect to orders page after a short delay
+                setTimeout(() => {
+                    router.push('/dashboard/orders');
+                }, 2000);
+            }
+
             toast.error(errorMessage);
         } finally {
             setIsPending(false);

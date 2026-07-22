@@ -12,6 +12,44 @@ from app.domains.shopping.services.order_service import OrderService
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
+
+# ============================================================================
+# Public Order Lookup (no authentication required)
+# ============================================================================
+
+@router.get("/public/{order_id_or_number}", response_model=ApiSuccessResponse[OrderResponse])
+async def get_public_order_details(
+    order_id_or_number: str,
+    guest_token: str = None,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get order details publicly without authentication.
+    Requires either:
+    - A valid order ID (UUID) or order number
+    - Optional guest_token for guest orders (provides additional validation)
+    """
+    service = OrderService(db)
+    order = await service.get_order(order_id_or_number)
+
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    # For guest orders, validate the guest_token if provided
+    if order.guest_token and guest_token != order.guest_token:
+        # Token mismatch - don't reveal that order exists
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    # If order has a guest_token set, require it for access
+    if order.guest_token and not guest_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="This order requires authentication or a valid guest token"
+        )
+
+    return success_response(order)
+
+
 @router.get("", response_model=ApiSuccessResponse[OrderListResponse])
 async def list_my_orders(
     current_user: Annotated[User, Depends(get_current_user)],

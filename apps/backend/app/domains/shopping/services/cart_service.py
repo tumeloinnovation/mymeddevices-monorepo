@@ -74,30 +74,46 @@ class CartService:
                     return cart
 
         # 4. Create new cart
-        cart = Cart(
-            user_id=user_id,
-            session_id=session_id or secrets.token_hex(16) if not user_id else None,
-            cart_token=secrets.token_urlsafe(32) if not user_id else None,
-            expires_at=datetime.now(timezone.utc) + timedelta(hours=48) if not user_id else None,
-            is_active=True,
-            cart_type="guest" if not user_id else "persistent"
-        )
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                cart = Cart(
+                    user_id=user_id,
+                    session_id=session_id or secrets.token_hex(16) if not user_id else None,
+                    cart_token=secrets.token_urlsafe(32) if not user_id else None,
+                    expires_at=datetime.now(timezone.utc) + timedelta(hours=48) if not user_id else None,
+                    is_active=True,
+                    cart_type="guest" if not user_id else "persistent"
+                )
 
-        self.db.add(cart)
-        await self.db.commit()
-        await self.db.refresh(cart)
-        return cart
+                self.db.add(cart)
+                await self.db.commit()
+                await self.db.refresh(cart)
+                return cart
+            except Exception as e:
+                # Handle potential unique constraint violations (very rare but possible)
+                if attempt < max_retries - 1 and "unique" in str(e).lower():
+                    await self.db.rollback()
+                    continue
+                raise
 
     async def get_by_id(self, cart_id: uuid.UUID) -> Optional[Cart]:
         """Get cart by ID with items loaded."""
-        stmt = select(Cart).where(
-            and_(
-                Cart.id == cart_id,
-                Cart.is_active == True
-            )
-        ).options(selectinload(Cart.items).selectinload(CartItem.product))
-        result = await self.db.execute(stmt)
-        return result.scalar_one_or_none()
+        try:
+            stmt = select(Cart).where(
+                and_(
+                    Cart.id == cart_id,
+                    Cart.is_active == True
+                )
+            ).options(selectinload(Cart.items).selectinload(CartItem.product))
+            result = await self.db.execute(stmt)
+            return result.scalar_one_or_none()
+        except Exception as e:
+            # Log error and return None instead of raising
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error fetching cart by ID {cart_id}: {str(e)}", exc_info=True)
+            return None
 
     async def add_item(
         self,

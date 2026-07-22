@@ -68,7 +68,7 @@ const OffersPage: React.FC = () => {
 
     if (selectedCategory !== "all") {
       filtered = filtered.filter((offer) =>
-        offer.tags.some((tag) => tag.slug === selectedCategory)
+        offer.tags.some((tag: any) => tag.slug === selectedCategory)
       );
     }
 

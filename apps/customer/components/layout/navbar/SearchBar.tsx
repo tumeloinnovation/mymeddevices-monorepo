@@ -144,7 +144,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ placeholder }) => {
                 >
                   <div className="relative w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
                     <Image
-                      src={item.images[0]?.src || "/placeholder-product.png"}
+                      src={item.images[0]?.src || (item.images[0] as any)?.url || "/logos/logo-portrait.png"}
                       alt={item.name}
                       fill
                       className="object-cover"

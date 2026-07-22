@@ -45,8 +45,9 @@ export const categoryService = {
       // Try dedicated endpoint first (if backend adds it)
       try {
         const response = await apiClient.get<any>('/catalog/categories');
-        if (response.data && Array.isArray(response.data)) {
-          return response.data;
+        const categoriesList = response?.data || response;
+        if (categoriesList && Array.isArray(categoriesList)) {
+          return categoriesList;
         }
       } catch {
         // Endpoint doesn't exist, fall back to extracting from products
@@ -98,10 +99,11 @@ export const categoryService = {
       // Try dedicated endpoint first
       try {
         const response = await apiClient.get<any>(`/catalog/categories/${slug}`);
-        if (response.data) {
+        const catData = response?.data || response;
+        if (catData && typeof catData === 'object') {
           return {
-            ...response.data,
-            products: response.data.products || [],
+            ...catData,
+            products: catData.products || [],
           };
         }
       } catch {

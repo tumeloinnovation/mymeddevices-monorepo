@@ -55,6 +55,7 @@ class CategoryTreeResponse(BaseModel):
     description: Optional[str] = None
     permalink: Optional[str] = None
     icon_url: Optional[str] = None
+    parent_id: Optional[uuid.UUID] = None
     sort_order: int
     is_active: bool
     children: List["CategoryTreeResponse"] = []

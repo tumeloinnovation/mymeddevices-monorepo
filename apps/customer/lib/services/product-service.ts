@@ -105,27 +105,27 @@ export const productService = {
       });
 
       // Handle different response formats
-      if (response.data && typeof response.data === 'object') {
-        // Backend returns { success: true, data: { items: [...], total, page, limit } }
-        if (response.data.items) {
-          return response.data;
-        }
-        // Backend returns { success: true, data: [...] }
-        if (Array.isArray(response.data.items)) {
+      if (response && typeof response === 'object') {
+        // Backend returns { products: [...], total, page, page_size }
+        if (response.products) {
           return {
-            items: response.data.items,
-            total: response.data.total || response.data.items.length,
-            page: response.data.page || 1,
-            limit: response.data.limit || 20,
+            items: response.products,
+            total: response.total || response.products.length,
+            page: response.page || 1,
+            limit: response.limit || response.page_size || 20,
           };
         }
-        // Backend returns { success: true, data: [...] }
-        if (Array.isArray(response.data)) {
+        // Backend returns { items: [...], total, page, limit }
+        if (response.items) {
+          return response;
+        }
+        // Backend returns array directly
+        if (Array.isArray(response)) {
           return {
-            items: response.data,
-            total: response.data.length,
+            items: response,
+            total: response.length,
             page: 1,
-            limit: response.data.length,
+            limit: response.length,
           };
         }
       }
@@ -152,13 +152,10 @@ export const productService = {
    */
   async getProduct(id: string): Promise<Product> {
     try {
-      const response = await apiClient.get<Product>(`/storefront/products/${id}`);
+      const response = await apiClient.get<any>(`/storefront/products/${id}`);
 
-      // Handle different response formats
+      // apiClient returns response body directly
       if (response && typeof response === 'object') {
-        if ('data' in response && typeof response.data === 'object') {
-          return response.data as Product;
-        }
         return response as Product;
       }
 
@@ -178,8 +175,8 @@ export const productService = {
       // Try to get by slug directly (storefront uses slugs)
       const response = await apiClient.get<any>(`/storefront/products/${slug}`);
 
-      if (response && response.data) {
-        return response.data;
+      if (response && typeof response === 'object') {
+        return response as Product;
       }
 
       throw new Error('Product not found');
@@ -272,12 +269,16 @@ export const productService = {
 
       const response = await apiClient.get<any>('/storefront/products', { params });
 
-      if (response.data?.items) {
-        return response.data.items;
+      if (response.products) {
+        return response.products;
       }
 
-      if (Array.isArray(response.data)) {
-        return response.data;
+      if (response.items) {
+        return response.items;
+      }
+
+      if (Array.isArray(response)) {
+        return response;
       }
 
       return [];
@@ -296,12 +297,16 @@ export const productService = {
         params: { limit, in_stock: true },
       });
 
-      if (response.data?.items) {
-        return response.data.items;
+      if (response.products) {
+        return response.products;
       }
 
-      if (Array.isArray(response.data)) {
-        return response.data;
+      if (response.items) {
+        return response.items;
+      }
+
+      if (Array.isArray(response)) {
+        return response;
       }
 
       return [];
@@ -320,12 +325,16 @@ export const productService = {
         params: { limit, sort: 'created_at:desc' },
       });
 
-      if (response.data?.items) {
-        return response.data.items;
+      if (response.products) {
+        return response.products;
       }
 
-      if (Array.isArray(response.data)) {
-        return response.data;
+      if (response.items) {
+        return response.items;
+      }
+
+      if (Array.isArray(response)) {
+        return response;
       }
 
       return [];
@@ -347,10 +356,12 @@ export const productService = {
 
       let products: Product[] = [];
 
-      if (response.data?.items) {
-        products = response.data.items;
-      } else if (Array.isArray(response.data)) {
-        products = response.data;
+      if (response.products) {
+        products = response.products;
+      } else if (response.items) {
+        products = response.items;
+      } else if (Array.isArray(response)) {
+        products = response;
       }
 
       // Filter products with compare_at_price (indicating discount)

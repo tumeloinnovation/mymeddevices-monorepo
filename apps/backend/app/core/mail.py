@@ -38,8 +38,8 @@ def _send_smtp_sync(to_email: str, subject: str, body: str, html_content: Option
             msg.attach(MIMEText(fallback_html, "html", "utf-8"))
 
         # Establish connection
-        # Use short timeout for localhost to avoid hanging development APIs if no mail server runs
-        timeout = 1.0 if settings.SMTP_HOST in ("localhost", "127.0.0.1") else 10.0
+        # Use reasonable timeout for localhost - Mailpit needs more than 1 second
+        timeout = 5.0 if settings.SMTP_HOST in ("localhost", "127.0.0.1") else 10.0
         if settings.SMTP_USE_SSL:
             server = smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=timeout)
         else:

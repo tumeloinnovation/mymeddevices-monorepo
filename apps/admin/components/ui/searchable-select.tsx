@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronDown, Loader2, Search, X } from "lucide-react"
+import { Check, ChevronDown, Loader2, Search, X, Plus } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -38,6 +38,11 @@ interface SearchableSelectProps {
   loading?: boolean
   groupLabel?: string
   renderValue?: (selectedOption: SearchableSelectOption | undefined) => React.ReactNode
+  // Inline creation props
+  allowCreate?: boolean
+  onCreateOption?: (name: string) => Promise<string> // Returns the new ID
+  createLoading?: boolean
+  createError?: string
 }
 
 export function SearchableSelect({
@@ -52,9 +57,15 @@ export function SearchableSelect({
   loading = false,
   groupLabel,
   renderValue,
+  allowCreate = false,
+  onCreateOption,
+  createLoading = false,
+  createError,
 }: SearchableSelectProps) {
   const [open, setOpen] = React.useState(false)
   const [searchValue, setSearchValue] = React.useState("")
+  const [internalCreateLoading, setInternalCreateLoading] = React.useState(false)
+  const [internalCreateError, setInternalCreateError] = React.useState<string | null>(null)
 
   const selectedOption = React.useMemo(
     () => options.find((option) => option.value === value),
@@ -68,6 +79,19 @@ export function SearchableSelect({
     )
   }, [options, searchValue])
 
+  // Determine if we should show create option
+  const showCreateOption = React.useMemo(() => {
+    if (!allowCreate || !searchValue || !onCreateOption) return false
+    // Check if search matches any existing option (case-insensitive)
+    const exactMatch = options.some(
+      (option) => option.label.toLowerCase() === searchValue.toLowerCase()
+    )
+    return !exactMatch && searchValue.trim().length > 0
+  }, [allowCreate, searchValue, options, onCreateOption])
+
+  const effectiveCreateLoading = createLoading || internalCreateLoading
+  const effectiveCreateError = createError || internalCreateError
+
   const handleSelect = (selectedValue: string) => {
     const option = options.find((opt) => opt.value === selectedValue)
     if (option && !option.disabled) {
@@ -77,10 +101,29 @@ export function SearchableSelect({
     }
   }
 
+  const handleCreateOption = async () => {
+    if (!onCreateOption || !searchValue) return
+
+    setInternalCreateLoading(true)
+    setInternalCreateError(null)
+
+    try {
+      const newId = await onCreateOption(searchValue)
+      onChange?.(newId)
+      setOpen(false)
+      setSearchValue("")
+    } catch (error) {
+      setInternalCreateError(error instanceof Error ? error.message : "Failed to create option")
+    } finally {
+      setInternalCreateLoading(false)
+    }
+  }
+
   const handleClear = (e: React.MouseEvent) => {
     e.stopPropagation()
     onChange?.("")
     setSearchValue("")
+    setInternalCreateError(null)
   }
 
   return (
@@ -90,7 +133,7 @@ export function SearchableSelect({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          disabled={disabled || loading}
+          disabled={disabled || loading || effectiveCreateLoading}
           className={cn(
             "w-full justify-between text-left font-normal h-11 px-3 py-2",
             !value && "text-muted-foreground",
@@ -98,7 +141,7 @@ export function SearchableSelect({
           )}
         >
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            {loading ? (
+            {loading || effectiveCreateLoading ? (
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
             ) : renderValue ? (
               <>{renderValue(selectedOption)}</>
@@ -116,7 +159,7 @@ export function SearchableSelect({
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            {value && !disabled && !loading && (
+            {value && !disabled && !loading && !effectiveCreateLoading && (
               <X
                 className="h-4 w-4 text-muted-foreground hover:text-foreground cursor-pointer"
                 onClick={handleClear}
@@ -139,19 +182,52 @@ export function SearchableSelect({
             <CommandInput
               placeholder={searchPlaceholder}
               value={searchValue}
-              onValueChange={setSearchValue}
+              onValueChange={(value) => {
+                setSearchValue(value)
+                setInternalCreateError(null)
+              }}
               className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-hidden placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50 border-0 focus:ring-0"
             />
             {searchValue && (
               <X
                 className="h-4 w-4 text-muted-foreground cursor-pointer shrink-0"
-                onClick={() => setSearchValue("")}
+                onClick={() => {
+                  setSearchValue("")
+                  setInternalCreateError(null)
+                }}
               />
             )}
           </div>
           <CommandList className="max-h-[200px] overflow-y-auto">
-            <CommandEmpty>{emptyMessage}</CommandEmpty>
-            {groupLabel ? (
+            {showCreateOption && (
+              <CommandGroup>
+                <CommandItem
+                  value="__create__"
+                  onSelect={handleCreateOption}
+                  disabled={effectiveCreateLoading}
+                  className="cursor-pointer bg-primary/5 hover:bg-primary/10"
+                >
+                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                    {effectiveCreateLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin shrink-0 text-primary" />
+                    ) : (
+                      <Plus className="h-4 w-4 shrink-0 text-primary" />
+                    )}
+                    <span className="truncate">
+                      Create &quot;{searchValue}&quot;
+                    </span>
+                  </div>
+                </CommandItem>
+              </CommandGroup>
+            )}
+            {effectiveCreateError && (
+              <div className="px-3 py-2 text-sm text-destructive">
+                {effectiveCreateError}
+              </div>
+            )}
+            {filteredOptions.length === 0 && !showCreateOption ? (
+              <CommandEmpty>{emptyMessage}</CommandEmpty>
+            ) : groupLabel ? (
               <CommandGroup heading={groupLabel}>
                 {filteredOptions.map((option) => (
                   <CommandItem

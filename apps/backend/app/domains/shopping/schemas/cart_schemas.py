@@ -26,7 +26,7 @@ class CartProductResponse(BaseModel):
     id: uuid.UUID
     sku: Optional[str] = None
     name: str
-    price: Optional[int] = None
+    price: Optional[float] = None
     images: List[ProductImageResponse] = []
     stock_quantity: int
 
@@ -40,7 +40,7 @@ class CartItemResponse(BaseModel):
     cart_id: uuid.UUID
     product_id: uuid.UUID
     quantity: int
-    unit_price: Optional[int] = None
+    unit_price: Optional[float] = None
     notes: Optional[str] = None
     substitution_allowed: bool
     product: CartProductResponse

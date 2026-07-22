@@ -71,7 +71,6 @@ class ProductCreate(BaseModel):
     # Medical device specifics
     brand: Optional[str] = Field(None, max_length=255)
     model_number: Optional[str] = Field(None, max_length=255)
-    manufacturer: Optional[str] = Field(None, max_length=255)
     specifications: Optional[dict] = None
     certifications: Optional[list] = None
     kmpdb_registration_number: Optional[str] = Field(None, max_length=255)
@@ -116,7 +115,6 @@ class ProductUpdate(BaseModel):
     # Medical device specifics
     brand: Optional[str] = Field(None, max_length=255)
     model_number: Optional[str] = Field(None, max_length=255)
-    manufacturer: Optional[str] = Field(None, max_length=255)
     specifications: Optional[dict] = None
     certifications: Optional[list] = None
     kmpdb_registration_number: Optional[str] = Field(None, max_length=255)
@@ -181,7 +179,6 @@ class ProductResponse(BaseModel):
     # Medical device specifics
     brand: Optional[str] = None
     model_number: Optional[str] = None
-    manufacturer: Optional[str] = None
     specifications: Optional[dict] = None
     certifications: Optional[list] = None
     kmpdb_registration_number: Optional[str] = None
@@ -254,7 +251,6 @@ class StorefrontProductResponse(BaseModel):
     # Medical device specifics
     brand: Optional[str] = None
     model_number: Optional[str] = None
-    manufacturer: Optional[str] = None
     specifications: Optional[dict] = None
     certifications: Optional[list] = None
     kmpdb_registration_number: Optional[str] = None

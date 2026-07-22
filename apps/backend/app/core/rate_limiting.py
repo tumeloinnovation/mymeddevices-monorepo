@@ -35,6 +35,7 @@ class RateLimiter:
             "otp": (10, 300),  # 10 OTP requests per 5 minutes
             "password_reset": (10, 300),  # 10 password resets per 5 minutes
             "guest_login": (10, 3600),  # 10 guest logins per hour
+            "products_get": (60, 60),  # 60 product GET requests per minute
         }
         self._limits = self._default_limits.copy()
         self._last_refresh = 0

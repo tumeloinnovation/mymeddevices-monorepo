@@ -62,8 +62,7 @@ class TypesenseProductDTO:
             
         self.brand = doc.get("brand")
         self.model_number = doc.get("model_number")
-        self.manufacturer = doc.get("manufacturer")
-        
+
         specs = doc.get("specifications")
         if specs and isinstance(specs, str):
             try:
@@ -177,7 +176,6 @@ class TypesenseClient:
                 {"name": "category_slug", "type": "string", "optional": True, "facet": True},
                 {"name": "brand", "type": "string", "optional": True, "facet": True},
                 {"name": "model_number", "type": "string", "optional": True},
-                {"name": "manufacturer", "type": "string", "optional": True, "facet": True},
                 {"name": "kmpdb_registration_number", "type": "string", "optional": True},
                 {"name": "ppb_classification", "type": "string", "optional": True, "facet": True},
                 {"name": "ce_marking_or_fda_clearance", "type": "string", "optional": True},
@@ -244,7 +242,6 @@ class TypesenseClient:
             "category_slug": product.category.slug if product.category else "",
             "brand": product.brand or "",
             "model_number": product.model_number or "",
-            "manufacturer": product.manufacturer or "",
             "kmpdb_registration_number": product.kmpdb_registration_number or "",
             "ppb_classification": product.ppb_classification or "",
             "ce_marking_or_fda_clearance": product.ce_marking_or_fda_clearance or "",
@@ -298,7 +295,7 @@ class TypesenseClient:
             return [], 0
 
         # Construct filters
-        filter_parts = ["status:=published", "is_deleted:=false"]
+        filter_parts = ["status:=published", "is_verified:=true", "is_deleted:=false"]
         if category_id:
             filter_parts.append(f"category_id:={category_id}")
         if category_slug:

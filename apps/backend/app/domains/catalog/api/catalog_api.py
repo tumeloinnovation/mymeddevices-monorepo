@@ -15,6 +15,7 @@ from app.domains.vendor.models.vendor_profile import VendorProfile
 from app.domains.catalog.services.catalog_service import CatalogService
 from app.domains.catalog.services.ai_assist_service import AIAssistService
 from app.domains.catalog.config import settings as catalog_settings
+from app.core.rate_limiting import RateLimiterDependency
 from app.domains.catalog.schemas.product_schemas import (
     ProductCreate,
     ProductUpdate,
@@ -30,6 +31,7 @@ from app.domains.catalog.schemas.product_schemas import (
 )
 from app.domains.catalog.schemas.brand_schemas import (
     BrandCreate,
+    BrandQuickCreate,
     BrandUpdate,
     BrandResponse,
     BrandListResponse,
@@ -60,7 +62,7 @@ router = APIRouter(tags=["Catalog"])
 async def list_categories(db: AsyncSession = Depends(get_db)):
     """List category tree (Diagnostics -> BP monitors etc.)"""
     service = CatalogService(db)
-    categories = await service.get_categories(active_only=True)
+    categories = await service.get_categories(active_only=False)
     return categories
 
 
@@ -116,13 +118,19 @@ async def delete_category(
 @router.get("/brands", response_model=BrandListResponse, tags=["Brands"])
 async def list_brands(
     active_only: bool = Query(True, description="Filter to active brands only"),
+    approval_status: Optional[str] = Query(None, description="Filter by approval status (pending, approved, rejected)"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db)
 ):
     """List all brands with pagination."""
     service = CatalogService(db)
-    brands, total = await service.get_brands(active_only=active_only, page=page, page_size=page_size)
+    brands, total = await service.get_brands(
+        active_only=active_only,
+        approval_status=approval_status,
+        page=page,
+        page_size=page_size
+    )
     return {
         "brands": brands,
         "total": total,
@@ -185,6 +193,43 @@ async def delete_brand(
     service = CatalogService(db)
     try:
         await service.delete_brand(brand_id=brand_id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/brands/quick-create", response_model=BrandResponse, status_code=status.HTTP_201_CREATED, tags=["Brands"])
+async def quick_create_brand(
+    data: BrandQuickCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Quick-create a brand with minimal details (name only).
+    Creates brand as 'pending' and inactive until approved by admin.
+    Accessible to all authenticated users (vendors, admins).
+    """
+    service = CatalogService(db)
+    try:
+        brand = await service.create_pending_brand(name=data.name)
+        return brand
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.patch("/brands/{brand_id}/approve", response_model=BrandResponse, tags=["Brands"])
+async def approve_brand(
+    brand_id: str,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Admin approves a pending brand.
+    Sets approval_status to 'approved' and is_active to True.
+    """
+    service = CatalogService(db)
+    try:
+        brand = await service.approve_brand(brand_id=brand_id)
+        return brand
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
@@ -427,7 +472,7 @@ async def create_product(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
-@router.get("/products", response_model=ProductListResponse, tags=["Vendor Catalog"])
+@router.get("/products", response_model=ProductListResponse, tags=["Vendor Catalog"], dependencies=[Depends(RateLimiterDependency("products_get"))])
 async def list_products(
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     status_filter: Optional[str] = Query(None, description="Filter by status (draft, pending_review, published, archived)"),
@@ -458,7 +503,7 @@ async def list_products(
     }
 
 
-@router.get("/products/{id}", response_model=ProductResponse, tags=["Vendor Catalog"])
+@router.get("/products/{id}", response_model=ProductResponse, tags=["Vendor Catalog"], dependencies=[Depends(RateLimiterDependency("products_get"))])
 async def get_product(
     id: str,
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
@@ -507,6 +552,8 @@ async def delete_product(
         vendor_id = str(vendor_profile.id) if vendor_profile else None
         await service.delete_product(vendor_id=vendor_id, product_id=id)
     except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -643,7 +690,11 @@ async def get_ai_suggestions(
     vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db)
 ):
-    """Trigger AI assistance to generate fields using Google Gemini."""
+    """
+    Trigger AI assistance to generate fields using Google Gemini.
+    Accepts fields_to_generate list to control which fields to generate.
+    Supports: description, short_description, specifications, tags, meta_title, meta_description
+    """
     catalog_service = CatalogService(db)
     try:
         vendor_id = str(vendor_profile.id) if vendor_profile else None
@@ -663,6 +714,60 @@ async def get_ai_suggestions(
             fields_to_generate=data.fields_to_generate
         )
         return suggestions_res
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
+
+@router.post("/ai/generate-descriptions", response_model=AIAssistResponse, tags=["Vendor Catalog"])
+async def generate_product_descriptions(
+    data: AIDescriptionRequest,
+    current_user: Annotated[User, Depends(get_current_user)]
+):
+    """
+    Generate AI-powered product descriptions from name and brand (before product creation).
+    Useful for pre-creation preview to help users see what content would be generated.
+    """
+    ai_service = AIAssistService()
+    try:
+        result = await ai_service.generate_descriptions_from_name_brand(
+            product_name=data.product_name,
+            brand=data.brand,
+            category=data.category
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate descriptions: {str(e)}"
+        )
+
+
+@router.post("/products/{id}/ai-validate", tags=["Vendor Catalog"])
+async def ai_validate_product(
+    id: str,
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Run AI-powered validation on a product listing.
+    Validates against medical device taxonomy, clinical accuracy, and regulatory compliance standards.
+    """
+    catalog_service = CatalogService(db)
+    try:
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
+        product = await catalog_service.get_product(vendor_id=vendor_id, product_id=id)
+
+        # Load category if any for additional context
+        category = None
+        if product.category_id:
+            category_stmt = select(Category).where(Category.id == product.category_id)
+            category_res = await db.execute(category_stmt)
+            category = category_res.scalar_one_or_none()
+
+        ai_service = AIAssistService()
+        validation_result = await ai_service.ai_validate_product(product=product, category=category)
+
+        return validation_result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 

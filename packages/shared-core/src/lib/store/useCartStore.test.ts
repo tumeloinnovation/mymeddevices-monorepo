@@ -83,7 +83,7 @@ describe('useCartStore', () => {
       })
 
       expect(result.current.items).toHaveLength(1)
-      expect(result.current.items[0]).toEqual({ ...mockProduct, quantity: 1 })
+      expect(result.current.items[0]).toEqual({ ...mockProduct, id: '1', quantity: 1 })
       expect(result.current.getCount()).toBe(1)
       expect(result.current.getTotal()).toBe(100)
     })
@@ -241,6 +241,99 @@ describe('useCartStore', () => {
 
       expect(newResult.current.items).toHaveLength(1)
       expect(newResult.current.items[0].quantity).toBe(2)
+    })
+  })
+
+  describe('rollback functionality', () => {
+    it('should create snapshot of current state', () => {
+      const { result } = renderHook(() => useCartStore())
+
+      act(() => {
+        result.current.addItem(mockProduct, 2)
+        result.current.createSnapshot()
+        result.current.addItem(mockProduct, 3) // This would make quantity 5
+        result.current.rollback()
+      })
+
+      expect(result.current.items).toHaveLength(1)
+      expect(result.current.items[0].quantity).toBe(2)
+    })
+
+    it('should clear snapshot', () => {
+      const { result } = renderHook(() => useCartStore())
+
+      act(() => {
+        result.current.addItem(mockProduct, 2)
+        result.current.createSnapshot()
+        result.current.clearSnapshot()
+        result.current.addItem(mockProduct, 3)
+        result.current.rollback()
+      })
+
+      // Rollback should do nothing since snapshot was cleared
+      expect(result.current.items[0].quantity).toBe(5)
+    })
+  })
+
+  describe('cart token management', () => {
+    it('should set cart token', () => {
+      const { result } = renderHook(() => useCartStore())
+
+      act(() => {
+        result.current.setCartToken('test-token-123')
+      })
+
+      expect(result.current.cartToken).toBe('test-token-123')
+    })
+
+    it('should clear cart token', () => {
+      const { result } = renderHook(() => useCartStore())
+
+      act(() => {
+        result.current.setCartToken('test-token-123')
+        result.current.clearCartToken()
+      })
+
+      expect(result.current.cartToken).toBe(null)
+    })
+  })
+
+  describe('syncWithBackend', () => {
+    it('should have syncWithBackend method', () => {
+      const { result } = renderHook(() => useCartStore())
+
+      expect(typeof result.current.syncWithBackend).toBe('function')
+    })
+
+    it('should set syncRequested flag when deferring due to pending ops', () => {
+      const { result } = renderHook(() => useCartStore())
+
+      act(() => {
+        result.current.pendingOps.add('add:item-1')
+        result.current.syncWithBackend({ force: false })
+      })
+
+      // When pending ops exist, sync should be deferred
+      expect(result.current.syncRequested).toBe(true)
+    })
+
+    // Note: Full syncWithBackend integration tests are in apps/customer/e2e/
+    // These tests require actual API mocking which is better suited for E2E tests
+  })
+
+  describe('concurrent operations', () => {
+    it('should handle multiple addItem calls', async () => {
+      const { result } = renderHook(() => useCartStore())
+
+      // Add multiple items rapidly
+      await act(async () => {
+        result.current.addItem(mockProduct, 1)
+        result.current.addItem(mockProduct, 1)
+        result.current.addItem(mockProduct, 1)
+      })
+
+      // Should handle gracefully
+      expect(result.current.items.length).toBeGreaterThan(0)
     })
   })
 })

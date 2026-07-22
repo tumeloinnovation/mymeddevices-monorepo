@@ -24,7 +24,7 @@ const rowVariants = {
 const ItemRow: React.FC<{ item: any; onRemove: (id: string | number) => void }> = ({ item, onRemove }) => {
   const id = item?.id ?? item?.sku ?? item?.slug;
   const name = item?.name ?? String(id ?? "");
-  const image = item?.image ?? (item?.images ? (Array.isArray(item.images) ? (item.images[0]?.src ?? item.images[0]) : undefined) : undefined);
+  const image = item?.image ?? (item?.images ? (Array.isArray(item.images) ? (item.images[0]?.src ?? item.images[0]?.url ?? item.images[0]) : undefined) : undefined);
   const price = Number(item?.price ?? item?.regular_price ?? 0);
   return (
     <motion.div

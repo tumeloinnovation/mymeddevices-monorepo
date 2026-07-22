@@ -15,7 +15,7 @@ from app.domains.shopping.models.coupon import (
     CouponProduct
 )
 from app.domains.shopping.models.cart_discount import CartDiscount
-from app.domains.shopping.models.cart import Cart
+from app.domains.shopping.models.cart import Cart, CartItem
 
 
 class CouponService:
@@ -108,7 +108,11 @@ class CouponService:
         """Get coupon by ID."""
         stmt = select(Coupon).where(Coupon.id == coupon_id)
         if include_restrictions:
-            stmt = stmt.options(selectinload(Coupon.restrictions))
+            stmt = stmt.options(
+                selectinload(Coupon.restrictions),
+                selectinload(Coupon.categories),
+                selectinload(Coupon.products)
+            )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -118,7 +122,11 @@ class CouponService:
             func.lower(Coupon.code) == code.lower()
         )
         if include_restrictions:
-            stmt = stmt.options(selectinload(Coupon.restrictions))
+            stmt = stmt.options(
+                selectinload(Coupon.restrictions),
+                selectinload(Coupon.categories),
+                selectinload(Coupon.products)
+            )
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -132,11 +140,33 @@ class CouponService:
         if not coupon:
             return None
 
+        # Extract category_ids and product_ids if provided
+        category_ids = updates.pop("category_ids", None)
+        product_ids = updates.pop("product_ids", None)
+
         for key, value in updates.items():
             if hasattr(coupon, key):
                 setattr(coupon, key, value)
             elif coupon.restrictions and hasattr(coupon.restrictions, key):
                 setattr(coupon.restrictions, key, value)
+
+        # Update categories if provided
+        if category_ids is not None:
+            await self.db.execute(
+                delete(CouponCategory).where(CouponCategory.coupon_id == coupon.id)
+            )
+            for category in category_ids:
+                cat = CouponCategory(coupon_id=coupon.id, category=category)
+                self.db.add(cat)
+
+        # Update products if provided
+        if product_ids is not None:
+            await self.db.execute(
+                delete(CouponProduct).where(CouponProduct.coupon_id == coupon.id)
+            )
+            for product_id in product_ids:
+                prod = CouponProduct(coupon_id=coupon.id, product_id=product_id)
+                self.db.add(prod)
 
         await self.db.commit()
         await self.db.refresh(coupon)
@@ -251,6 +281,36 @@ class CouponService:
                 has_purchased = await self._has_user_purchased_before(user_id)
                 if has_purchased:
                     return False, None, "Coupon is valid for first purchase only"
+
+        # Check category/product scope restrictions if cart_id is provided
+        if cart_id and coupon.discount_scope in ("specific_categories", "specific_products"):
+            stmt = select(Cart).where(Cart.id == cart_id).options(
+                selectinload(Cart.items).selectinload(CartItem.product)
+            )
+            result = await self.db.execute(stmt)
+            cart = result.scalar_one_or_none()
+            if not cart or not cart.items:
+                return False, None, "Cart is empty"
+
+            has_matching_item = False
+            if coupon.discount_scope == "specific_categories":
+                allowed_categories = {c.category for c in coupon.categories}
+                for item in cart.items:
+                    if item.product and item.product.category_id:
+                        if str(item.product.category_id) in allowed_categories:
+                            has_matching_item = True
+                            break
+                if not has_matching_item:
+                    return False, None, "Coupon does not apply to any items in your cart (categories don't match)"
+            
+            elif coupon.discount_scope == "specific_products":
+                allowed_products = {p.product_id for p in coupon.products}
+                for item in cart.items:
+                    if item.product_id in allowed_products:
+                        has_matching_item = True
+                        break
+                if not has_matching_item:
+                    return False, None, "Coupon does not apply to any items in your cart (products don't match)"
 
         # Check if already applied to cart (if cart_id provided)
         if cart_id:

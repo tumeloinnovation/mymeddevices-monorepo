@@ -14,11 +14,10 @@ export default function FeaturedNewArrivalsSection({
   title,
   description
 }: FeaturedNewArrivalsSectionProps) {
-  const products = useProducts({ 
-    featured: type === 'featured', 
+  const products = useProducts({
+    featured: type === 'featured',
     orderby: type === 'new-arrivals' ? 'date' : undefined,
-    order: type === 'new-arrivals' ? 'desc' : undefined,
-    per_page: 10 
+    per_page: 10
   });
 
   const defaultTitle = type === 'featured' ? 'Featured Products' : 'New Arrivals';

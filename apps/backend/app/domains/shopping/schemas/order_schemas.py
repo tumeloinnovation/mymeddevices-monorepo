@@ -3,6 +3,16 @@ from typing import List, Optional, Any, Union
 from datetime import datetime
 import uuid
 
+class ProductMinResponse(BaseModel):
+    """Minimal product response for order items."""
+    id: uuid.UUID
+    sku: Optional[str] = None
+    name: str
+    image_url: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class OrderItemBase(BaseModel):
     product_id: uuid.UUID
     vendor_id: uuid.UUID
@@ -27,6 +37,7 @@ class OrderItemResponse(OrderItemBase):
     tracking_number: Optional[str] = None
     tracking_url: Optional[str] = None
     total_price: int
+    product: Optional[ProductMinResponse] = None
 
     @field_validator("total_price", mode="before")
     @classmethod

@@ -1,12 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   flexRender,
   getCoreRowModel,
   useReactTable,
   createColumnHelper,
+  getSortedRowModel,
+  SortingState,
 } from "@tanstack/react-table";
 import {
   Package,
@@ -20,11 +23,15 @@ import {
   Building2,
   FileEdit,
   Clock,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
   MoreVertical,
 } from "lucide-react";
 import { Product, ProductStatus } from "@mymeddevices/shared-core";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -32,7 +39,6 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Checkbox } from "@/components/ui/checkbox";
 
 const STATUS_CONFIG: Record<
   ProductStatus,
@@ -95,6 +101,9 @@ interface ProductsTableProps {
   onPageChange: (page: number) => void;
   onQuickAction: (id: string, action: "verify" | "publish" | "archive" | "unarchive" | "reject") => void;
   onDelete: (product: Product) => void;
+  onBulkAction?: (ids: string[], action: "verify" | "publish" | "archive" | "unarchive" | "delete") => void;
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
 }
 
 export function ProductsTable({
@@ -107,15 +116,61 @@ export function ProductsTable({
   onPageChange,
   onQuickAction,
   onDelete,
+  onBulkAction,
+  hasActiveFilters,
+  onClearFilters,
 }: ProductsTableProps) {
+  const router = useRouter();
+  const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
+  const [sorting, setSorting] = useState<SortingState>([]);
+
   const columns = useMemo(
     () => [
+      columnHelper.display({
+        id: "select",
+        header: ({ table }) => (
+          <div className="flex items-center justify-center pl-2">
+            <Checkbox
+              checked={
+                table.getIsAllRowsSelected() ||
+                (table.getIsSomeRowsSelected() && "indeterminate")
+              }
+              onCheckedChange={(value) => table.toggleAllRowsSelected(!!value)}
+              aria-label="Select all"
+              className="border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+          </div>
+        ),
+        cell: ({ row }) => (
+          <div className="flex items-center justify-center pl-2">
+            <Checkbox
+              checked={row.getIsSelected()}
+              onCheckedChange={(value) => row.toggleSelected(!!value)}
+              aria-label="Select row"
+              className="border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+          </div>
+        ),
+        enableSorting: false,
+        enableHiding: false,
+      }),
       columnHelper.accessor((row) => row, {
         id: "product",
-        header: () => (
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        sortingFn: (rowA, rowB) => rowA.original.name.localeCompare(rowB.original.name),
+        header: ({ column }) => (
+          <button
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="flex items-center gap-1 hover:text-foreground text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors group cursor-pointer"
+          >
             Product Details
-          </span>
+            {column.getIsSorted() === "asc" ? (
+              <ArrowUp className="h-3 w-3 text-primary" />
+            ) : column.getIsSorted() === "desc" ? (
+              <ArrowDown className="h-3 w-3 text-primary" />
+            ) : (
+              <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50" />
+            )}
+          </button>
         ),
         cell: ({ getValue }) => {
           const product = getValue();
@@ -164,10 +219,20 @@ export function ProductsTable({
       }),
       columnHelper.accessor("category_name", {
         id: "category",
-        header: () => (
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        header: ({ column }) => (
+          <button
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="flex items-center gap-1 hover:text-foreground text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors group cursor-pointer"
+          >
             Category
-          </span>
+            {column.getIsSorted() === "asc" ? (
+              <ArrowUp className="h-3 w-3 text-primary" />
+            ) : column.getIsSorted() === "desc" ? (
+              <ArrowDown className="h-3 w-3 text-primary" />
+            ) : (
+              <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50" />
+            )}
+          </button>
         ),
         cell: ({ getValue }) => (
           <span className="text-xs text-muted-foreground">
@@ -177,10 +242,20 @@ export function ProductsTable({
       }),
       columnHelper.accessor("stock_quantity", {
         id: "stock",
-        header: () => (
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+        header: ({ column }) => (
+          <button
+            onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+            className="flex items-center gap-1 hover:text-foreground text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors group cursor-pointer"
+          >
             Stock
-          </span>
+            {column.getIsSorted() === "asc" ? (
+              <ArrowUp className="h-3 w-3 text-primary" />
+            ) : column.getIsSorted() === "desc" ? (
+              <ArrowDown className="h-3 w-3 text-primary" />
+            ) : (
+              <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50" />
+            )}
+          </button>
         ),
         cell: ({ row }) => {
           const qty = row.original.stock_quantity;
@@ -213,15 +288,27 @@ export function ProductsTable({
       }),
       columnHelper.accessor("price", {
         id: "price",
-        header: () => (
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-right">
-            Price (KES)
-          </span>
+        header: ({ column }) => (
+          <div className="flex justify-end w-full">
+            <button
+              onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+              className="flex items-center gap-1 hover:text-foreground text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors group cursor-pointer"
+            >
+              Price (KES)
+              {column.getIsSorted() === "asc" ? (
+                <ArrowUp className="h-3 w-3 text-primary" />
+              ) : column.getIsSorted() === "desc" ? (
+                <ArrowDown className="h-3 w-3 text-primary" />
+              ) : (
+                <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50" />
+              )}
+            </button>
+          </div>
         ),
         cell: ({ row }) => {
           const price = row.original.price || 0;
           return (
-            <span className="text-sm font-medium tabular-nums text-foreground">
+            <span className="text-sm font-medium tabular-nums text-foreground text-right block w-full">
               {formatCurrency(price, "KES")}
             </span>
           );
@@ -229,10 +316,22 @@ export function ProductsTable({
       }),
       columnHelper.accessor("status", {
         id: "status",
-        header: () => (
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground text-center">
-            Status
-          </span>
+        header: ({ column }) => (
+          <div className="flex justify-center w-full">
+            <button
+              onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+              className="flex items-center gap-1 hover:text-foreground text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors group cursor-pointer"
+            >
+              Status
+              {column.getIsSorted() === "asc" ? (
+                <ArrowUp className="h-3 w-3 text-primary" />
+              ) : column.getIsSorted() === "desc" ? (
+                <ArrowDown className="h-3 w-3 text-primary" />
+              ) : (
+                <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground/50" />
+              )}
+            </button>
+          </div>
         ),
         cell: ({ getValue }) => (
           <div className="flex justify-center">
@@ -269,46 +368,166 @@ export function ProductsTable({
   const table = useReactTable({
     data: products,
     columns,
+    state: {
+      rowSelection,
+      sorting,
+    },
+    onRowSelectionChange: setRowSelection,
+    onSortingChange: setSorting,
     getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
     manualPagination: true,
     pageCount: Math.ceil(total / pageSize),
+    getRowId: (row) => row.id,
   });
+
+  const selectedRows = table.getSelectedRowModel().rows;
+  const selectedCount = selectedRows.length;
+
+  const canSubmit = selectedRows.some((r) => r.original.status === "draft");
+  const canPublish = selectedRows.some((r) => r.original.status === "pending_review");
+  const canArchive = selectedRows.some((r) => r.original.status === "published");
+  const canUnarchive = selectedRows.some((r) => r.original.status === "archived");
+  const canDelete = selectedRows.length > 0 && selectedRows.every((r) => r.original.status === "draft");
+
+  const handleBulkActionClick = (action: "verify" | "publish" | "archive" | "unarchive" | "delete") => {
+    const ids = selectedRows.map((r) => r.original.id);
+    if (ids.length === 0 || !onBulkAction) return;
+
+    onBulkAction(ids, action);
+    table.toggleAllRowsSelected(false);
+  };
+
+  const handleRowKeyDown = (
+    e: React.KeyboardEvent<HTMLTableRowElement>,
+    product: Product,
+    index: number
+  ) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      if (e.key === " ") {
+        table.getRow(product.id).toggleSelected();
+      } else {
+        router.push(`/dashboard/catalog/products/${product.id}`);
+      }
+    } else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const nextRow = e.currentTarget.nextElementSibling as HTMLTableRowElement | null;
+      if (nextRow) nextRow.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prevRow = e.currentTarget.previousElementSibling as HTMLTableRowElement | null;
+      if (prevRow) prevRow.focus();
+    } else if (e.key === "e") {
+      e.preventDefault();
+      router.push(`/dashboard/catalog/products/${product.id}`);
+    } else if (e.key === "Delete" || e.key === "Backspace") {
+      e.preventDefault();
+      onDelete(product);
+    }
+  };
 
   if (isLoading && products.length === 0) {
     return (
-      <div className="border rounded-lg overflow-hidden">
-        <div className="h-[34px] bg-muted/30 border-b" />
-        {Array.from({ length: 10 }).map((_, i) => (
-          <div
-            key={i}
-            className="h-[36px] border-b last:border-0 animate-pulse bg-muted/20"
-          />
-        ))}
+      <div className="border rounded-lg overflow-hidden bg-card border-border">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="h-[34px] bg-muted/30 border-b">
+                <th className="w-10 px-4">
+                  <Skeleton className="h-4 w-4 rounded" />
+                </th>
+                <th className="px-4 text-left">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Product Details</span>
+                </th>
+                <th className="px-4 text-left">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Category</span>
+                </th>
+                <th className="px-4 text-left">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Stock</span>
+                </th>
+                <th className="px-4 text-right">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Price (KES)</span>
+                </th>
+                <th className="px-4 text-center">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</span>
+                </th>
+                <th className="w-12 px-4"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {Array.from({ length: 8 }).map((_, i) => (
+                <tr key={i} className="h-[36px] border-b last:border-0 hover:bg-muted/30">
+                  <td className="px-4 text-center">
+                    <Skeleton className="h-4 w-4 rounded mx-auto" />
+                  </td>
+                  <td className="px-4">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-8 w-8 rounded flex-shrink-0" />
+                      <div className="flex flex-col gap-1 w-full max-w-[180px]">
+                        <Skeleton className="h-3 w-[80%] rounded" />
+                        <Skeleton className="h-2 w-[40%] rounded" />
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4">
+                    <Skeleton className="h-3.5 w-16 rounded" />
+                  </td>
+                  <td className="px-4">
+                    <Skeleton className="h-3.5 w-12 rounded" />
+                  </td>
+                  <td className="px-4 text-right">
+                    <Skeleton className="h-3.5 w-20 rounded ml-auto" />
+                  </td>
+                  <td className="px-4 text-center">
+                    <Skeleton className="h-4.5 w-16 rounded-full mx-auto" />
+                  </td>
+                  <td className="px-4 text-center">
+                    <Skeleton className="h-5 w-5 rounded mx-auto" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     );
   }
 
   if (products.length === 0) {
     return (
-      <div className="border rounded-lg p-12 text-center">
-        <div className="h-16 w-16 rounded-full bg-muted/30 flex items-center justify-center mb-4 mx-auto">
-          <Package className="h-8 w-8 text-muted-foreground/30" />
+      <div className="border rounded-lg p-12 text-center bg-card border-border flex flex-col items-center justify-center">
+        <div className="h-12 w-12 rounded-xl bg-muted/30 flex items-center justify-center mb-4 text-muted-foreground">
+          <Package className="h-6 w-6" />
         </div>
-        <h3 className="text-sm font-medium text-foreground mb-1">No products found</h3>
-        <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-          Try adjusting your filters or search query.
+        <h3 className="text-sm font-semibold text-foreground mb-1">No products found</h3>
+        <p className="text-xs text-muted-foreground max-w-sm mb-4">
+          {hasActiveFilters
+            ? "Your search or filter criteria did not match any products in the catalog."
+            : "There are currently no products in the catalog. Click the button below to add your first product."}
         </p>
+        {hasActiveFilters && onClearFilters ? (
+          <Button variant="outline" size="sm" onClick={onClearFilters} className="h-8 text-xs">
+            Clear all filters
+          </Button>
+        ) : (
+          <Button size="sm" asChild className="h-8 text-xs">
+            <Link href="/dashboard/catalog/products/new">
+              Add first product
+            </Link>
+          </Button>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="border rounded-lg overflow-hidden">
+    <div className="border rounded-lg overflow-hidden bg-card border-border relative">
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="h-[34px] bg-muted/30">
+              <tr key={headerGroup.id} className="h-[34px] bg-muted/30 border-b">
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
@@ -330,10 +549,12 @@ export function ProductsTable({
             ))}
           </thead>
           <tbody>
-            {table.getRowModel().rows.map((row) => (
+            {table.getRowModel().rows.map((row, index) => (
               <tr
                 key={row.id}
-                className="h-[36px] border-b last:border-0 hover:bg-muted/30 transition-colors"
+                tabIndex={0}
+                onKeyDown={(e) => handleRowKeyDown(e, row.original, index)}
+                className="h-[36px] border-b last:border-0 hover:bg-muted/10 focus:bg-muted/20 focus:outline-none focus-visible:ring-1 focus-visible:ring-primary focus-visible:ring-inset transition-colors cursor-pointer"
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
@@ -396,6 +617,84 @@ export function ProductsTable({
             >
               Next
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Bulk Actions Bar */}
+      {selectedCount > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card border border-border shadow-2xl rounded-xl px-4 py-2.5 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4 duration-200">
+          <div className="flex items-center gap-2 border-r pr-3 border-border">
+            <Checkbox
+              checked={true}
+              onCheckedChange={() => table.toggleAllRowsSelected(false)}
+              className="border-muted-foreground/30 data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+            <span className="text-xs font-semibold text-foreground">
+              {selectedCount} selected
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {canSubmit && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 border-success/30 text-success hover:bg-success/10"
+                onClick={() => handleBulkActionClick("verify")}
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                Submit review
+              </Button>
+            )}
+            
+            {canPublish && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 border-success/30 text-success hover:bg-success/10"
+                onClick={() => handleBulkActionClick("publish")}
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                Approve & Publish
+              </Button>
+            )}
+
+            {canArchive && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 border-border text-foreground hover:bg-muted"
+                onClick={() => handleBulkActionClick("archive")}
+              >
+                <Archive className="h-3 w-3" />
+                Archive
+              </Button>
+            )}
+
+            {canUnarchive && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs gap-1 border-border text-foreground hover:bg-muted"
+                onClick={() => handleBulkActionClick("unarchive")}
+              >
+                <Package className="h-3 w-3" />
+                Restore
+              </Button>
+            )}
+
+            {canDelete && (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="h-8 text-xs gap-1"
+                onClick={() => handleBulkActionClick("delete")}
+              >
+                <Trash2 className="h-3 w-3" />
+                Delete
+              </Button>
+            )}
           </div>
         </div>
       )}
@@ -478,11 +777,15 @@ function RowActions({
           </>
         )}
 
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-destructive" onClick={() => onDelete(product)}>
-          <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-          Delete
-        </DropdownMenuItem>
+        {product.status === "draft" && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-destructive" onClick={() => onDelete(product)}>
+              <Trash2 className="h-3.5 w-3.5 mr-1.5" />
+              Delete
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

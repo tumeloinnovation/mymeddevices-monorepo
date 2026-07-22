@@ -13,8 +13,10 @@ import {
   AIAssistRequest,
   AIDescriptionRequest,
   AIAssistResponse,
+  AIValidationResponse,
   ProductCompleteness,
   Brand,
+  BrandQuickCreate,
   BrandCreate,
   BrandUpdate,
   BrandListResponse,
@@ -81,6 +83,10 @@ export const catalogService = {
 
   async getAiSuggestions(id: string, data: AIAssistRequest): Promise<AIAssistResponse> {
     return apiClient.post<AIAssistResponse>(`/catalog/products/${id}/ai-assist`, data);
+  },
+
+  async aiValidateProduct(id: string): Promise<AIValidationResponse> {
+    return apiClient.post<AIValidationResponse>(`/catalog/products/${id}/ai-validate`, {});
   },
 
   async generateDescriptions(data: AIDescriptionRequest): Promise<AIAssistResponse> {
@@ -150,6 +156,16 @@ export const catalogService = {
 
   async deleteBrand(id: string): Promise<void> {
     return apiClient.delete(`/catalog/brands/${id}`);
+  },
+
+  // Quick-create brand for inline creation during product creation
+  async createQuickBrand(data: BrandQuickCreate): Promise<Brand> {
+    return apiClient.post<Brand>('/catalog/brands/quick-create', data);
+  },
+
+  // Approve a pending brand (admin only)
+  async approveBrand(id: string): Promise<Brand> {
+    return apiClient.patch<Brand>(`/catalog/brands/${id}/approve`, {});
   },
 
   // Tags

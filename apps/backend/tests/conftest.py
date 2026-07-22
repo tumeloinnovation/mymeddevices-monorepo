@@ -11,13 +11,13 @@ from app.domains.vendor.models.vendor_profile import VendorProfile
 from app.core.security import get_password_hash, create_access_token
 from sqlalchemy import select
 
-DATABASE_URL = "postgresql+asyncpg://nickm@localhost:5432/mymeddevices_test"
+DATABASE_URL = "postgresql+asyncpg:///mymeddevices_test"
 
 @pytest.fixture(scope="session")
 async def engine():
     # ... (rest of engine fixture)
     import asyncpg
-    conn = await asyncpg.connect("postgresql://nickm@localhost:5432/postgres")
+    conn = await asyncpg.connect("postgresql:///postgres")
     try:
         # Terminate any active connections to the test DB
         await conn.execute(
@@ -51,9 +51,22 @@ async def db(engine) -> AsyncGenerator[AsyncSession, None]:
 @pytest.fixture
 async def client(db: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db] = lambda: db
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
+    
+    class PrefixedClient(AsyncClient):
+        async def request(self, method: str, url: any, *args: any, **kwargs: any) -> any:
+            url_str = str(url)
+            if url_str.startswith("/shopping") or url_str.startswith("/auth") or url_str.startswith("/payments"):
+                url = f"/api/v1{url_str}"
+            return await super().request(method, url, *args, **kwargs)
+            
+    async with PrefixedClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def async_client(client) -> AsyncClient:
+    return client
 
 
 @pytest.fixture(autouse=True)

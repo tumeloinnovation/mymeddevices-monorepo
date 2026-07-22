@@ -114,7 +114,6 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
     )
     brand: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # Legacy, kept for backward compatibility
     model_number: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    manufacturer: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     specifications: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)  # Flexible key-value specs
     certifications: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)  # [{type, number, expiry}]
     kmpdb_registration_number: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
@@ -175,3 +174,16 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
     def category_name(self) -> Optional[str]:
         """Get the category name from the relationship"""
         return self.category.name if self.category else None
+
+    @property
+    def image_url(self) -> Optional[str]:
+        """Get the primary image URL or first image URL if available."""
+        if self.images:
+            # Try to find the primary image first
+            for img in self.images:
+                if img.is_primary:
+                    return img.url
+            # Fall back to the first image (sort_order=0 is the hero image)
+            if self.images:
+                return self.images[0].url
+        return None

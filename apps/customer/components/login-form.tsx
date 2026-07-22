@@ -10,7 +10,6 @@ import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import useCartStore from "@/lib/store/useCartStore"
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -20,7 +19,6 @@ const loginSchema = z.object({
 
 export function LoginForm() {
   const { login, isLoading, error, getDashboardRoute } = useAuthStore()
-  const { mergeCart } = useCartStore()
   const router = useRouter()
   const {
     register,
@@ -33,13 +31,8 @@ export function LoginForm() {
   const onSubmit = async (data: z.infer<typeof loginSchema>) => {
     try {
       await login({ email: data.email, password: data.password, rememberMe: data.rememberMe })
-      
-      // Merge guest cart if it exists
-      try {
-        await mergeCart();
-      } catch (err) {
-        console.error("Failed to merge cart:", err);
-      }
+
+      // Note: Guest cart merge is handled by AuthCartSync component
 
       const searchParams = new URLSearchParams(window.location.search);
       const returnUrl = searchParams.get('returnUrl');

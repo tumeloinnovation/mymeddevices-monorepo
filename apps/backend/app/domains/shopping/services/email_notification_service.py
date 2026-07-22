@@ -88,25 +88,31 @@ class EmailNotificationService:
     async def send_otp(self, user_email: str, otp_code: str, purpose: str = "verification"):
         title = "Email Verification"
         lead_text = "Use the verification code below to verify your email address."
+        reset_url = None  # Default: no button
+
         if purpose == "reset_password":
             title = "Password Reset"
             lead_text = "Use the verification code below to reset your password."
+            # Generate clickable link with pre-filled code and email
+            from urllib.parse import urlencode
+            reset_url = f"{self.site_url}/reset-password?{urlencode({'token': otp_code, 'user_id': user_email})}"
         elif purpose == "login":
             title = "Login Verification"
             lead_text = "Use the verification code below to complete your login."
         elif purpose == "email_change":
             title = "Email Change Verification"
             lead_text = "Use the verification code below to verify your new email address."
-        
+
         html_content = email_templates.otp_html(
             code=otp_code,
             title=title,
             lead_text=lead_text,
             footer_note="If you have any issues, please contact our support team.",
-            expiry_minutes=15
+            expiry_minutes=15,
+            reset_url=reset_url
         )
         subject = f"Your Verification Code: {otp_code}"
         body = f"Your code is: {otp_code}"
-        
+
         await send_email(user_email, subject, body, html_content)
         logger.info(f"OTP email sent to {user_email}")

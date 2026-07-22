@@ -60,7 +60,7 @@ const STEPS = [
   { id: "pricing", label: "Pricing", icon: ShoppingCart, description: "Price and currency" },
   { id: "inventory", label: "Inventory & Physical", icon: Package, description: "Stock, SKU, weight" },
   { id: "gallery", label: "Product Gallery", icon: ImageIcon, description: "Manage images" },
-  { id: "ai", label: "AI Assist", icon: Sparkles, description: "Gemini AI content & tags" },
+  { id: "ai", label: "AI Assist", icon: Sparkles, description: "MedAI content & tags" },
   { id: "compliance", label: "Compliance & Certs", icon: ShieldCheck, description: "Regulatory details" },
   { id: "review", label: "Review", icon: Eye, description: "Confirm & publish" },
 ];
@@ -78,6 +78,8 @@ export default function NewProductPage() {
   const [generatingSEO, setGeneratingSEO] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [draftProductId, setDraftProductId] = useState<string | null>(null);
+  const [createBrandLoading, setCreateBrandLoading] = useState(false);
+  const [createBrandError, setCreateBrandError] = useState<string | null>(null);
 
   // Gallery state
   const [images, setImages] = useState<File[]>([]);
@@ -97,7 +99,6 @@ export default function NewProductPage() {
     category_name: "",
     brand: "",
     brand_name: "",
-    manufacturer: "",
     model_number: "",
     price: "",
     cost_price: "",
@@ -176,7 +177,7 @@ export default function NewProductPage() {
     setFormData(prev => ({ ...prev, tags: prev.tags.filter((t: string) => t !== tagToRemove) }));
   };
 
-  // Gemini AI Content Generation helper
+  // MedAI Content Generation helper
   const generateAIContent = async () => {
     if (!formData.name || !formData.category_id) {
       toast.error("Please select a vendor, name, and category first");
@@ -199,7 +200,6 @@ export default function NewProductPage() {
         sku: formData.sku || undefined,
         category_id: formData.category_id || undefined,
         brand: formData.brand_name || undefined,
-        manufacturer: formData.manufacturer || undefined,
         model_number: formData.model_number || undefined,
         price: parseFloat(formData.price) || 0,
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : undefined,
@@ -284,6 +284,26 @@ export default function NewProductPage() {
 
   const updateFormData = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleCreateBrand = async (name: string): Promise<string> => {
+    setCreateBrandLoading(true);
+    setCreateBrandError(null);
+
+    try {
+      const newBrand = await catalogService.createQuickBrand({ name });
+      // Add the new brand to the local brands list
+      setBrands(prev => [...prev, newBrand]);
+      toast.success(`Brand "${name}" created and pending approval`);
+      return newBrand.id;
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.detail || error?.message || "Failed to create brand";
+      setCreateBrandError(errorMessage);
+      toast.error(errorMessage);
+      throw error;
+    } finally {
+      setCreateBrandLoading(false);
+    }
   };
 
   const generateSlug = (name: string) => {
@@ -374,7 +394,6 @@ export default function NewProductPage() {
         category_name: sampleCategory?.name || "Diagnostic Equipment",
         brand: sampleBrand?.id || "",
         brand_name: sampleBrand?.name || "MedTech Pro",
-        manufacturer: "MedTech Pro International",
         model_number: "PG-2024-X",
         price: "189.99",
         cost_price: "95.00",
@@ -420,7 +439,6 @@ export default function NewProductPage() {
         category_name: sampleCategory?.name || "Surgical Instruments",
         brand: sampleBrand?.id || "",
         brand_name: sampleBrand?.name || "MediCut",
-        manufacturer: "MediCut Surgical",
         model_number: "MC-SC-11",
         price: "12.50",
         cost_price: "5.00",
@@ -461,7 +479,6 @@ export default function NewProductPage() {
         category_name: sampleCategory?.name || "Patient Care",
         brand: sampleBrand?.id || "",
         brand_name: sampleBrand?.name || "FlowMed",
-        manufacturer: "FlowMed Devices",
         model_number: "IPD-500",
         price: "2450.00",
         cost_price: "1200.00",
@@ -495,7 +512,6 @@ export default function NewProductPage() {
         category_name: sampleCategory?.name || "Diagnostic Equipment",
         brand: sampleBrand?.id || "",
         brand_name: sampleBrand?.name || "OxiHealth",
-        manufacturer: "OxiHealth Instruments",
         model_number: "DPO-80",
         price: "45.00",
         cost_price: "20.00",
@@ -565,7 +581,6 @@ export default function NewProductPage() {
         sku: formData.sku || undefined,
         category_id: formData.category_id || undefined,
         brand: formData.brand_name || undefined,
-        manufacturer: formData.manufacturer || undefined,
         model_number: formData.model_number || undefined,
         price: parseFloat(formData.price),
         cost_price: formData.cost_price ? parseFloat(formData.cost_price) : undefined,
@@ -709,9 +724,9 @@ export default function NewProductPage() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Left Sidebar - Steps */}
-          <div className="w-72 border-r bg-muted/30 flex-shrink-0 overflow-y-auto">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          {/* Left Sidebar - Steps (Desktop Only) */}
+          <div className="hidden lg:block w-72 border-r bg-muted/30 flex-shrink-0 overflow-y-auto">
             <div className="p-6 space-y-2">
               <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-6">
                 Setup Steps
@@ -758,8 +773,63 @@ export default function NewProductPage() {
 
           {/* Right Side - Form Content */}
           <div className="flex-1 overflow-y-auto">
+            {/* Horizontal Steps for mobile/tablet */}
+            <div className="lg:hidden px-6 py-4 border-b border-border bg-muted/20">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Step {currentStep + 1} of {STEPS.length}
+                </span>
+                <span className="text-sm font-bold text-foreground">
+                  {STEPS[currentStep].label}
+                </span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden">
+                <div
+                  className="bg-primary h-1.5 transition-all duration-300"
+                  style={{ width: `${((currentStep + 1) / STEPS.length) * 100}%` }}
+                />
+              </div>
+              
+              {/* Horizontal mini step icons for tablet view */}
+              <div className="hidden sm:flex items-center justify-start gap-2 mt-4 overflow-x-auto py-1">
+                {STEPS.map((step, index) => {
+                  const isActive = currentStep === index;
+                  const isCompleted = completedSteps.has(index);
+                  const Icon = step.icon;
+                  return (
+                    <button
+                      key={step.id}
+                      onClick={() => {
+                        if (isCompleted || index < currentStep) {
+                          setCurrentStep(index);
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs transition-all border",
+                        isActive && "bg-card border-border text-foreground font-semibold shadow-sm",
+                        !isActive && isCompleted && "bg-success/5 border-success/20 text-success hover:bg-success/10",
+                        !isActive && !isCompleted && "opacity-40 border-transparent text-muted-foreground cursor-not-allowed"
+                      )}
+                      disabled={!isCompleted && index > currentStep}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span className="truncate max-w-[80px]">{step.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="p-8">
-              {currentStep === 0 && (
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={currentStep}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.15, ease: "easeOut" }}
+                >
+                  {currentStep === 0 && (
                 <div className="space-y-8">
                   <div>
                     <h2 className="text-2xl font-bold tracking-tight">General Information</h2>
@@ -856,6 +926,7 @@ export default function NewProductPage() {
                             options={brands.map((b) => ({
                               value: b.id,
                               label: b.name,
+                              badge: b.approval_status === 'pending' ? 'Pending' : undefined,
                             }))}
                             value={formData.brand}
                             onChange={(value) => {
@@ -866,21 +937,13 @@ export default function NewProductPage() {
                             searchPlaceholder="Search brands..."
                             emptyMessage="No brands found."
                             className="w-full"
+                            allowCreate={true}
+                            onCreateOption={handleCreateBrand}
+                            createLoading={createBrandLoading}
+                            createError={createBrandError || undefined}
                           />
                         </div>
-                        <div className="space-y-2 col-span-2 md:col-span-1">
-                          <Label htmlFor="manufacturer" className="text-xs font-semibold uppercase tracking-wider">
-                            Manufacturer
-                          </Label>
-                          <Input
-                            id="manufacturer"
-                            value={formData.manufacturer}
-                            onChange={(e) => setFormData({ ...formData, manufacturer: e.target.value })}
-                            placeholder="e.g. GE Healthcare"
-                            className="h-11 font-semibold"
-                          />
-                        </div>
-                        <div className="space-y-2 col-span-2 md:col-span-1">
+                        <div className="space-y-2 col-span-2">
                           <Label htmlFor="model_number" className="text-xs font-semibold uppercase tracking-wider">
                             Model Number
                           </Label>
@@ -961,11 +1024,31 @@ export default function NewProductPage() {
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                      <div className="grid grid-cols-4 gap-6">
-                        <div className="space-y-2 col-span-4 md:col-span-1">
-                          <Label htmlFor="sku" className="text-xs font-semibold uppercase tracking-wider">
-                            SKU
-                          </Label>
+                      <div className="grid grid-cols-2 gap-6">
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label htmlFor="sku" className="text-xs font-semibold uppercase tracking-wider">
+                              SKU
+                            </Label>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => {
+                                const brandName = formData.brand_name || "GEN";
+                                const categoryId = formData.category_id || "CAT";
+                                const brandPart = brandName.substring(0, 3).toUpperCase();
+                                const catPart = categoryId.substring(0, 3).toUpperCase();
+                                const randomPart = Math.floor(1000 + Math.random() * 9000);
+                                const generatedSku = `${brandPart}-${catPart}-${randomPart}`;
+                                setFormData({ ...formData, sku: generatedSku });
+                              }}
+                            >
+                              <Sparkles className="h-3 w-3 mr-1" />
+                              Auto-generate
+                            </Button>
+                          </div>
                           <Input
                             id="sku"
                             value={formData.sku}
@@ -973,8 +1056,9 @@ export default function NewProductPage() {
                             placeholder="e.g. MRI-102-X"
                             className="h-11 font-mono"
                           />
+                          <p className="text-[10px] text-muted-foreground">Click auto-generate to create a unique SKU based on brand and category.</p>
                         </div>
-                        <div className="space-y-2 col-span-4 md:col-span-1">
+                        <div className="space-y-2">
                           <Label htmlFor="stock_quantity" className="text-xs font-semibold uppercase tracking-wider">
                             Initial Stock
                           </Label>
@@ -986,7 +1070,7 @@ export default function NewProductPage() {
                             className="h-11"
                           />
                         </div>
-                        <div className="space-y-2 col-span-4 md:col-span-1">
+                        <div className="space-y-2">
                           <Label htmlFor="low_stock_threshold" className="text-xs font-semibold uppercase tracking-wider">
                             Low Stock Alert
                           </Label>
@@ -998,7 +1082,7 @@ export default function NewProductPage() {
                             className="h-11"
                           />
                         </div>
-                        <div className="space-y-2 col-span-4 md:col-span-1">
+                        <div className="space-y-2">
                           <Label htmlFor="weight_kg" className="text-xs font-semibold uppercase tracking-wider">
                             Weight (kg)
                           </Label>
@@ -1129,39 +1213,32 @@ export default function NewProductPage() {
                 <div className="space-y-8">
                   <div>
                     <h2 className="text-2xl font-bold tracking-tight">AI Assist & Technical Details</h2>
-                    <p className="text-muted-foreground mt-1">Generate details using Gemini AI and manage technical specifications.</p>
+                    <p className="text-muted-foreground mt-1">Generate details using MedAI and manage technical specifications.</p>
                   </div>
 
-                  {/* Gemini AI Assist Card */}
-                  <Card className="border-border/50 shadow-xl shadow-foreground/5 bg-gradient-to-br from-amber-500/[0.03] to-primary/[0.03] relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-                      <Zap className="h-24 w-24 text-primary" />
+                  {/* MedAI Assist Card - Compact */}
+                  <Card className="border-border/50 shadow-lg shadow-foreground/5 bg-gradient-to-br from-amber-500/[0.02] to-primary/[0.02] relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-2 opacity-5 pointer-events-none">
+                      <Zap className="h-16 w-16 text-primary" />
                     </div>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2 text-amber-600">
-                        <Sparkles className="h-5 w-5" />
-                        Gemini AI Intelligence
-                      </CardTitle>
-                      <CardDescription>
-                        Generate clinically accurate description, specifications, tags, and SEO metadata.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="flex flex-col items-center justify-center py-6 gap-4">
-                      <div className={`h-16 w-16 rounded-2xl flex items-center justify-center shadow-md bg-white border ${isGenerating ? "animate-pulse" : ""}`}>
-                        {isGenerating ? <Loader2 className="h-6 w-6 text-primary animate-spin" /> : <Sparkles className="h-6 w-6 text-amber-500" />}
-                      </div>
-                      <div className="text-center space-y-1">
-                        <h3 className="text-sm font-bold">Auto-generate with Gemini</h3>
-                        <p className="text-xs text-muted-foreground max-w-sm mx-auto">Requires Product Name and Category to be filled in first.</p>
+                    <CardContent className="flex items-center justify-between py-4 gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-sm bg-white border ${isGenerating ? "animate-pulse" : ""}`}>
+                          {isGenerating ? <Loader2 className="h-4 w-4 text-primary animate-spin" /> : <Sparkles className="h-4 w-4 text-amber-500" />}
+                        </div>
+                        <div>
+                          <h3 className="text-sm font-semibold">AI Generate</h3>
+                          <p className="text-[10px] text-muted-foreground">Auto-fill descriptions, specs & tags</p>
+                        </div>
                       </div>
                       <Button
                         type="button"
                         onClick={generateAIContent}
                         disabled={isGenerating || !formData.name || !formData.category_id}
-                        className="rounded-xl h-11 px-6 font-semibold gap-2 shadow-md shadow-primary/10"
+                        className="rounded-lg h-9 px-4 text-xs font-semibold gap-2"
                       >
-                        {isGenerating ? "Generating Content..." : "Generate Details"}
-                        <ArrowRight className="h-4 w-4" />
+                        {isGenerating ? "Generating..." : "Generate"}
+                        <ArrowRight className="h-3 w-3" />
                       </Button>
                     </CardContent>
                   </Card>
@@ -1451,7 +1528,6 @@ export default function NewProductPage() {
                           { label: "Slug", value: formData.slug, mono: true },
                           { label: "Vendor", value: formData.vendor_name },
                           { label: "Brand", value: formData.brand_name },
-                          { label: "Manufacturer", value: formData.manufacturer },
                           { label: "Category", value: formData.category_name },
                           { label: "Model Number", value: formData.model_number },
                           { label: "SKU", value: formData.sku, mono: true },
@@ -1686,7 +1762,9 @@ export default function NewProductPage() {
                     </Card>
                   </div>
                 </div>
-              )}
+                  )}
+                </motion.div>
+              </AnimatePresence>
 
               {/* Navigation Buttons */}
               <div className="flex items-center justify-between pt-8 border-t mt-8">

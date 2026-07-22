@@ -223,6 +223,36 @@ function ProductsPageInner() {
     );
   }, [rejectTarget, rejectionReason, mutations.reject]);
 
+  const handleBulkAction = useCallback(
+    async (ids: string[], action: "verify" | "publish" | "archive" | "unarchive" | "delete") => {
+      const mutationMap = {
+        verify: mutations.verify,
+        publish: mutations.publish,
+        archive: mutations.archive,
+        unarchive: mutations.unarchive,
+        delete: mutations.delete,
+      } as const;
+
+      const mutation = mutationMap[action];
+      const promises = ids.map(
+        (id) =>
+          new Promise<void>((resolve, reject) => {
+            mutation.mutate(id, {
+              onSuccess: () => resolve(),
+              onError: (err) => reject(err),
+            });
+          })
+      );
+
+      toast.promise(Promise.all(promises), {
+        loading: `Performing bulk ${action} on ${ids.length} products...`,
+        success: `Successfully updated ${ids.length} products.`,
+        error: (err: any) => err.message || `Failed to perform bulk ${action}.`,
+      });
+    },
+    [mutations]
+  );
+
   const actionLoadingId = pendingProductId;
 
   const products = productsData?.products ?? [];
@@ -332,6 +362,9 @@ function ProductsPageInner() {
           onPageChange={handlePageChange}
           onQuickAction={handleQuickAction}
           onDelete={(product) => setDeleteTarget(product)}
+          onBulkAction={handleBulkAction}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={clearFilters}
         />
 
         {/* Delete Dialog */}

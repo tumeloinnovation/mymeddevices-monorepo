@@ -19,7 +19,10 @@ from app.domains.catalog.services.typesense_client import TypesenseClient
 
 def generate_slug(name: str, existing_slug: Optional[str] = None) -> str:
     """Generate a URL-friendly slug from a product name."""
+    # Convert to lowercase, replace non-alphanumeric chars with dashes, strip ends
     slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    # Collapse multiple dashes to single dashes
+    slug = re.sub(r'-+', '-', slug)
     if not slug:
         slug = "product"
     return slug
@@ -81,6 +84,14 @@ class CatalogService:
         if not vendor.scalar_one_or_none():
             raise ValueError("Vendor profile not found")
 
+        # Check SKU uniqueness
+        if "sku" in kwargs and kwargs["sku"]:
+            sku_check = await self.db.execute(
+                select(Product).where(Product.sku == kwargs["sku"], Product.is_deleted == False)
+            )
+            if sku_check.scalar_one_or_none():
+                raise ValueError(f"Product with SKU '{kwargs['sku']}' already exists.")
+
         # Generate unique slug
         base_slug = generate_slug(name)
         slug = await self._ensure_unique_slug(base_slug)
@@ -117,6 +128,18 @@ class CatalogService:
     async def update_product(self, vendor_id: str, product_id: str, **kwargs) -> Product:
         """Update a product. Recalculates completeness."""
         product = await self._get_vendor_product(vendor_id, product_id)
+
+        # Check SKU uniqueness if updated
+        if "sku" in kwargs and kwargs["sku"]:
+            sku_check = await self.db.execute(
+                select(Product).where(
+                    Product.sku == kwargs["sku"],
+                    Product.id != product.id,
+                    Product.is_deleted == False
+                )
+            )
+            if sku_check.scalar_one_or_none():
+                raise ValueError(f"Product with SKU '{kwargs['sku']}' already exists.")
 
         # Recalculate pricing if base_price is updated
         if "base_price" in kwargs and kwargs["base_price"] is not None:
@@ -170,9 +193,17 @@ class CatalogService:
         if product.status != "draft":
             raise ValueError("Only draft products can be deleted. Archive published products instead.")
 
-        await self.db.delete(product)
+        # Perform soft delete
+        product.is_deleted = True
+        product.deleted_at = datetime.now(timezone.utc)
+        
         await self.db.commit()
-        logger.info(f"Product deleted: {product_id}")
+        
+        # Sync deletion with Typesense
+        if self.typesense.client is not None:
+            await asyncio.to_thread(self.typesense.delete_product, product.id)
+            
+        logger.info(f"Product soft deleted: {product_id}")
 
     # ========================================================================
     # PRODUCT LIFECYCLE
@@ -632,6 +663,7 @@ class CatalogService:
                 slug=cat.slug,
                 description=cat.description,
                 icon_url=cat.icon_url,
+                parent_id=cat.parent_id,
                 sort_order=cat.sort_order,
                 is_active=cat.is_active,
                 children=[]
@@ -667,6 +699,14 @@ class CatalogService:
         if existing.scalar_one_or_none():
             raise ValueError(f"Category with slug '{kwargs['slug']}' already exists")
 
+        # Check parent_id exists
+        if kwargs.get("parent_id"):
+            parent_exists = await self.db.execute(
+                select(Category.id).where(Category.id == kwargs["parent_id"], Category.is_deleted == False)
+            )
+            if not parent_exists.scalar_one_or_none():
+                raise ValueError("Parent category not found")
+
         category = Category(**kwargs)
         self.db.add(category)
         await self.db.commit()
@@ -684,8 +724,37 @@ class CatalogService:
         if not category:
             raise ValueError("Category not found")
 
+        # Validate parent_id
+        if "parent_id" in kwargs:
+            new_parent_id = kwargs["parent_id"]
+            if new_parent_id is not None:
+                # 1. Check if parent exists
+                parent_exists = await self.db.execute(
+                    select(Category.id).where(Category.id == new_parent_id, Category.is_deleted == False)
+                )
+                if not parent_exists.scalar_one_or_none():
+                    raise ValueError("Parent category not found")
+
+                # 2. Check for self-reference
+                if str(new_parent_id) == str(category_id):
+                    raise ValueError("A category cannot be its own parent")
+
+                # 3. Check for circular reference
+                curr_parent_id = new_parent_id
+                visited = {str(category_id)}
+                while curr_parent_id:
+                    if str(curr_parent_id) in visited:
+                        raise ValueError("Circular reference detected: Parent category cannot be a descendant of this category")
+                    visited.add(str(curr_parent_id))
+                    parent_res = await self.db.execute(
+                        select(Category.parent_id).where(Category.id == curr_parent_id)
+                    )
+                    curr_parent_id = parent_res.scalar_one_or_none()
+
         for key, value in kwargs.items():
-            if value is not None and hasattr(category, key):
+            if key == "parent_id":
+                category.parent_id = value
+            elif value is not None and hasattr(category, key):
                 setattr(category, key, value)
 
         await self.db.commit()
@@ -728,6 +797,7 @@ class CatalogService:
     async def get_brands(
         self,
         active_only: bool = True,
+        approval_status: Optional[str] = None,
         page: int = 1,
         page_size: int = 20
     ) -> Tuple[List[Brand], int]:
@@ -735,11 +805,15 @@ class CatalogService:
         query = select(Brand).where(Brand.is_deleted == False)
         if active_only:
             query = query.where(Brand.is_active == True)
+        if approval_status:
+            query = query.where(Brand.approval_status == approval_status)
 
         # Get total count
         count_query = select(func.count(Brand.id)).where(Brand.is_deleted == False)
         if active_only:
             count_query = count_query.where(Brand.is_active == True)
+        if approval_status:
+            count_query = count_query.where(Brand.approval_status == approval_status)
         total_result = await self.db.execute(count_query)
         total = total_result.scalar()
 
@@ -769,7 +843,10 @@ class CatalogService:
         """Create a new brand (admin only)."""
         # Generate slug if not provided
         if "slug" not in kwargs or not kwargs["slug"]:
+            # Convert to lowercase, replace non-alphanumeric chars with single dashes, strip ends
             slug = re.sub(r'[^a-z0-9]+', '-', kwargs["name"].lower()).strip('-')
+            # Collapse multiple dashes to single dashes
+            slug = re.sub(r'-+', '-', slug)
             kwargs["slug"] = slug
 
         # Check slug uniqueness
@@ -825,6 +902,78 @@ class CatalogService:
         brand.is_deleted = True
         await self.db.commit()
         logger.info(f"Brand deleted: {brand_id}")
+
+    async def create_pending_brand(self, name: str) -> Brand:
+        """
+        Create a brand with minimal details (name only) as 'pending' and inactive.
+        Used for quick brand creation during product creation.
+        Checks for duplicate brand names (case-insensitive).
+        """
+        # Check for duplicate brand name (case-insensitive)
+        existing = await self.db.execute(
+            select(Brand).where(
+                Brand.name.ilike(name),
+                Brand.is_deleted == False
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise ValueError(f"Brand with name '{name}' already exists")
+
+        # Auto-generate slug from name
+        slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+        slug = re.sub(r'-+', '-', slug)
+
+        # Ensure slug is unique
+        counter = 1
+        base_slug = slug
+        while True:
+            slug_exists = await self.db.execute(
+                select(Brand).where(Brand.slug == slug)
+            )
+            if not slug_exists.scalar_one_or_none():
+                break
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+
+        # Create brand with pending status and inactive
+        brand = Brand(
+            name=name,
+            slug=slug,
+            approval_status="pending",
+            is_active=False,
+            sort_order=0
+        )
+
+        self.db.add(brand)
+        await self.db.commit()
+        await self.db.refresh(brand)
+
+        logger.info(f"Pending brand created: {brand.id} - {brand.name} (pending approval)")
+        return brand
+
+    async def approve_brand(self, brand_id: str) -> Brand:
+        """
+        Approve a pending brand.
+        Sets approval_status to 'approved' and is_active to True.
+        """
+        result = await self.db.execute(
+            select(Brand).where(Brand.id == brand_id, Brand.is_deleted == False)
+        )
+        brand = result.scalar_one_or_none()
+        if not brand:
+            raise ValueError("Brand not found")
+
+        if brand.approval_status == "approved":
+            raise ValueError("Brand is already approved")
+
+        brand.approval_status = "approved"
+        brand.is_active = True
+
+        await self.db.commit()
+        await self.db.refresh(brand)
+
+        logger.info(f"Brand approved: {brand_id} - {brand.name}")
+        return brand
 
     # ========================================================================
     # TAGS
@@ -1035,7 +1184,7 @@ class CatalogService:
         elif field == "sku":
             return bool(product.sku)
         elif field == "brand":
-            return bool(product.brand or product.manufacturer)
+            return bool(product.brand)
         elif field == "specifications":
             return bool(product.specifications and len(product.specifications) > 0)
         elif field == "weight_or_dimensions":

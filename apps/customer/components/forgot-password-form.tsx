@@ -10,6 +10,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label"
 import Link from "next/link"
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -17,7 +18,8 @@ const forgotPasswordSchema = z.object({
 
 export function ForgotPasswordForm() {
   const { forgotPassword, isLoading, error } = useAuthStore()
-  const [success, setSuccess] = useState(false)
+  const [email, setEmail] = useState("")
+  const router = useRouter()
   const {
     register,
     handleSubmit,
@@ -29,28 +31,12 @@ export function ForgotPasswordForm() {
   const onSubmit = async (data: z.infer<typeof forgotPasswordSchema>) => {
     try {
       await forgotPassword(data.email)
-      setSuccess(true)
+      setEmail(data.email)
+      // Redirect to reset password page with email pre-filled and step hint
+      router.push(`/reset-password?email=${encodeURIComponent(data.email)}&step=otp`)
     } catch {
       // Error handled by AuthStore
     }
-  }
-
-  if (success) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Check your email</CardTitle>
-          <CardDescription>
-            We&apos;ve sent password reset instructions to your email.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Button variant="outline" className="w-full" asChild>
-            <Link href="/login">Back to login</Link>
-          </Button>
-        </CardContent>
-      </Card>
-    )
   }
 
   return (

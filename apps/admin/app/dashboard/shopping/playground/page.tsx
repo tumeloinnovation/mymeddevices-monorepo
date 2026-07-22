@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { 
   shoppingService, 
-  type Cart, 
+  type ShoppingCart, 
   type CartTotals, 
   type Order 
 } from "@mymeddevices/shared-core"
@@ -32,7 +32,7 @@ import { toast } from "sonner"
 export default function ShoppingPlayground() {
   const [loading, setLoading] = useState<string | null>(null)
   const [products, setProducts] = useState<Product[]>([])
-  const [cart, setCart] = useState<Cart | null>(null)
+  const [cart, setCart] = useState<ShoppingCart | null>(null)
   const [totals, setTotals] = useState<CartTotals | null>(null)
   const [order, setOrder] = useState<Order | null>(null)
   const [step, setStep] = useState(1)

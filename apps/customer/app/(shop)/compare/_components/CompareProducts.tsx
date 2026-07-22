@@ -40,7 +40,7 @@ const CompareProducts: FC = () => {
   const normalize = (p: any) => {
     const id = (p?.id ?? p?.sku ?? p?.slug) as any;
     const name = p?.name ?? String(id ?? "");
-    const image = p?.image ?? (p?.images ? (Array.isArray(p.images) ? (p.images[0]?.src ?? p.images[0]) : undefined) : undefined);
+    const image = p?.image ?? (p?.images ? (Array.isArray(p.images) ? (p.images[0]?.src ?? p.images[0]?.url ?? p.images[0]) : undefined) : undefined);
     const price = Number(p?.price ?? p?.regular_price ?? 0);
     return { id, name, image, price, raw: p };
   };
@@ -256,7 +256,7 @@ const CompareProducts: FC = () => {
                     return new Set(values.filter(v => v !== undefined && v !== null)).size > 1 ? 'bg-yellow-50 ring-1 ring-yellow-200' : '';
                   })()}`}>
                     <div className="w-28 h-28 relative">
-                      <Image src={n.image ?? '/logos/logo-placeholder.png'} alt={n.name} fill className="object-contain" sizes="112px" />
+                      <Image src={n.image ?? '/logos/logo-portrait.png'} alt={n.name} fill className="object-contain" sizes="112px" />
                     </div>
                   </td>
                 })}

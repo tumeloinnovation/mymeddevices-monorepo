@@ -6,6 +6,7 @@ import {
   CategoryTree,
   Product,
   ProductCompleteness,
+  AIValidationResponse,
 } from "@mymeddevices/shared-core";
 import { usersService } from "@mymeddevices/shared-core";
 import { toast } from "sonner";
@@ -177,5 +178,25 @@ export function useAIGenerate(id: string) {
         ],
       }),
     onError: (err: any) => toast.error(err.message || "AI generation failed"),
+  });
+}
+
+export function useAIValidate(id: string) {
+  return useMutation({
+    mutationFn: () => catalogService.aiValidateProduct(id),
+    onSuccess: (result: AIValidationResponse) => {
+      if (result.is_valid) {
+        toast.success(result.summary || "AI validation passed successfully");
+      } else {
+        toast.error(result.summary || "AI validation found critical issues");
+      }
+      // Show recommendations if any
+      if (result.recommendations && result.recommendations.length > 0) {
+        result.recommendations.forEach((rec) => {
+          toast.info(rec);
+        });
+      }
+    },
+    onError: (err: any) => toast.error(err.message || "AI validation failed"),
   });
 }

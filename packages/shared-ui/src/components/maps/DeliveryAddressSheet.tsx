@@ -59,6 +59,8 @@ interface DeliveryAddressSheetProps {
   delivery?: Address | null;
   onSelect: (address: Address) => void;
   children?: ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const TAG_ICONS: Record<string, React.ComponentType<any>> = {
@@ -71,8 +73,14 @@ export default function DeliveryAddressSheet({
   delivery,
   onSelect,
   children,
+  open: externalOpen,
+  onOpenChange: externalOnOpenChange,
 }: DeliveryAddressSheetProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  // Use external control if provided, otherwise use internal state
+  const open = externalOpen !== undefined ? externalOpen : internalOpen;
+  const setOpen = externalOnOpenChange || setInternalOpen;
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(delivery || null);
   const [selectedTag, setSelectedTag] = useState<AddressTag | "">("");
   const [customTagInput, setCustomTagInput] = useState("");
@@ -165,11 +173,16 @@ export default function DeliveryAddressSheet({
 
   const allTags = [...PREDEFINED_TAGS, ...customTags];
 
+  // Determine if we're in controlled mode (external control provided)
+  const isControlled = externalOpen !== undefined;
+
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        {children || <Button variant="outline">Select Address</Button>}
-      </SheetTrigger>
+      {!isControlled && (
+        <SheetTrigger asChild>
+          {children || <Button variant="outline">Select Address</Button>}
+        </SheetTrigger>
+      )}
 
       <SheetContent side="right" className="w-full p-6 sm:max-w-lg overflow-y-auto">
         <SheetHeader>

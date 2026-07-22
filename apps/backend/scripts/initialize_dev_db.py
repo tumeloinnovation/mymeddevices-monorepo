@@ -26,6 +26,7 @@ import app.domains.payments.models  # noqa
 import app.domains.tickets.models  # noqa
 import app.domains.returns.models  # noqa
 import app.domains.shared.models  # noqa
+import app.domains.admin.models  # noqa
 
 from app.domains.auth.models.user import User
 from app.domains.catalog.models.category import Category

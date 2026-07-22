@@ -5,8 +5,22 @@ import { Eye, EyeOff } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-function Input({ className, type, ...props }: React.ComponentProps<"input">) {
+function Input({ className, type, "aria-invalid": ariaInvalid, ...props }: React.ComponentProps<"input">) {
   const [showPassword, setShowPassword] = React.useState(false)
+  const [hasError, setHasError] = React.useState(false)
+  const prevInvalid = React.useRef(ariaInvalid)
+
+  // Trigger shake animation when error state changes from false to true
+  React.useEffect(() => {
+    if (ariaInvalid === true && prevInvalid.current !== true) {
+      setHasError(true)
+      const timer = setTimeout(() => setHasError(false), 400)
+      return () => clearTimeout(timer)
+    }
+    prevInvalid.current = ariaInvalid
+  }, [ariaInvalid])
+
+  const shakeClass = hasError ? "animate-[shake_0.4s_ease-in-out]" : ""
 
   if (type === "password") {
     return (
@@ -14,8 +28,10 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
         <input
           type={showPassword ? "text" : "password"}
           data-slot="input"
+          aria-invalid={ariaInvalid}
           className={cn(
             "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent pl-2.5 pr-9 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+            shakeClass,
             className
           )}
           {...props}
@@ -40,8 +56,10 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
     <input
       type={type}
       data-slot="input"
+      aria-invalid={ariaInvalid}
       className={cn(
         "h-8 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1 text-base transition-colors outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-input/50 disabled:opacity-50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 md:text-sm dark:bg-input/30 dark:disabled:bg-input/80 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40",
+        shakeClass,
         className
       )}
       {...props}

@@ -25,6 +25,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Sheet,
   SheetContent,
@@ -138,7 +139,7 @@ export default function CategoriesPage() {
   const openEditSheet = (category: CategoryTree) => {
     setEditingCategory(category);
     setUserEditedSlug(true);
-    setParentId(undefined);
+    setParentId(category.parent_id || undefined);
     setName(category.name);
     setSlug(category.slug);
     setDescription(category.description || "");
@@ -155,6 +156,7 @@ export default function CategoriesPage() {
           name,
           slug,
           description,
+          parent_id: parentId || null,
           is_active: isActive
         });
         toast.success("Category updated");
@@ -163,7 +165,7 @@ export default function CategoriesPage() {
           name,
           slug,
           description,
-          parent_id: parentId,
+          parent_id: parentId || undefined,
           is_active: isActive,
           sort_order: 0
         });
@@ -212,16 +214,49 @@ export default function CategoriesPage() {
     return { total, active, inactive, withChildren };
   }, [categories]);
 
+  // Options for parent category selection (excluding current editing category and its descendants to prevent cycles)
+  const parentOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = [];
+    const excludedIds = new Set<string>();
+    if (editingCategory) {
+      const collectDescendants = (node: CategoryTree) => {
+        excludedIds.add(node.id);
+        if (node.children) {
+          node.children.forEach(collectDescendants);
+        }
+      };
+      collectDescendants(editingCategory);
+    }
+
+    const flatten = (cats: CategoryTree[], prefix = "") => {
+      cats.forEach((cat) => {
+        if (!excludedIds.has(cat.id)) {
+          options.push({
+            value: cat.id,
+            label: prefix ? `${prefix} › ${cat.name}` : cat.name,
+          });
+          if (cat.children?.length) {
+            flatten(cat.children, prefix ? `${prefix} › ${cat.name}` : cat.name);
+          }
+        }
+      });
+    };
+
+    flatten(categories);
+    return options;
+  }, [categories, editingCategory]);
+
   const clearFilters = () => {
     setSearchQuery("");
     setStatusFilter("all");
   };
 
-  const hasActiveFilters = searchQuery || statusFilter !== "all";
+  const hasActiveFilters = !!searchQuery || statusFilter !== "all";
 
   // Filtered categories (flat list for rendering)
   const filteredCategories = useMemo(() => {
     const result: { category: CategoryTree; level: number }[] = [];
+    const hasActiveFilter = !!searchQuery || statusFilter !== "all";
 
     const filterNodes = (nodes: CategoryTree[], level: number) => {
       nodes.forEach((node) => {
@@ -235,8 +270,8 @@ export default function CategoriesPage() {
           (statusFilter === "active" && node.is_active) ||
           (statusFilter === "inactive" && !node.is_active);
 
-        // Include if matches, or if children might match
-        const hasMatchingChildren = node.children?.some((child) =>
+        // Include if matches, or if children might match (only when filters are active)
+        const hasMatchingChildren = hasActiveFilter && !!node.children?.some((child) =>
           searchQuery
             ? child.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
               child.slug.toLowerCase().includes(searchQuery.toLowerCase())
@@ -245,7 +280,7 @@ export default function CategoriesPage() {
               (statusFilter === "inactive" && !child.is_active)
         );
 
-        if (matchesSearch || hasMatchingChildren) {
+        if ((matchesSearch && matchesStatus) || hasMatchingChildren) {
           result.push({ category: node, level });
           if (node.children?.length && (expandedIds.has(node.id) || hasMatchingChildren)) {
             filterNodes(node.children, level + 1);
@@ -427,6 +462,22 @@ export default function CategoriesPage() {
 
             {/* Form */}
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Parent Category */}
+              <div className="space-y-1.5">
+                <Label htmlFor="parent" className="text-sm">
+                  Parent Category
+                </Label>
+                <SearchableSelect
+                  options={parentOptions}
+                  value={parentId || ""}
+                  onChange={(val) => setParentId(val || undefined)}
+                  placeholder="None (Top-level Category)"
+                  searchPlaceholder="Search categories..."
+                  emptyMessage="No categories found."
+                  className="w-full h-10"
+                />
+              </div>
+
               {/* Name */}
               <div className="space-y-1.5">
                 <Label htmlFor="name" className="text-sm">
@@ -710,15 +761,11 @@ function RowActions({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-40">
         <DropdownMenuItem onClick={() => onEdit(category)}>Edit category</DropdownMenuItem>
-        {hasChildren && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onAddChild(category.id)}>
-              <FolderPlus className="h-3.5 w-3.5 mr-1.5" />
-              Add sub-category
-            </DropdownMenuItem>
-          </>
-        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => onAddChild(category.id)}>
+          <FolderPlus className="h-3.5 w-3.5 mr-1.5" />
+          Add sub-category
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem className="text-destructive" onClick={() => onDelete(category)}>
           Delete category

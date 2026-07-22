@@ -22,7 +22,7 @@ export default function CartItemRow({ item }: CartItemProps) {
 
   return (
     <div className="flex items-center gap-4 p-4 border-b last:border-b-0">
-      <Image src={item.images?.[0]?.src || '/images/digital_bp.png'} alt={item.name} width={80} height={80} className="object-cover rounded" />
+      <Image src={item.images?.[0]?.src || '/logos/logo-portrait.png'} alt={item.name} width={80} height={80} className="object-cover rounded" />
       <div className="flex-1">
         <div className="font-semibold">{item.name}</div>
         <div className="text-sm text-muted-foreground">Ksh. {formatCurrency(Number(item.price))}</div>

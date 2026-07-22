@@ -2,13 +2,14 @@ import uuid
 import math
 from typing import List, Optional
 from decimal import Decimal
-from sqlalchemy import select, and_
+from sqlalchemy import select, and_, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.models.cart_discount import CartDiscount
 from app.domains.catalog.models.product import Product
+from app.domains.shopping.models.coupon import Coupon
 
 OFFICE_LAT = -1.3011758537859464
 OFFICE_LON = 36.800690681948126
@@ -48,7 +49,12 @@ class CartCalculationService:
         # Calculate subtotal
         subtotal = 0.0
         for item in items:
-            price = float(item.unit_price) if item.unit_price is not None else float(item.product.price or 0.0)
+            if item.unit_price is not None:
+                price = float(item.unit_price)
+            elif item.product and item.product.price is not None:
+                price = float(item.product.price)
+            else:
+                price = 0.0
             subtotal += price * item.quantity
 
         # Get applied discounts
@@ -64,15 +70,46 @@ class CartCalculationService:
         # Calculate discount amount
         discount_amount = 0.0
         for discount in discounts:
-            if discount.discount_amount and discount.discount_amount > 0:
-                discount_amount += float(discount.discount_amount)
-            elif discount.discount_type == "percentage":
-                disc = (subtotal * float(discount.discount_value)) / 100.0
-                discount_amount += disc
-                discount.discount_amount = Decimal(str(round(disc, 2)))
-            elif discount.discount_type == "fixed":
-                discount_amount += float(discount.discount_value)
-                discount.discount_amount = discount.discount_value
+            # Query coupon to see its scope and restrictions
+            coupon_stmt = select(Coupon).where(func.lower(Coupon.code) == discount.coupon_code.lower()).options(
+                selectinload(Coupon.restrictions),
+                selectinload(Coupon.categories),
+                selectinload(Coupon.products)
+            )
+            coupon_res = await self.db.execute(coupon_stmt)
+            coupon = coupon_res.scalar_one_or_none()
+
+            # Determine applicable subtotal for the coupon's scope
+            applicable_subtotal = subtotal
+            if coupon:
+                if coupon.discount_scope == "specific_categories":
+                    allowed_categories = {c.category for c in coupon.categories}
+                    applicable_subtotal = 0.0
+                    for item in items:
+                        if item.product and item.product.category_id and str(item.product.category_id) in allowed_categories:
+                            price = float(item.unit_price) if item.unit_price is not None else float(item.product.price or 0.0)
+                            applicable_subtotal += price * item.quantity
+                elif coupon.discount_scope == "specific_products":
+                    allowed_products = {p.product_id for p in coupon.products}
+                    applicable_subtotal = 0.0
+                    for item in items:
+                        if item.product_id in allowed_products:
+                            price = float(item.unit_price) if item.unit_price is not None else float(item.product.price or 0.0)
+                            applicable_subtotal += price * item.quantity
+
+            # Calculate the discount
+            disc = 0.0
+            if discount.discount_type == "percentage":
+                disc = (applicable_subtotal * float(discount.discount_value)) / 100.0
+                if coupon and coupon.restrictions and coupon.restrictions.max_discount_amount:
+                    disc = min(disc, float(coupon.restrictions.max_discount_amount))
+            elif discount.discount_type in ("fixed", "fixed_amount"):
+                disc = min(float(discount.discount_value), applicable_subtotal)
+            elif discount.discount_type == "free_shipping":
+                disc = 0.0
+
+            discount_amount += disc
+            discount.discount_amount = Decimal(str(round(disc, 2)))
 
         # Commit the updated discount amounts to database (if any were calculated)
         await self.db.commit()
@@ -208,8 +245,10 @@ class CartCalculationService:
         # Construct route: Office -> Vendor 1 -> Vendor 2 ... -> Customer
         route = [[OFFICE_LAT, OFFICE_LON]]
         for v_coords in vendor_coords:
-            if v_coords not in route:
-                route.append(v_coords)
+            # Convert tuple to list for consistent type (List[List[float]])
+            coord_list = list(v_coords)
+            if coord_list not in route:
+                route.append(coord_list)
         route.append([customer_lat, customer_lon])
 
         # Calculate total distance along the route

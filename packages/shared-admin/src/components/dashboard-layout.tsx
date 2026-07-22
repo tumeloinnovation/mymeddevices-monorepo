@@ -434,7 +434,7 @@ function SidebarBranding({ theme }: { theme: DashboardTheme }) {
   const dashboardHref = theme === "vendor" ? "/vendor/dashboard" : "/dashboard"
 
   return (
-    <div className="px-3 py-2">
+    <div className="px-4 py-3">
       <Link href={dashboardHref} className="flex items-center justify-center">
         <SidebarLogo theme={theme} />
       </Link>
@@ -483,39 +483,41 @@ function SidebarSearch({
 
 function SidebarNav({ navConfig, theme, searchQuery }: { navConfig: NavConfig; theme: DashboardTheme; searchQuery: string }) {
   const pathname = usePathname()
+  const router = useRouter()
   const dashboardHref = theme === "vendor" ? "/vendor/dashboard" : "/dashboard"
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null)
+  const [selectedCollapsedGroup, setSelectedCollapsedGroup] = useState<string | null>(null)
+  const { state } = useSidebar()
+  const isCollapsed = state === "collapsed"
+  const isPanelClosed = useRef(false)
 
-  // Determine which group should be expanded
-  const getExpandedGroup = () => {
-    // If searching, expand all matching groups
-    if (searchQuery.trim()) {
-      return null // null means expand all (handled in render)
-    }
-    // If hovering, expand the hovered group
-    if (hoveredGroup) {
-      return hoveredGroup
-    }
-    // Otherwise, expand the active group
+  // Find which group contains the active route (use longest matching prefix)
+  const activeGroupLabel = useMemo(() => {
+    let bestMatch: { label: string | null; length: number } = { label: null, length: 0 }
+
     for (const group of navConfig) {
-      const isGroupActive = group.items.some((item) =>
-        pathname === item.href || pathname.startsWith(item.href + "/")
-      )
-      if (isGroupActive) {
-        return group.label
+      for (const item of group.items) {
+        const matches = pathname === item.href || pathname.startsWith(item.href + "/")
+        if (matches && item.href.length > bestMatch.length) {
+          bestMatch = { label: group.label, length: item.href.length }
+        }
       }
     }
-    return null
-  }
+    return bestMatch.label
+  }, [navConfig, pathname])
 
-  const expandedGroup = getExpandedGroup()
+  // Auto-select active group when sidebar collapses or pathname changes
+  useEffect(() => {
+    if (isCollapsed && activeGroupLabel && !isPanelClosed.current) {
+      setSelectedCollapsedGroup(activeGroupLabel)
+    } else if (!isCollapsed) {
+      setSelectedCollapsedGroup(null)
+      isPanelClosed.current = false
+    }
+  }, [isCollapsed, activeGroupLabel])
 
-  // Get the active item label for each group
-  const getActiveItemLabel = (items: NavItem[]) => {
-    return items.find((item) =>
-      pathname === item.href || pathname.startsWith(item.href + "/")
-    )?.label
-  }
+  // Get the selected group's items
+  const selectedGroup = navConfig.find(g => g.label === selectedCollapsedGroup)
 
   // Filter groups and items based on search query
   const filteredNavConfig = useMemo(() => {
@@ -535,16 +537,44 @@ function SidebarNav({ navConfig, theme, searchQuery }: { navConfig: NavConfig; t
       .filter((group) => group.items.length > 0)
   }, [navConfig, searchQuery])
 
-  const renderGroupItems = (items: NavItem[]) => {
+  const renderGroupItems = (items: NavItem[], forSlideOut = false) => {
     return items.map((item) => {
       const isActive =
         pathname === item.href ||
         (pathname.startsWith(item.href + "/") && item.href !== dashboardHref)
 
+      if (forSlideOut) {
+        // Render plain buttons for slide-out panel (show text labels)
+        return (
+          <SidebarMenuItem key={item.href}>
+            <button
+              className={cn(
+                "flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm text-left transition-colors",
+                "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                isActive && "bg-sidebar-primary/10 text-sidebar-primary font-semibold",
+                isActive && "relative before:content-[''] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-[2px] before:rounded-r before:bg-sidebar-primary"
+              )}
+              onClick={() => {
+                // Use client-side navigation for internal links
+                if (item.target === "_blank") {
+                  window.open(item.href, "_blank", "noopener,noreferrer")
+                } else {
+                  router.push(item.href)
+                }
+              }}
+            >
+              {item.icon && <item.icon className="size-4 shrink-0" />}
+              <span>{item.label}</span>
+            </button>
+          </SidebarMenuItem>
+        )
+      }
+
       return (
         <SidebarMenuItem key={item.href}>
           <SidebarMenuButton asChild isActive={isActive} tooltip={item.label}>
             <Link href={item.href} target={item.target} rel={item.target === "_blank" ? "noopener noreferrer" : undefined}>
+              {item.icon && <item.icon className="size-4" />}
               <span>{item.label}</span>
             </Link>
           </SidebarMenuButton>
@@ -553,6 +583,77 @@ function SidebarNav({ navConfig, theme, searchQuery }: { navConfig: NavConfig; t
     })
   }
 
+  // Render collapsed state - two-column pattern
+  if (isCollapsed) {
+    return (
+      <>
+        {/* First column: Group icons */}
+        <div className="flex flex-col gap-1 px-1 py-2">
+          {navConfig.map((group) => {
+            const isGroupActive = group.label === activeGroupLabel
+            const isSelected = group.label === selectedCollapsedGroup
+            const GroupIcon = group.icon
+
+            return (
+              <button
+                key={group.label}
+                onClick={() => {
+                  setSelectedCollapsedGroup(group.label)
+                  isPanelClosed.current = false
+                }}
+                className={cn(
+                  "relative flex size-8 items-center justify-center rounded-md transition-all duration-200",
+                  "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  isSelected && "bg-sidebar-primary text-sidebar-primary-foreground shadow-sm",
+                  isGroupActive && !isSelected && "bg-sidebar-accent/50 text-sidebar-primary"
+                )}
+                title={group.label}
+              >
+                {GroupIcon && <GroupIcon className="size-4" />}
+                {isGroupActive && !isSelected && (
+                  <div className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-4 bg-sidebar-primary rounded-r" />
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Second column: Child items panel */}
+        {selectedCollapsedGroup && selectedGroup && (
+          <div className="absolute left-full top-0 bottom-0 w-56 bg-sidebar border-l border-sidebar-border animate-in slide-in-from-left-2 duration-200">
+            <div className="flex flex-col h-full">
+              {/* Group header with close button */}
+              <div className="flex items-center justify-between px-4 py-3 border-b border-sidebar-border">
+                <div className="flex items-center gap-2">
+                  {selectedGroup.icon && <selectedGroup.icon className="size-4 text-sidebar-primary" />}
+                  <span className="font-semibold text-sm">{selectedGroup.label}</span>
+                </div>
+                <button
+                  onClick={() => {
+                    setSelectedCollapsedGroup(null)
+                    isPanelClosed.current = true
+                  }}
+                  className="flex items-center justify-center size-6 rounded-md hover:bg-sidebar-accent transition-colors"
+                  aria-label="Close panel"
+                >
+                  <XIcon className="size-4" />
+                </button>
+              </div>
+
+              {/* Child items */}
+              <div className="flex-1 overflow-y-auto">
+                <SidebarMenu className="p-2 gap-0.5">
+                  {renderGroupItems(selectedGroup.items, true)}
+                </SidebarMenu>
+              </div>
+            </div>
+          </div>
+        )}
+      </>
+    )
+  }
+
+  // Render expanded state - grouped with hover-expand
   if (filteredNavConfig.length === 0) {
     return (
       <div className="px-3 py-4 text-sm text-sidebar-foreground/50 text-center">
@@ -561,13 +662,19 @@ function SidebarNav({ navConfig, theme, searchQuery }: { navConfig: NavConfig; t
     )
   }
 
+  // Determine which group should be expanded
+  const getExpandedGroup = () => {
+    if (searchQuery.trim()) return null
+    if (hoveredGroup) return hoveredGroup
+    return activeGroupLabel
+  }
+
+  const expandedGroup = getExpandedGroup()
+
   // Determine if a group should show its items
   const shouldShowItems = (groupLabel: string) => {
-    // Always show items when searching
     if (searchQuery.trim()) return true
-    // Show items if this is the hovered group
     if (hoveredGroup === groupLabel) return true
-    // Show items if this is the active group
     if (expandedGroup === groupLabel) return true
     return false
   }
@@ -577,13 +684,11 @@ function SidebarNav({ navConfig, theme, searchQuery }: { navConfig: NavConfig; t
       {filteredNavConfig.map((group) => {
         const showItems = shouldShowItems(group.label)
         const isGroupActive = expandedGroup === group.label
-        const activeItemLabel = getActiveItemLabel(group.items)
-        const itemCount = group.items.length
 
         return (
           <div
             key={group.label}
-            className="group/nav-group"
+            className="group/nav-group hover:bg-sidebar-accent/30 transition-colors -mx-2 px-2 rounded-lg"
             onMouseEnter={() => setHoveredGroup(group.label)}
             onMouseLeave={() => setHoveredGroup(null)}
           >
@@ -600,13 +705,6 @@ function SidebarNav({ navConfig, theme, searchQuery }: { navConfig: NavConfig; t
                   <span>{group.label}</span>
                 </div>
               </SidebarGroupLabel>
-              {/* Active item indicator when collapsed */}
-              {!showItems && activeItemLabel && (
-                <div className="px-3 text-xs text-sidebar-foreground/50 flex items-center gap-1.5">
-                  <span className="w-1 h-1 rounded-full bg-sidebar-primary/60"></span>
-                  <span className="truncate">{activeItemLabel}</span>
-                </div>
-              )}
               <SidebarMenu
                 className={cn(
                   "transition-all duration-200 ease-out overflow-hidden",
@@ -627,6 +725,8 @@ function SidebarUserMenu({ theme }: { theme: DashboardTheme }) {
   const { user, logout, isLoading } = useAuthStore()
   const { clearAuthCookie } = useAuthCookie()
   const router = useRouter()
+  const { state } = useSidebar()
+  const isCollapsed = state === "collapsed"
 
   const displayName = getUserDisplayName(user);
   const initials =
@@ -652,11 +752,87 @@ function SidebarUserMenu({ theme }: { theme: DashboardTheme }) {
     systemHealth: "healthy" as "healthy" | "warning" | "error",
   }
 
+  // Collapsed state: simplified layout with centered items
+  if (isCollapsed) {
+    return (
+      <SidebarFooter className="flex flex-col gap-2 px-2 py-2 items-center">
+        {/* System Status Icon - centered */}
+        <Link
+          href="/dashboard/system/health"
+          className={cn(
+            "relative flex size-8 items-center justify-center rounded-md transition-colors",
+            "hover:bg-sidebar-accent",
+            stats.systemHealth === "healthy" && "text-success",
+            stats.systemHealth === "warning" && "text-warning",
+            stats.systemHealth === "error" && "text-destructive"
+          )}
+          title={stats.systemHealth === "healthy" ? "Systems operational" : "Attention needed"}
+        >
+          <ActivityIcon className="size-4" />
+          {stats.systemHealth !== "healthy" && (
+            <div className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-current animate-pulse" />
+          )}
+        </Link>
+
+        {/* User Menu Avatar - centered */}
+        <div className="flex items-center justify-center w-full">
+          <SidebarMenu className="w-full flex justify-center">
+            <SidebarMenuItem className="flex justify-center">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton
+                    size="lg"
+                    className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground size-9 p-0"
+                    tooltip="User menu"
+                  >
+                    <Avatar className="h-8 w-8 rounded-lg">
+                      <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                    </Avatar>
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
+                  side="right"
+                  align="end"
+                  sideOffset={4}
+                >
+                  <DropdownMenuLabel className="p-0 font-normal">
+                    <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
+                      <Avatar className="h-8 w-8 rounded-lg">
+                        <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                      </Avatar>
+                      <div className="grid flex-1 text-left text-sm leading-tight">
+                        <span className="truncate font-medium">{displayName || DEFAULT_USER_LABEL[theme]}</span>
+                        <span className="truncate text-xs">{user?.email || ""}</span>
+                      </div>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem asChild>
+                  <Link href={theme === "vendor" ? "/vendor/settings/profile" : theme === "customer" ? "/dashboard/profile" : "/settings"} className="cursor-pointer">
+                    <SettingsIcon className="mr-2 size-4" />
+                    Account Settings
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleLogout} disabled={isLoading}>
+                    <LogOutIcon className="mr-2 size-4" />
+                    Log out
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </div>
+      </SidebarFooter>
+    )
+  }
+
   return (
-    <SidebarFooter className="flex flex-col gap-0 p-2">
+    <SidebarFooter className="flex flex-col gap-3 p-4">
       {/* System Status Bar */}
-      <div className="flex items-center justify-between px-2 py-1.5 mb-1 rounded-md bg-sidebar-accent/50">
-        <div className="flex items-center gap-1.5">
+      <div className="flex items-center justify-between px-3 py-2.5 rounded-md bg-sidebar-accent/50">
+        <div className="flex items-center gap-2">
           <div className={cn(
             "w-1.5 h-1.5 rounded-full",
             stats.systemHealth === "healthy" && "bg-success",
@@ -676,29 +852,30 @@ function SidebarUserMenu({ theme }: { theme: DashboardTheme }) {
       </div>
 
       {/* User Menu */}
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <SidebarMenuButton
-                size="lg"
-                className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
-              >
-                <Avatar className="h-8 w-8 rounded-lg">
-                  <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
-                </Avatar>
-                <div className="grid flex-1 text-left text-sm leading-tight">
-                  <div className="flex items-center gap-1.5">
-                    <span className="truncate font-medium">{displayName || DEFAULT_USER_LABEL[theme]}</span>
-                    <span className="text-[10px] px-1 py-0.5 rounded bg-sidebar-primary/20 text-sidebar-primary">
-                      {user?.role || "Admin"}
-                    </span>
+      <div className="px-1">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  size="lg"
+                  className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+                >
+                  <Avatar className="h-8 w-8 rounded-lg">
+                    <AvatarFallback className="rounded-lg">{initials}</AvatarFallback>
+                  </Avatar>
+                  <div className="grid flex-1 text-left text-sm leading-tight">
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate font-medium">{displayName || DEFAULT_USER_LABEL[theme]}</span>
+                      <span className="text-[10px] px-1 py-0.5 rounded bg-sidebar-primary/20 text-sidebar-primary">
+                        {user?.role || "Admin"}
+                      </span>
+                    </div>
+                    <span className="truncate text-xs">{user?.email || ""}</span>
                   </div>
-                  <span className="truncate text-xs">{user?.email || ""}</span>
-                </div>
-                <ChevronsUpDownIcon className="ml-auto size-4" />
-              </SidebarMenuButton>
-            </DropdownMenuTrigger>
+                  <ChevronsUpDownIcon className="ml-auto size-4" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
             <DropdownMenuContent
               className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
               side="right"
@@ -732,6 +909,7 @@ function SidebarUserMenu({ theme }: { theme: DashboardTheme }) {
           </DropdownMenu>
         </SidebarMenuItem>
       </SidebarMenu>
+      </div>
     </SidebarFooter>
   )
 }

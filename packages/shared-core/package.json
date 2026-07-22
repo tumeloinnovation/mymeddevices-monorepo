@@ -2,6 +2,9 @@
   "name": "@mymeddevices/shared-core",
   "version": "1.0.0",
   "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "test": "vitest run"
   },

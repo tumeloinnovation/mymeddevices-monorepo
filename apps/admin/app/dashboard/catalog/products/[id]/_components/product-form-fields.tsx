@@ -42,9 +42,15 @@ export function TextView({
   );
 }
 
-export function MonoView({ children }: { children: ReactNode }) {
+export function MonoView({
+  children,
+  className = "",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <span className="text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded">
+    <span className={`text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded ${className}`}>
       {children ?? "\u2014"}
     </span>
   );

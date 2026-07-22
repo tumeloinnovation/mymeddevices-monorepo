@@ -126,30 +126,18 @@ export default function ReviewSection({
                   className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-3"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    {(() => {
-                      const src =
+                    <Image
+                      src={
                         // prefer WooCommerce `images` array
-                        (it as any).images?.[0]?.src || it.image || (it as any).thumbnail || null;
-                      if (src) {
-                        return (
-                          <Image
-                            src={src}
-                            alt={
-                              (it as any).images?.[0]?.alt || it.name || it.title || `Item ${it.id}`
-                            }
-                            width={56}
-                            height={56}
-                            className="h-12 w-12 sm:h-14 sm:w-14 rounded-md object-cover"
-                          />
-                        );
+                        (it as any).images?.[0]?.src || it.image || (it as any).thumbnail || '/logos/logo-portrait.png'
                       }
-
-                      return (
-                        <div className="h-14 w-14 shrink-0 rounded-md bg-muted/30 flex items-center justify-center text-sm text-muted-foreground">
-                          {String(it.name || it.title || '—').slice(0, 1)}
-                        </div>
-                      );
-                    })()}
+                      alt={
+                        (it as any).images?.[0]?.alt || it.name || it.title || `Item ${it.id}`
+                      }
+                      width={56}
+                      height={56}
+                      className="h-12 w-12 sm:h-14 sm:w-14 rounded-md object-cover"
+                    />
 
                     <div className="min-w-0">
                       <div className="font-medium truncate">

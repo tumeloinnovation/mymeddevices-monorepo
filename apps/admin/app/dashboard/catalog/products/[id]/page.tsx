@@ -76,6 +76,7 @@ import {
   useProductMutations,
   useImageMutations,
   useAIGenerate,
+  useAIValidate,
   useVendorsOverview,
   findVendorName,
 } from "./_hooks/use-product-detail";
@@ -155,7 +156,6 @@ const productSchema = z.object({
   sku: z.string().default(""),
   category_id: z.string().default(""),
   brand: z.string().default(""),
-  manufacturer: z.string().default(""),
   model_number: z.string().default(""),
   price: z.coerce.number().optional(),
   cost_price: z.coerce.number().optional(),
@@ -190,7 +190,6 @@ function productToFormValues(p: Product): ProductFormValues {
     sku: p.sku || "",
     category_id: p.category_id || "",
     brand: p.brand || "",
-    manufacturer: p.manufacturer || "",
     model_number: p.model_number || "",
     price: p.price ?? undefined,
     cost_price: p.cost_price ?? undefined,
@@ -239,7 +238,6 @@ function formValuesToPayload(values: ProductFormValues): Partial<Product> {
     sku: values.sku || undefined,
     category_id: values.category_id || undefined,
     brand: values.brand || undefined,
-    manufacturer: values.manufacturer || undefined,
     model_number: values.model_number || undefined,
     price: toOptionalNumber(values.price),
     cost_price: toOptionalNumber(values.cost_price),
@@ -287,6 +285,7 @@ export default function ProductDetailPage() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [activeGalleryImageIndex, setActiveGalleryImageIndex] = useState(0);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
 
   const { data: product, isLoading, error } = useProduct(productId);
   const { data: completeness } = useProductCompleteness(productId);
@@ -295,6 +294,7 @@ export default function ProductDetailPage() {
   const mutations = useProductMutations(productId);
   const imageMutations = useImageMutations(productId);
   const aiGen = useAIGenerate(productId);
+  const aiValidate = useAIValidate(productId);
 
   const form = useForm<ProductFormValues>({
     resolver: standardSchemaResolver(productSchema) as any,
@@ -377,7 +377,8 @@ export default function ProductDetailPage() {
     mutations.archive.isPending ||
     mutations.delete.isPending ||
     imageMutations.upload.isPending ||
-    imageMutations.remove.isPending;
+    imageMutations.remove.isPending ||
+    aiValidate.isPending;
 
   const vendorName =
     product && findVendorName(product.vendor_id, vendors);
@@ -441,9 +442,9 @@ export default function ProductDetailPage() {
       <div className="flex flex-col gap-6 p-4 lg:p-6 max-w-[1600px] mx-auto">
         
         {/* Header Block */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between bg-card border border-border/80 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="h-16 w-16 rounded-2xl bg-muted/40 border border-border flex items-center justify-center overflow-hidden flex-shrink-0 relative group">
+        <div className="flex flex-col gap-3 sm:gap-4 md:flex-row md:items-start md:justify-between bg-card border border-border/80 rounded-2xl p-4 md:p-5 shadow-sm">
+          <div className="flex items-center gap-3 md:gap-4 min-w-0">
+            <div className="h-14 w-14 md:h-16 md:w-16 rounded-2xl bg-muted/40 border border-border flex items-center justify-center overflow-hidden flex-shrink-0 relative group">
               {primaryImage ? (
                 <img
                   src={primaryImage.url}
@@ -451,28 +452,28 @@ export default function ProductDetailPage() {
                   className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-110"
                 />
               ) : (
-                <Package className="h-7 w-7 text-muted-foreground/30" />
+                <Package className="h-6 w-6 md:h-7 md:w-7 text-muted-foreground/30" />
               )}
             </div>
-            <div className="space-y-1">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-xl lg:text-2xl font-bold tracking-tight text-foreground">
+            <div className="space-y-1 min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2 md:gap-2.5">
+                <h1 className="text-base sm:text-lg md:text-xl lg:text-2xl font-bold tracking-tight text-foreground truncate">
                   {product.name}
                 </h1>
                 <StatusBadge status={product.status} />
               </div>
-              <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                <MonoView>{product.sku || "NO-SKU"}</MonoView>
+              <div className="flex items-center gap-2 md:gap-3 text-[11px] md:text-xs text-muted-foreground">
+                <MonoView className="truncate">{product.sku || "NO-SKU"}</MonoView>
                 {vendorName && (
-                  <span className="flex items-center gap-1 font-medium">
-                    <span className="h-1.5 w-1.5 rounded-full bg-primary/60" />
-                    {vendorName}
+                  <span className="flex items-center gap-1 font-medium truncate">
+                    <span className="h-1.5 w-1.5 rounded-full bg-primary/60 flex-shrink-0" />
+                    <span className="truncate">{vendorName}</span>
                   </span>
                 )}
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 flex-wrap justify-start md:justify-end">
             {!isEditing ? (
               <>
                 <Button variant="outline" size="sm" className="h-9 text-xs rounded-xl font-semibold border-border hover:bg-muted active:scale-[0.97] transition-all duration-150" asChild>
@@ -548,12 +549,12 @@ export default function ProductDetailPage() {
         </div>
 
         {(!product.images || product.images.length === 0) && (
-          <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+          <div className="p-3 md:p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
             <div className="flex gap-3 items-center">
               <div className="h-10 w-10 rounded-xl bg-amber-500/10 flex items-center justify-center flex-shrink-0">
                 <AlertCircle className="h-5 w-5 text-amber-600" />
               </div>
-              <div className="flex flex-col gap-0.5">
+              <div className="flex flex-col gap-0.5 min-w-0 flex-1">
                 <p className="text-sm font-bold text-amber-900 dark:text-amber-300">
                   Missing Clinical Images
                 </p>
@@ -566,7 +567,7 @@ export default function ProductDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-8 text-xs font-bold bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 border-amber-500/20 rounded-xl flex-shrink-0 active:scale-[0.97] transition-all duration-150"
+                className="h-8 text-xs font-bold bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 border-amber-500/20 rounded-xl flex-shrink-0 active:scale-[0.97] transition-all duration-150 self-start sm:self-auto"
                 onClick={() => {
                   setIsEditing(true);
                   setActiveTab("media");
@@ -579,42 +580,42 @@ export default function ProductDetailPage() {
         )}
 
         {/* Dashboard Grid Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
+
           {/* Left / Main Workspace */}
-          <div className="lg:col-span-2 flex flex-col gap-6">
+          <div className="lg:col-span-2 flex flex-col gap-4 md:gap-6 order-2 lg:order-1">
             
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="bg-muted/60 p-1 h-11 rounded-xl w-full justify-start overflow-x-auto border gap-1">
+              <TabsList className="bg-muted/60 p-1 h-10 md:h-11 rounded-xl w-full justify-start overflow-x-auto overflow-y-hidden border gap-1 scrollbar-thin">
                 <TabsTrigger
                   value="general"
-                  className="px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs font-semibold tracking-wide transition-all duration-150"
+                  className="px-3 md:px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-[11px] md:text-xs font-semibold tracking-wide transition-all duration-150 whitespace-nowrap"
                 >
-                  General Details
+                  General
                 </TabsTrigger>
                 <TabsTrigger
                   value="pricing"
-                  className="px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs font-semibold tracking-wide transition-all duration-150"
+                  className="px-3 md:px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-[11px] md:text-xs font-semibold tracking-wide transition-all duration-150 whitespace-nowrap"
                 >
-                  Pricing &amp; Stock
+                  Pricing
                 </TabsTrigger>
                 <TabsTrigger
                   value="technical"
-                  className="px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs font-semibold tracking-wide transition-all duration-150"
+                  className="px-3 md:px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-[11px] md:text-xs font-semibold tracking-wide transition-all duration-150 whitespace-nowrap"
                 >
-                  Specs &amp; Compliance
+                  Specs
                 </TabsTrigger>
                 <TabsTrigger
                   value="media"
-                  className="px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs font-semibold tracking-wide transition-all duration-150"
+                  className="px-3 md:px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-[11px] md:text-xs font-semibold tracking-wide transition-all duration-150 whitespace-nowrap"
                 >
-                  Media Library
+                  Media
                 </TabsTrigger>
                 <TabsTrigger
                   value="seo"
-                  className="px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-xs font-semibold tracking-wide transition-all duration-150"
+                  className="px-3 md:px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-[11px] md:text-xs font-semibold tracking-wide transition-all duration-150 whitespace-nowrap"
                 >
-                  SEO &amp; Search
+                  SEO
                 </TabsTrigger>
               </TabsList>
 
@@ -624,10 +625,10 @@ export default function ProductDetailPage() {
                 {/* Visual specsheet gallery when not editing */}
                 {!isEditing && product.images && product.images.length > 0 && (
                   <Card className="overflow-hidden border border-border/80 shadow-sm rounded-2xl">
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-6 p-6">
-                      
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 p-4 md:p-6">
+
                       {/* Active image and slider thumbnails */}
-                      <div className="md:col-span-5 flex flex-col gap-4">
+                      <div className="flex flex-col gap-3 md:gap-4">
                         <div className="aspect-square w-full rounded-2xl overflow-hidden border border-border/60 bg-muted/20 relative group">
                           <img
                             src={activeImage.url}
@@ -641,13 +642,13 @@ export default function ProductDetailPage() {
                           )}
                         </div>
                         {product.images.length > 1 && (
-                          <div className="flex gap-2.5 overflow-x-auto pb-1.5 scrollbar-thin">
+                          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin">
                             {product.images.map((img, idx) => (
                               <button
                                 key={img.id}
                                 onClick={() => setActiveGalleryImageIndex(idx)}
                                 className={cn(
-                                  "relative w-14 h-14 rounded-xl overflow-hidden border-2 bg-muted/10 transition-all select-none active:scale-95 flex-shrink-0",
+                                  "relative w-12 h-12 md:w-14 md:h-14 rounded-xl overflow-hidden border-2 bg-muted/10 transition-all select-none active:scale-95 flex-shrink-0",
                                   activeGalleryImageIndex === idx ? "border-primary shadow" : "border-border/60 hover:border-muted-foreground/30"
                                 )}
                               >
@@ -659,7 +660,7 @@ export default function ProductDetailPage() {
                       </div>
 
                       {/* Side quick specifications overview */}
-                      <div className="md:col-span-7 flex flex-col justify-between py-2 gap-4">
+                      <div className="flex flex-col justify-center md:justify-between py-1 gap-3 md:gap-4">
                         <div className="space-y-4">
                           <div className="flex flex-wrap items-center gap-2">
                             <Badge variant="secondary" className="bg-primary/5 text-primary border border-primary/10 rounded-lg px-2.5 py-1 text-[11px] font-bold">
@@ -685,10 +686,6 @@ export default function ProductDetailPage() {
                             <p className="text-sm font-semibold text-foreground mt-0.5">{product.model_number || "—"}</p>
                           </div>
                           <div>
-                            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Manufacturer</span>
-                            <p className="text-sm font-semibold text-foreground mt-0.5">{product.manufacturer || "—"}</p>
-                          </div>
-                          <div>
                             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Regulatory status</span>
                             <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 mt-0.5">
                               {product.ce_marking_or_fda_clearance ? "Clearance Active" : "No Clearance Record"}
@@ -711,8 +708,8 @@ export default function ProductDetailPage() {
                       Define device nomenclature, catalog mapping, and marketing copies.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-6 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                  <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
                       <Field
                         label="Product Name"
                         editing={isEditing}
@@ -737,7 +734,7 @@ export default function ProductDetailPage() {
 
                     <Separator />
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-5">
                       <Field
                         label="Catalog Category"
                         editing={isEditing}
@@ -775,21 +772,11 @@ export default function ProductDetailPage() {
                           className="h-10 text-sm focus-visible:ring-primary"
                         />
                       </Field>
-                      <Field
-                        label="Manufacturer"
-                        editing={isEditing}
-                        view={<TextView>{product.manufacturer}</TextView>}
-                      >
-                        <Input
-                          {...form.register("manufacturer")}
-                          className="h-10 text-sm focus-visible:ring-primary"
-                        />
-                      </Field>
                     </div>
 
                     <Separator />
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 md:gap-5">
                       <Field
                         label="Model Number"
                         editing={isEditing}
@@ -855,11 +842,11 @@ export default function ProductDetailPage() {
               </TabsContent>
 
               {/* Pricing & Stock Tab */}
-              <TabsContent value="pricing" className="mt-6 flex flex-col gap-6 focus-visible:outline-none">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                  
+              <TabsContent value="pricing" className="mt-4 md:mt-6 flex flex-col gap-4 md:gap-6 focus-visible:outline-none">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-6">
+
                   {/* Pricing Architecture */}
-                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-7">
+                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-1 lg:col-span-7">
                     <CardHeader className="bg-primary/5 border-b p-5">
                       <CardTitle className="text-sm font-bold flex items-center gap-2 text-primary">
                         <ShoppingCart className="h-4 w-4" />
@@ -962,9 +949,9 @@ export default function ProductDetailPage() {
                   </Card>
 
                   {/* Inventory & Stock */}
-                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-5 flex flex-col justify-between">
+                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-1 lg:col-span-5 flex flex-col justify-between">
                     <div>
-                      <CardHeader className="bg-amber-500/5 border-b p-5">
+                      <CardHeader className="bg-amber-500/5 border-b p-4 md:p-5">
                         <CardTitle className="text-sm font-bold flex items-center gap-2 text-amber-600">
                           <Zap className="h-4 w-4" />
                           Inventory &amp; Stock
@@ -973,7 +960,7 @@ export default function ProductDetailPage() {
                           Track product storage level, thresholds, and inventory states.
                         </CardDescription>
                       </CardHeader>
-                      <CardContent className="p-6 space-y-6">
+                      <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
                         <div className="grid grid-cols-2 gap-4">
                           <Field
                             label="Stock Count"
@@ -1042,13 +1029,13 @@ export default function ProductDetailPage() {
               </TabsContent>
 
               {/* Technical Specifications Tab */}
-              <TabsContent value="technical" className="mt-6 flex flex-col gap-6 focus-visible:outline-none">
-                
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-                  
+              <TabsContent value="technical" className="mt-4 md:mt-6 flex flex-col gap-4 md:gap-6 focus-visible:outline-none">
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-6">
+
                   {/* Left Specs */}
-                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-7">
-                    <CardHeader className="bg-indigo-500/5 border-b p-5">
+                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-1 lg:col-span-7">
+                    <CardHeader className="bg-indigo-500/5 border-b p-4 md:p-5">
                       <CardTitle className="text-sm font-bold flex items-center gap-2 text-indigo-600">
                         <Settings2 className="h-4 w-4" />
                         Clinical Configuration Specifications
@@ -1057,7 +1044,7 @@ export default function ProductDetailPage() {
                         Structured technical metrics displayed in dynamic lists.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="p-6">
+                    <CardContent className="p-4 md:p-6">
                       <Field
                         label="Technical Specifications Schema"
                         editing={isEditing}
@@ -1069,8 +1056,8 @@ export default function ProductDetailPage() {
                   </Card>
 
                   {/* Right Compliance details */}
-                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-5">
-                    <CardHeader className="bg-violet-500/5 border-b p-5">
+                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-1 lg:col-span-5">
+                    <CardHeader className="bg-violet-500/5 border-b p-4 md:p-5">
                       <CardTitle className="text-sm font-bold flex items-center gap-2 text-violet-600">
                         <ShieldCheck className="h-4 w-4" />
                         Compliance &amp; Clearance
@@ -1079,7 +1066,7 @@ export default function ProductDetailPage() {
                         Regulatory details and physical device metrics.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="p-6 space-y-6">
+                    <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
                       
                       <div className="grid grid-cols-2 gap-4">
                         <Field
@@ -1242,10 +1229,10 @@ export default function ProductDetailPage() {
               </TabsContent>
 
               {/* Media library manager */}
-              <TabsContent value="media" className="mt-6 focus-visible:outline-none">
+              <TabsContent value="media" className="mt-4 md:mt-6 focus-visible:outline-none">
                 <Card className="border border-border/80 shadow-sm rounded-2xl">
-                  <CardHeader className="bg-muted/10 border-b p-5">
-                    <div className="flex items-center justify-between">
+                  <CardHeader className="bg-muted/10 border-b p-4 md:p-5">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                       <div>
                         <CardTitle className="text-sm font-bold flex items-center gap-2">
                           <ImageIcon className="h-4 w-4 text-primary" />
@@ -1259,7 +1246,7 @@ export default function ProductDetailPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-9 text-xs rounded-xl font-semibold border-border active:scale-[0.97] transition-all duration-150"
+                          className="h-9 text-xs rounded-xl font-semibold border-border active:scale-[0.97] transition-all duration-150 self-start sm:self-auto"
                           asChild
                         >
                           <label
@@ -1281,10 +1268,10 @@ export default function ProductDetailPage() {
                       )}
                     </div>
                   </CardHeader>
-                  <CardContent className="p-6">
+                  <CardContent className="p-4 md:p-6">
                     {product.images && product.images.length > 0 ? (
-                      <div className="flex flex-col gap-6">
-                        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                      <div className="flex flex-col gap-4 md:gap-6">
+                        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 md:gap-4">
                           {product.images.map((image, index) => (
                             <div
                               key={image.id}
@@ -1348,7 +1335,7 @@ export default function ProductDetailPage() {
                           )}
                         </div>
 
-                        <div className="p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 flex gap-3 items-start">
+                        <div className="p-3 md:p-4 rounded-2xl bg-amber-500/5 border border-amber-500/10 flex gap-3 items-start">
                           <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
                           <div>
                             <p className="text-xs font-bold text-amber-900 dark:text-amber-300">Clinical Image Standards</p>
@@ -1359,7 +1346,7 @@ export default function ProductDetailPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex flex-col items-center justify-center py-16 text-center border-2 border-dashed rounded-2xl bg-muted/5 border-muted-foreground/10 p-6">
+                      <div className="flex flex-col items-center justify-center py-12 md:py-16 text-center border-2 border-dashed rounded-2xl bg-muted/5 border-muted-foreground/10 p-4 md:p-6">
                         <div className="h-12 w-12 rounded-2xl bg-muted/50 flex items-center justify-center mb-4">
                           <ImageIcon className="h-6 w-6 text-muted-foreground/40" />
                         </div>
@@ -1391,9 +1378,9 @@ export default function ProductDetailPage() {
               </TabsContent>
 
               {/* SEO Tab */}
-              <TabsContent value="seo" className="mt-6 focus-visible:outline-none">
+              <TabsContent value="seo" className="mt-4 md:mt-6 focus-visible:outline-none">
                 <Card className="border border-border/80 shadow-sm rounded-2xl">
-                  <CardHeader className="bg-emerald-500/5 border-b p-5">
+                  <CardHeader className="bg-emerald-500/5 border-b p-4 md:p-5">
                     <CardTitle className="text-sm font-bold flex items-center gap-2 text-emerald-600">
                       <Globe className="h-4 w-4" />
                       Search Engine Optimization
@@ -1402,7 +1389,7 @@ export default function ProductDetailPage() {
                       Configure custom metatags for organic search indexing and visibility.
                     </CardDescription>
                   </CardHeader>
-                  <CardContent className="p-6 space-y-6">
+                  <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
                     
                     {/* Meta Title */}
                     <div className="space-y-2">
@@ -1498,11 +1485,30 @@ export default function ProductDetailPage() {
           </div>
 
           {/* Right / Sidebar widgets */}
-          <div className="lg:col-span-1 flex flex-col gap-6">
-            
+          <div className="lg:col-span-1 flex flex-col gap-4 md:gap-6 order-1 lg:order-2">
+
+            {/* Mobile/Tablet Sidebar Toggle */}
+            <div className="lg:hidden flex items-center justify-between p-3 bg-muted/40 border border-border/60 rounded-xl">
+              <div className="flex items-center gap-2">
+                <Activity className="h-4 w-4 text-primary" />
+                <span className="text-xs font-bold text-foreground">Status & Actions</span>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSidebar(!showSidebar)}
+                className="h-8 px-3 text-xs"
+              >
+                {showSidebar ? "Hide" : "Show"}
+              </Button>
+            </div>
+
             {/* Lifecyle Governance Card */}
-            <Card className="border border-border/80 shadow-sm rounded-2xl">
-              <CardHeader className="bg-muted/10 border-b p-5">
+            <Card className={cn(
+              "border border-border/80 shadow-sm rounded-2xl transition-all duration-200",
+              !showSidebar && "lg:block hidden"
+            )}>
+              <CardHeader className="bg-muted/10 border-b p-4 md:p-5">
                 <CardTitle className="text-sm font-bold flex items-center gap-2">
                   <Activity className="h-4 w-4 text-primary" />
                   Lifecycle &amp; Audit Status
@@ -1511,10 +1517,10 @@ export default function ProductDetailPage() {
                   Governance lifecycle parameters and compliance review actions.
                 </CardDescription>
               </CardHeader>
-              <CardContent className="p-6 space-y-6">
-                
+              <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
+
                 {completeness && (
-                  <div className="space-y-4">
+                  <div className="space-y-3 md:space-y-4">
                     <div className="space-y-2">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -1539,7 +1545,7 @@ export default function ProductDetailPage() {
                     </div>
 
                     {/* Step-by-Step Completeness Audit Checklist */}
-                    <div className="space-y-2 border bg-muted/10 rounded-2xl p-4">
+                    <div className="space-y-2 border bg-muted/10 rounded-2xl p-3 md:p-4">
                       <h5 className="text-[10px] font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5 mb-1">
                         <ListChecks className="h-3.5 w-3.5 text-primary" />
                         Audit Desk Checklist
@@ -1547,9 +1553,9 @@ export default function ProductDetailPage() {
                       <ul className="space-y-2">
                         {checklistItems.map((item, idx) => (
                           <li key={idx} className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">{item.label}</span>
+                            <span className="text-muted-foreground truncate flex-1 mr-2">{item.label}</span>
                             <Badge className={cn(
-                              "text-[9px] px-1.5 py-0.5 rounded-full font-bold",
+                              "text-[9px] px-1.5 py-0.5 rounded-full font-bold flex-shrink-0",
                               item.isCompleted ? "bg-emerald-500/10 text-emerald-700 border-emerald-200" : "bg-muted text-muted-foreground"
                             )}>
                               {item.isCompleted ? "VERIFIED" : "PENDING"}
@@ -1560,7 +1566,7 @@ export default function ProductDetailPage() {
                     </div>
 
                     {completeness.missing_required.length > 0 && (
-                      <div className="space-y-1 bg-amber-500/5 border border-amber-500/10 rounded-xl p-3.5">
+                      <div className="space-y-1 bg-amber-500/5 border border-amber-500/10 rounded-xl p-3 md:p-3.5">
                         <p className="text-[9px] font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider flex items-center gap-1">
                           <AlertCircle className="h-3 w-3" />
                           Action Required:
@@ -1570,15 +1576,15 @@ export default function ProductDetailPage() {
                             const item = completeness.items.find((i) => i.field === field);
                             return (
                               <li key={field} className="text-[10px] text-amber-700/90 dark:text-amber-400/90 flex items-center gap-1.5">
-                                <span className="h-1 w-1 rounded-full bg-amber-500" />
-                                {item?.label || field}
+                                <span className="h-1 w-1 rounded-full bg-amber-500 flex-shrink-0" />
+                                <span className="truncate">{item?.label || field}</span>
                               </li>
                             );
                           })}
                         </ul>
                       </div>
                     )}
-                    
+
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1620,7 +1626,7 @@ export default function ProductDetailPage() {
                             disabled={isSaving}
                           >
                             <CheckCircle2 className="mr-2 h-4 w-4" />
-                            Approve &amp; Publish Listing
+                            Approve &amp; Publish
                           </Button>
                           <Button
                             variant="outline"
@@ -1633,7 +1639,7 @@ export default function ProductDetailPage() {
                             Reject with Feedback
                           </Button>
 
-                          <div className="p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2.5">
+                          <div className="p-3 md:p-4 rounded-2xl bg-indigo-500/5 border border-indigo-500/10 space-y-2.5">
                              <div className="flex items-center gap-2">
                                <Sparkles className="h-4 w-4 text-indigo-600" />
                                <span className="text-[10px] font-extrabold uppercase tracking-wider text-indigo-700">Audit Desk Validator</span>
@@ -1641,16 +1647,21 @@ export default function ProductDetailPage() {
                              <p className="text-[10px] text-muted-foreground leading-relaxed">
                                Cross-reference listings against medical device taxonomy specifications.
                              </p>
-                             <Button 
-                               variant="outline" 
-                               size="sm" 
+                             <Button
+                               variant="outline"
+                               size="sm"
                                className="w-full h-8 text-[10px] font-bold border-indigo-200 text-indigo-700 hover:bg-indigo-50 active:scale-[0.97] transition-all duration-150 rounded-lg"
-                               onClick={() => {
-                                 toast.info("AI Validator is analyzing the listing...");
-                                 setTimeout(() => toast.success("AI Audit complete: No major clinical inconsistencies found."), 2000);
-                               }}
+                               onClick={() => aiValidate.mutate()}
+                               disabled={isSaving}
                              >
-                               Run AI Validation
+                               {aiValidate.isPending ? (
+                                 <>
+                                   <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+                                   Validating...
+                                 </>
+                               ) : (
+                                 "Run AI Validation"
+                               )}
                              </Button>
                           </div>
                         </>
@@ -1678,7 +1689,7 @@ export default function ProductDetailPage() {
                 <Separator />
 
                 {/* Analytical Stats */}
-                <div className="space-y-3.5">
+                <div className="space-y-3 md:space-y-3.5">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
                     Listing Analytics
                   </span>
@@ -1701,13 +1712,13 @@ export default function ProductDetailPage() {
                 {vendorName && (
                   <>
                     <Separator />
-                    <div className="rounded-2xl bg-slate-950 p-4 text-white relative overflow-hidden shadow-md">
+                    <div className="rounded-2xl bg-slate-950 p-3 md:p-4 text-white relative overflow-hidden shadow-md">
                       <div className="absolute top-0 right-0 -translate-y-1/2 translate-x-1/2 w-16 h-16 bg-primary/20 rounded-full blur-xl" />
                       <div className="relative z-10 space-y-2">
                         <Package className="h-4 w-4 text-yellow-400" />
-                        <p className="text-xs font-bold">{vendorName}</p>
+                        <p className="text-xs font-bold truncate">{vendorName}</p>
                         <p className="text-[9px] text-slate-400 leading-normal">
-                          Vendor owns write access privileges for this product. Updates are audited.
+                          Vendor owns write access privileges. Updates are audited.
                         </p>
                       </div>
                     </div>
@@ -1717,7 +1728,7 @@ export default function ProductDetailPage() {
                 <Separator />
 
                 {/* Destructive actions */}
-                <div className="flex flex-col items-center text-center gap-2 p-4 rounded-2xl bg-destructive/5 border border-dashed border-destructive/10">
+                <div className="flex flex-col items-center text-center gap-2 p-3 md:p-4 rounded-2xl bg-destructive/5 border border-dashed border-destructive/10">
                   <div className="h-8 w-8 rounded-lg bg-destructive/10 text-destructive flex items-center justify-center">
                     <AlertCircle className="h-4 w-4" />
                   </div>
@@ -1743,7 +1754,7 @@ export default function ProductDetailPage() {
 
       {/* Delete Dialog */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="sm:max-w-[380px] rounded-2xl">
+        <DialogContent className="sm:max-w-[380px] max-w-[calc(100%-2rem)] rounded-2xl mx-4">
           <DialogHeader>
             <div className="h-10 w-10 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center mb-3">
               <Trash2 className="h-5 w-5" />
@@ -1765,7 +1776,7 @@ export default function ProductDetailPage() {
               size="sm"
               onClick={() => setShowDeleteDialog(false)}
               disabled={isSaving}
-              className="rounded-lg h-9 text-xs"
+              className="rounded-lg h-9 text-xs flex-1 sm:flex-auto"
             >
               Cancel
             </Button>
@@ -1778,7 +1789,7 @@ export default function ProductDetailPage() {
                 });
               }}
               disabled={isSaving}
-              className="rounded-lg h-9 text-xs"
+              className="rounded-lg h-9 text-xs flex-1 sm:flex-auto"
             >
               {mutations.delete.isPending && (
                 <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
@@ -1791,7 +1802,7 @@ export default function ProductDetailPage() {
 
       {/* Rejection Dialog */}
       <Dialog open={showRejectDialog} onOpenChange={() => setShowRejectDialog(false)}>
-        <DialogContent className="sm:max-w-[480px] rounded-3xl">
+        <DialogContent className="sm:max-w-[480px] max-w-[calc(100%-2rem)] rounded-3xl mx-4">
           <DialogHeader>
             <div className="h-12 w-12 rounded-2xl bg-amber-100 text-amber-600 flex items-center justify-center mb-4">
               <XCircle className="h-6 w-6" />
@@ -1809,11 +1820,11 @@ export default function ProductDetailPage() {
               className="min-h-[120px] rounded-2xl p-4 text-xs border-muted-foreground/20 focus:ring-primary focus-visible:ring-primary focus-visible:outline-none"
             />
           </div>
-          <DialogFooter className="gap-2">
+          <DialogFooter className="gap-2 flex-col sm:flex-row">
             <Button
               variant="ghost"
               onClick={() => setShowRejectDialog(false)}
-              className="font-bold text-xs uppercase tracking-widest"
+              className="font-bold text-xs uppercase tracking-widest flex-1 sm:flex-auto"
             >
               Cancel
             </Button>
@@ -1821,7 +1832,7 @@ export default function ProductDetailPage() {
               variant="destructive"
               onClick={handleRejectSubmit}
               disabled={!rejectionReason.trim() || mutations.reject.isPending}
-              className="rounded-xl px-6 font-bold text-xs uppercase tracking-wider"
+              className="rounded-xl px-6 font-bold text-xs uppercase tracking-wider flex-1 sm:flex-auto"
             >
               {mutations.reject.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ArrowRight className="mr-2 h-4 w-4" />}
               Send Feedback

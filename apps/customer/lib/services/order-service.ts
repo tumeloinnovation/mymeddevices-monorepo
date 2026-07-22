@@ -1,5 +1,6 @@
 import { apiClient } from '@mymeddevices/core/lib/services/api-client';
 import { toast } from 'sonner';
+import type { Cart } from '@mymeddevices/shared-core';
 
 // ============================================================================
 // Types
@@ -146,7 +147,7 @@ export const orderService = {
         },
       });
 
-      if (response && response.data) {
+      if (response?.success && response?.data) {
         return response.data;
       }
 
@@ -158,13 +159,14 @@ export const orderService = {
   },
 
   /**
-   * Get single order by ID
+   * Get single order by ID (public endpoint)
    */
-  async getOrder(id: string): Promise<Order> {
+  async getOrder(id: string, guestToken?: string): Promise<Order> {
     try {
-      const response = await apiClient.get<any>(`/shopping/orders/${id}`);
+      const params = guestToken ? { guest_token: guestToken } : {};
+      const response = await apiClient.get<any>(`/shopping/orders/public/${id}`, { params });
 
-      if (response && response.data) {
+      if (response?.success && response?.data) {
         return response.data;
       }
 
@@ -184,7 +186,7 @@ export const orderService = {
         params: { order_number: orderNumber, limit: 1 },
       });
 
-      if (response && response.data && response.data.items && response.data.items.length > 0) {
+      if (response?.success && response?.data?.items && response.data.items.length > 0) {
         return response.data.items[0];
       }
 
@@ -206,7 +208,7 @@ export const orderService = {
     try {
       const response = await apiClient.post<any>('/shopping/checkout', request);
 
-      if (response && response.data) {
+      if (response?.success && response?.data) {
         toast.success('Order created successfully');
         return response.data;
       }
@@ -220,30 +222,23 @@ export const orderService = {
     }
   },
 
-  /**
-   * Create order from cart ID (convenience method)
-   */
   async createOrderFromCart(
-    cartId: string,
+    cart: Cart,
     shippingAddress: Address | Record<string, any>,
     billingAddress?: Address | Record<string, any>,
     notes?: string,
     guestToken?: string
   ): Promise<Order> {
     try {
-      // Validate cart has items first
-      const { cartService } = await import('../services/cart-service');
-      const cart = await cartService.getCart();
-
-      if (!cart || cart.items.length === 0) {
+      if (!cart || !cart.items || cart.items.length === 0) {
         throw new Error('Your cart is empty. Please add items before checkout.');
       }
 
       // Generate idempotency key for this order
-      const idempotencyKey = `order-${cartId}-${Date.now()}`;
+      const idempotencyKey = `order-${cart.id}-${Date.now()}`;
 
       return await this.createOrder({
-        cart_id: cartId,
+        cart_id: cart.id,
         shipping_address: shippingAddress,
         notes,
         idempotency_key: idempotencyKey,
@@ -268,15 +263,15 @@ export const orderService = {
     try {
       // For M-Pesa, use the STK push endpoint
       if (request.payment_method === 'mpesa') {
-        const response = await apiClient.post<any>('/api/payments/stkpush/initiate', {
+        const response = await apiClient.post<any>('/payments/stkpush/initiate', {
           order_id: request.order_id,
           phone_number: request.payment_data?.phone,
         });
 
-        if (response && response.data) {
+        if (response) {
           toast.success('Payment initiated successfully');
           return {
-            payment_id: response.data.payment_id || response.data.merchant_request_id,
+            payment_id: response.payment_id || response.merchant_request_id,
             order_id: request.order_id,
             status: 'pending',
             amount: '0',
@@ -306,21 +301,21 @@ export const orderService = {
     phone: string
   ): Promise<PaymentResponse> {
     try {
-      const response = await apiClient.post<any>('/api/payments/stkpush/initiate', {
+      const response = await apiClient.post<any>('/payments/stkpush/initiate', {
         order_id: orderId,
         phone_number: phone,
       });
 
-      if (response && response.data) {
+      if (response) {
         toast.success('M-Pesa payment initiated');
         return {
-          payment_id: response.data.payment_id || response.data.merchant_request_id,
+          payment_id: response.payment_id || response.merchant_request_id,
           order_id: orderId,
           status: 'pending',
           amount: '0',
           currency: 'KES',
           payment_method: 'mpesa',
-          transaction_id: response.data.checkout_request_id,
+          transaction_id: response.checkout_request_id,
           created_at: new Date().toISOString(),
         };
       }
@@ -338,19 +333,19 @@ export const orderService = {
    */
   async getPaymentStatus(paymentId: string): Promise<PaymentResponse> {
     try {
-      const response = await apiClient.post<any>('/api/payments/stkpush/status', {
+      const response = await apiClient.post<any>('/payments/stkpush/status', {
         merchant_request_id: paymentId,
       });
 
-      if (response && response.data) {
+      if (response) {
         return {
           payment_id: paymentId,
-          order_id: response.data.order_id || '',
-          status: response.data.result_code === '0' ? 'completed' : 'failed',
-          amount: response.data.amount || '0',
+          order_id: response.order_id || '',
+          status: response.result_code === '0' ? 'completed' : 'failed',
+          amount: response.amount || '0',
           currency: 'KES',
           payment_method: 'mpesa',
-          transaction_id: response.data.merchant_request_id,
+          transaction_id: response.merchant_request_id,
           created_at: new Date().toISOString(),
         };
       }
@@ -373,7 +368,7 @@ export const orderService = {
     try {
       const response = await apiClient.get<any>(`/shopping/orders/${orderId}/status`);
 
-      if (response && response.data) {
+      if (response?.success && response?.data) {
         return response.data;
       }
 
@@ -391,7 +386,7 @@ export const orderService = {
     try {
       const response = await apiClient.get<any>(`/shopping/orders/${orderId}/tracking`);
 
-      if (response && response.data) {
+      if (response?.success && response?.data) {
         return response.data;
       }
 
@@ -434,7 +429,7 @@ export const orderService = {
         reason,
       });
 
-      if (response && response.data) {
+      if (response?.success && response?.data) {
         toast.success('Order cancelled successfully');
         return response.data;
       }
@@ -461,7 +456,7 @@ export const orderService = {
         reason,
       });
 
-      if (response && response.data) {
+      if (response?.success && response?.data) {
         toast.success('Refund requested successfully');
         return response.data;
       }

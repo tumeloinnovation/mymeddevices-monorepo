@@ -30,7 +30,7 @@ def render_email_template(template_name: str, context: Dict[str, Any]) -> str:
     return template.render(**context)
 
 
-def otp_html(code: str, title: str, lead_text: str, footer_note: str, expiry_minutes: int) -> str:
+def otp_html(code: str, title: str, lead_text: str, footer_note: str, expiry_minutes: int, reset_url: Optional[str] = None) -> str:
     return render_email_template(
         "otp.html",
         {
@@ -40,6 +40,7 @@ def otp_html(code: str, title: str, lead_text: str, footer_note: str, expiry_min
             "lead_text": lead_text,
             "footer_note": footer_note,
             "expiry_minutes": expiry_minutes,
+            "reset_url": reset_url,
         },
     )
 

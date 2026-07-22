@@ -25,6 +25,16 @@
       </mj-column>
     </mj-section>
 
+    {% if reset_url %}
+    <mj-section padding="24px 32px 24px" background-color="#ffffff">
+      <mj-column>
+        <mj-button href="{{ reset_url }}">
+          Reset Your Password
+        </mj-button>
+      </mj-column>
+    </mj-section>
+    {% endif %}
+
     <mj-section padding="24px 32px 24px" background-color="#ffffff">
       <mj-column>
         <mj-text font-size="14px" color="#64748b" padding="0 0 16px">

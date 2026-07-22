@@ -230,7 +230,7 @@ export default function ProductCommandSearch({
                       >
                         {products.map((p, idx) => {
                           const selected = idx === highlightIndex;
-                          const imageSrc = p.images?.[0]?.src || "/placeholder.png";
+                          const imageSrc = p.images?.[0]?.src || "/logos/logo-portrait.png";
                           const category =
                             p.categories?.[0]?.name || "Uncategorized";
                           return (

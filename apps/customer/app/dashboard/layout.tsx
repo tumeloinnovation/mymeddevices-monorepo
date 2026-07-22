@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { useTheme } from 'next-themes';
 import { Sun, Moon, Store } from 'lucide-react';
 import Link from 'next/link';
-import { DashboardSidebar } from '../(shop)/dashboard/_components/DashboardSidebar';
+import { DashboardSidebar } from './_components/DashboardSidebar';
 
 export default function DashboardLayout({
   children,

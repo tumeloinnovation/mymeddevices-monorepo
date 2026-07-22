@@ -1,5 +1,5 @@
 import { cartService } from '../services/cart-service';
-import useCartStore from '@mymeddevices/core/lib/store/useCartStore';
+import { useCartStore, CART_STORAGE_KEY } from '@mymeddevices/shared-core';
 
 // ============================================================================
 // Simple UUID Generator (replaces uuid package)
@@ -20,12 +20,25 @@ function generateUUID(): string {
 const GUEST_CART_TOKEN_KEY = 'guest_cart_token';
 const GUEST_CART_EXPIRY_KEY = 'guest_cart_expiry';
 const CART_TOKEN_DURATION = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
+const ABANDONED_CART_KEY = 'guest_cart_last_activity';
+const ABANDONED_CART_DURATION = 30 * 24 * 60 * 60 * 1000; // 30 days of inactivity
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export type MergeMethod = 'merge' | 'replace';
+
+export interface MergeOptions {
+  /** Whether to skip merge if guest cart is empty */
+  skipIfEmpty?: boolean;
+  /** Whether to show a confirmation dialog (for future use) */
+  confirm?: boolean;
+  /** Callback when merge succeeds */
+  onSuccess?: () => void;
+  /** Callback when merge fails */
+  onError?: (error: Error) => void;
+}
 
 // ============================================================================
 // Guest Cart Token Management
@@ -132,43 +145,162 @@ export function isGuestCart(): boolean {
 // ============================================================================
 
 /**
+ * Track cart activity timestamp
+ */
+export function updateCartActivity(): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.setItem(ABANDONED_CART_KEY, String(Date.now()));
+  } catch (error) {
+    console.error('Failed to update cart activity:', error);
+  }
+}
+
+/**
+ * Check if cart should be abandoned due to inactivity
+ */
+export function shouldAbandonCart(): boolean {
+  if (typeof window === 'undefined') return false;
+
+  try {
+    const lastActivity = localStorage.getItem(ABANDONED_CART_KEY);
+    if (!lastActivity) return false;
+
+    const inactiveTime = Date.now() - parseInt(lastActivity, 10);
+    return inactiveTime > ABANDONED_CART_DURATION;
+  } catch (error) {
+    console.error('Failed to check cart abandonment:', error);
+    return false;
+  }
+}
+
+/**
  * Initialize guest cart on app load
  * Should be called on app initialization
+ *
+ * @param isAuthenticated - Optional flag indicating if user is authenticated.
+ *                          If not provided, will check localStorage as fallback.
  */
-export function initializeGuestCart(): void {
+export function initializeGuestCart(isAuthenticated?: boolean): void {
   if (typeof window === 'undefined') {
     return;
   }
 
-  // Ensure we have a guest cart token
-  ensureGuestCartToken();
+  // Don't initialize guest cart if user is authenticated
+  // Authenticated users use their persistent cart from backend
+  const userIsAuthenticated = isAuthenticated ?? (() => {
+    try {
+      // Fallback to checking localStorage for backward compatibility
+      const accessToken = localStorage.getItem('access_token');
+      return !!accessToken;
+    } catch (e) {
+      // Ignore localStorage access errors
+      return false;
+    }
+  })();
 
-  // Update cart store with the token
+  if (userIsAuthenticated) {
+    console.log('🔐 [GuestCart] User is authenticated, skipping guest cart initialization');
+    // Clean up any leftover guest cart token
+    const token = getGuestCartToken();
+    if (token) {
+      console.log('🧹 [GuestCart] Clearing orphaned guest cart token');
+      clearGuestCartToken();
+    }
+    return;
+  }
+
+  const cartStore = useCartStore.getState();
+
+  // Check if cart should be abandoned due to inactivity
+  if (shouldAbandonCart()) {
+    console.log('Cart abandoned due to inactivity, clearing...');
+    abandonGuestCart();
+    // Don't create a new token - will be created lazily when items are added
+    return;
+  }
+
+  // Update activity timestamp
+  updateCartActivity();
+
+  // Clean up empty guest cart tokens
+  // This prevents "Guest cart not found" errors on login
   const token = getGuestCartToken();
-  if (token) {
-    const cartStore = useCartStore.getState();
+  if (token && cartStore.items.length === 0) {
+    console.log('🧹 [GuestCart] Removing empty guest cart token');
+    clearGuestCartToken();
+    cartStore.clearCartToken();
+    return;
+  }
+
+  // Only sync with backend if we have both a token AND items
+  // This avoids unnecessary API calls and errors for empty carts
+  if (token && cartStore.items.length > 0) {
     cartStore.setCartToken(token);
+    // Sync to get the latest cart state from backend
+    // This handles cases where the cart was modified in another tab/session
+    cartStore.syncWithBackend();
   }
 }
 
 /**
  * Clean up guest cart on logout
+ *
+ * This ensures all guest cart data is cleared from:
+ * - localStorage (guest cart token)
+ * - Cart store state (both in-memory and persisted)
  */
 export function cleanupGuestCartOnLogout(): void {
+  // Clear guest cart token from localStorage
   clearGuestCartToken();
 
   const cartStore = useCartStore.getState();
+
+  // Clear cart token from store
   cartStore.clearCartToken();
+
+  // Clear items and cart reference from store
+  // This updates both in-memory state AND persisted storage
   cartStore.clear();
+
+  // Also explicitly clear the persisted storage to ensure
+  // stale items don't reappear on page reload
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem(CART_STORAGE_KEY);
+    } catch (e) {
+      console.warn('Failed to clear cart storage:', e);
+    }
+  }
+}
+
+/**
+ * Clean up empty guest cart token
+ *
+ * Removes the guest cart token if there are no items in the cart.
+ * This prevents attempting to merge empty guest carts on login.
+ */
+export function cleanupEmptyGuestCart(): void {
+  const cartStore = useCartStore.getState();
+
+  // If we have a token but no items, clear the token
+  if (getGuestCartToken() && cartStore.items.length === 0) {
+    console.log('🧹 [GuestCart] Clearing empty guest cart token');
+    clearGuestCartToken();
+    cartStore.clearCartToken();
+  }
 }
 
 /**
  * Merge guest cart into customer cart on login
  *
  * @param mergeMethod - 'merge' to combine carts, 'replace' to use customer cart only
+ * @param options - Additional options for merge behavior
  */
 export async function mergeGuestCartOnLogin(
-  mergeMethod: MergeMethod = 'merge'
+  mergeMethod: MergeMethod = 'merge',
+  options?: MergeOptions
 ): Promise<void> {
   const guestToken = getGuestCartToken();
 
@@ -177,34 +309,71 @@ export async function mergeGuestCartOnLogin(
     return;
   }
 
-  try {
-    const cartStore = useCartStore.getState();
+  const cartStore = useCartStore.getState();
 
+  // Optionally skip if guest cart is empty
+  if (options?.skipIfEmpty && cartStore.items.length === 0) {
+    console.log('Guest cart is empty, skipping merge');
+    clearGuestCartToken();
+    cartStore.clearCartToken();
+    options?.onSuccess?.();
+    return;
+  }
+
+  try {
     // Call the merge API
     const result = await cartService.mergeGuestCart(guestToken, mergeMethod);
+
+    // Sync the merged cart to get updated state
+    await cartStore.syncWithBackend({ force: true });
 
     // Clear guest token after successful merge
     clearGuestCartToken();
     cartStore.clearCartToken();
 
-    // Sync the merged cart
-    await cartStore.syncWithBackend();
-
     console.log('Cart merged successfully:', result);
-  } catch (error) {
-    console.error('Failed to merge guest cart:', error);
 
-    // Even if merge fails, clear the guest token to avoid issues
-    clearGuestCartToken();
+    // Call success callback if provided
+    options?.onSuccess?.();
+  } catch (error: any) {
+    console.error('Failed to merge guest cart:', error);
+    // If guest cart doesn't exist on backend, just clear local token and proceed
+    // This happens when user never added items as guest, or cart expired
+    const errorMessage = error?.message || error?.toString() || '';
+    if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
+      console.log('Guest cart not found or expired, clearing local token and proceeding');
+      clearGuestCartToken();
+      cartStore.clearCartToken();
+      options?.onSuccess?.();
+      return;
+    }
+
+    // Call error callback if provided
+    options?.onError?.(error as Error);
+    // Re-throw error so caller can handle it
+    throw error;
   }
 }
 
 /**
  * Check if guest cart needs merging
+ *
+ * Returns true only if:
+ * 1. Guest cart token exists
+ * 2. AND there are items in the local cart (added as guest)
+ *
+ * This prevents attempting to merge empty guest carts which would fail
+ * with "Guest cart not found or expired" errors.
  */
 export function needsGuestCartMerge(): boolean {
   const guestToken = getGuestCartToken();
-  return guestToken !== null;
+  if (!guestToken) {
+    return false;
+  }
+
+  // Only merge if there are actually items in the cart
+  const cartStore = useCartStore.getState();
+  return cartStore.items.length > 0;
 }
 
 // ============================================================================
@@ -213,7 +382,15 @@ export function needsGuestCartMerge(): boolean {
 
 /**
  * Transfer local cart items to guest cart
- * Useful when migrating from local-only cart to guest cart
+ *
+ * @deprecated This function is reserved for future migration scenarios.
+ * It is not currently called in the main flow but should be kept for:
+ * - Migrating from legacy local-only carts to guest carts
+ * - Testing and development scenarios
+ * - Future cart migration features
+ *
+ * Usage: Call this when transitioning from a local-only cart system
+ * to a guest cart system with backend persistence.
  */
 export async function transferLocalCartToGuest(): Promise<void> {
   const cartStore = useCartStore.getState();
@@ -248,7 +425,21 @@ export async function transferLocalCartToGuest(): Promise<void> {
  */
 export function abandonGuestCart(): void {
   clearGuestCartToken();
+  clearCartActivity();
 
   const cartStore = useCartStore.getState();
   cartStore.clearCartToken();
+}
+
+/**
+ * Clear cart activity tracking
+ */
+export function clearCartActivity(): void {
+  if (typeof window === 'undefined') return;
+
+  try {
+    localStorage.removeItem(ABANDONED_CART_KEY);
+  } catch (error) {
+    console.error('Failed to clear cart activity:', error);
+  }
 }

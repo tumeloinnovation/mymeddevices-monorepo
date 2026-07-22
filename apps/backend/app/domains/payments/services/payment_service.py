@@ -4,9 +4,10 @@ import random
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, or_, desc, func
+from sqlalchemy import select, and_, or_, desc, func, update
 from sqlalchemy.orm import selectinload
 
+from app.core.logging import logger
 from app.domains.payments.models import (
     PaymentMethod,
     Transaction,
@@ -588,18 +589,32 @@ class PaymentService:
 
             # Update Order status if linked
             if transaction.order_id:
-                order_stmt = update(Order).where(Order.id == transaction.order_id).values(status="paid")
-                await self.db.execute(order_stmt)
-                logger.info(f"Order {transaction.order_id} updated to 'paid' via callback")
+                try:
+                    from app.domains.shopping.services.order_service import OrderService
+                    order_service = OrderService(self.db)
+                    await order_service.update_order_status(transaction.order_id, "paid")
+                    logger.info(f"Order {transaction.order_id} updated to 'paid' via callback using OrderService")
+                except Exception as e:
+                    logger.error(f"Failed to update order status to paid via OrderService: {e}")
+                    order_stmt = update(Order).where(Order.id == transaction.order_id).values(status="paid")
+                    await self.db.execute(order_stmt)
+                    logger.info(f"Order {transaction.order_id} updated to 'paid' directly via callback fallback")
         else:
             transaction.status = TransactionStatus.FAILED.value
             transaction.failure_reason = callback_data.get("ResultDesc", "Unknown error")
 
-            # Optional: Update Order status to failed if linked
+            # Optional: Update Order status to cancelled if linked
             if transaction.order_id:
-                order_stmt = update(Order).where(Order.id == transaction.order_id).values(status="failed")
-                await self.db.execute(order_stmt)
-                logger.info(f"Order {transaction.order_id} updated to 'failed' via callback")
+                try:
+                    from app.domains.shopping.services.order_service import OrderService
+                    order_service = OrderService(self.db)
+                    await order_service.update_order_status(transaction.order_id, "cancelled")
+                    logger.info(f"Order {transaction.order_id} updated to 'cancelled' via callback using OrderService")
+                except Exception as e:
+                    logger.error(f"Failed to update order status to cancelled via OrderService: {e}")
+                    order_stmt = update(Order).where(Order.id == transaction.order_id).values(status="cancelled")
+                    await self.db.execute(order_stmt)
+                    logger.info(f"Order {transaction.order_id} updated to 'cancelled' directly via callback fallback")
 
         await self.db.commit()
         return True

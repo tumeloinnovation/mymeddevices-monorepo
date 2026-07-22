@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/sidebar"
 import { ChevronsUpDownIcon, UserIcon, SettingsIcon, CreditCardIcon, BellIcon, LogOutIcon } from "lucide-react"
 import Link from "next/link"
+import { useAuthStore } from "@mymeddevices/shared-core"
 
 export function NavUser({
   user,
@@ -38,22 +39,22 @@ export function NavUser({
     {
       icon: <UserIcon />,
       property: "Profile",
-      href: "/account/profile",
+      href: "/dashboard",
     },
     {
       icon: <SettingsIcon />,
       property: "Settings",
-      href: "/account/settings",
+      href: "/dashboard/settings",
     },
     {
       icon: <CreditCardIcon />,
-      property: "Billing",
-      href: "/account/billing",
+      property: "Orders",
+      href: "/dashboard/orders",
     },
     {
       icon: <BellIcon />,
-      property: "Notifications",
-      href: "/account/notifications",
+      property: "Addresses",
+      href: "/dashboard/addresses",
     },
     {
       icon: <LogOutIcon />,
@@ -61,6 +62,8 @@ export function NavUser({
       href: "#",
       onClick: () => {
         // Handle sign out logic here
+        useAuthStore.getState().logout();
+        window.location.href = "/";
       },
     },
   ]

@@ -91,16 +91,8 @@ async def admin_update_coupon(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Coupon not found")
     
     update_data = data.model_dump(exclude_unset=True)
-    # Handle restriction updates separately if needed, for now simplify
-    for key, value in update_data.items():
-        if hasattr(coupon, key):
-            setattr(coupon, key, value)
-        elif coupon.restrictions and hasattr(coupon.restrictions, key):
-            setattr(coupon.restrictions, key, value)
-            
-    await db.commit()
-    await db.refresh(coupon)
-    return success_response(coupon)
+    updated_coupon = await service.update_coupon(coupon_id, **update_data)
+    return success_response(updated_coupon)
 
 
 @router.delete("/coupons/{coupon_id}", status_code=status.HTTP_200_OK)

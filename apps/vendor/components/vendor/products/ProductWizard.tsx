@@ -55,6 +55,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useCategories, useProduct } from "@/lib/api/hooks/useCatalog";
 
 // --- Form Schema ---
@@ -64,7 +73,6 @@ const productSchema = z.object({
   slug: z.string().optional(),
   category_id: z.string().min(1, "Please select a category"),
   brand: z.string().optional(),
-  manufacturer: z.string().optional(),
   model_number: z.string().optional(),
 
   // Pricing
@@ -130,6 +138,9 @@ export function ProductWizard({ productId }: { productId?: string }) {
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+  const [aiPreview, setAiPreview] = useState<any>(null);
+  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [draftProductId, setDraftProductId] = useState<string | null>(productId || null);
 
   // Gallery state
@@ -139,7 +150,9 @@ export function ProductWizard({ productId }: { productId?: string }) {
 
   // Categories and brands
   const { data: categories } = useCategories();
-  const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
+  const [brands, setBrands] = useState<{ id: string; name: string; approval_status?: string }[]>([]);
+  const [createBrandLoading, setCreateBrandLoading] = useState(false);
+  const [createBrandError, setCreateBrandError] = useState<string | null>(null);
 
   // Fetch product in edit mode
   const { data: product, loading: productLoading } = useProduct(productId || "");
@@ -168,6 +181,26 @@ export function ProductWizard({ productId }: { productId?: string }) {
     fetchBrands();
   }, []);
 
+  const handleCreateBrand = async (name: string): Promise<string> => {
+    setCreateBrandLoading(true);
+    setCreateBrandError(null);
+
+    try {
+      const newBrand = await catalogService.createQuickBrand({ name });
+      // Add the new brand to the local brands list
+      setBrands(prev => [...prev, { id: newBrand.id, name: newBrand.name, approval_status: newBrand.approval_status }]);
+      toast.success(`Brand "${name}" created and pending approval`);
+      return newBrand.id;
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.detail || error?.message || "Failed to create brand";
+      setCreateBrandError(errorMessage);
+      toast.error(errorMessage);
+      throw error;
+    } finally {
+      setCreateBrandLoading(false);
+    }
+  };
+
   const flatCategories = useMemo(() => {
     if (!categories) return [];
     const result: typeof categories = [];
@@ -189,7 +222,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
       slug: "",
       category_id: "",
       brand: "",
-      manufacturer: "",
       model_number: "",
       base_price: 0,
       cost_price: undefined,
@@ -232,7 +264,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
         slug: prod.slug || "",
         category_id: prod.category_id || "",
         brand: prod.brand || "",
-        manufacturer: prod.manufacturer || "",
         model_number: prod.model_number || "",
         base_price: prod.base_price || prod.price || 0,
         cost_price: prod.cost_price || undefined,
@@ -363,7 +394,111 @@ export function ProductWizard({ productId }: { productId?: string }) {
     setValue("certifications", certifications.filter((c: string) => c !== certToRemove), { shouldValidate: true, shouldDirty: true });
   };
 
-  // AI Content Generation
+  // AI Content Generation for individual fields
+  const generateSingleField = async (fieldName: string) => {
+    const name = watch("name");
+    const categoryId = watch("category_id");
+
+    if (!name) {
+      toast.error("Please provide a product name first.");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      // Ensure we have a draft product
+      const draftData = methods.getValues();
+      const productData = {
+        ...draftData,
+        status: "draft"
+      };
+
+      let product;
+      if (draftProductId) {
+        product = await catalogService.updateProduct(draftProductId, productData);
+      } else {
+        product = await catalogService.createProduct(productData as ProductCreate);
+        setDraftProductId(product.id);
+      }
+
+      // Generate just the requested field
+      const suggestions = await catalogService.getAiSuggestions(product.id, {
+        fields_to_generate: [fieldName]
+      });
+
+      if (suggestions.suggestions) {
+        const { suggestions: s } = suggestions;
+
+        // Map field names to form field names
+        const fieldMap: Record<string, string> = {
+          "description": "description",
+          "short_description": "short_description",
+          "specifications": "specifications",
+          "tags": "tags",
+          "meta_title": "meta_title",
+          "meta_description": "meta_description"
+        };
+
+        if (s[fieldName]) {
+          setValue(fieldMap[fieldName] as any, s[fieldName]);
+          toast.success(`${fieldName.replace(/_/g, " ")} generated successfully!`);
+        }
+      }
+    } catch (error: any) {
+      toast.error("AI generation failed: " + (error.message || "Unknown error"));
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  // Pre-creation AI Preview
+  const previewAIContent = async () => {
+    const name = watch("name");
+    const brand = watch("brand");
+    const categoryId = watch("category_id");
+
+    if (!name || !brand) {
+      toast.error("Please enter product name and brand first.");
+      return;
+    }
+
+    setIsPreviewing(true);
+    try {
+      const category = flatCategories.find((c) => c.id === categoryId);
+      const categoryName = category?.name || "Medical Device";
+
+      const suggestions = await catalogService.generateDescriptions({
+        product_name: name,
+        brand: brand,
+        category: categoryName
+      });
+
+      setAiPreview(suggestions.suggestions);
+      setShowPreviewDialog(true);
+      toast.success("AI preview generated successfully!");
+    } catch (error: any) {
+      toast.error("AI preview failed: " + (error.message || "Unknown error"));
+    } finally {
+      setIsPreviewing(false);
+    }
+  };
+
+  // Apply preview content to form
+  const applyPreviewToForm = () => {
+    if (!aiPreview) return;
+
+    if (aiPreview.description) setValue("description", aiPreview.description);
+    if (aiPreview.short_description) setValue("short_description", aiPreview.short_description);
+    if (aiPreview.meta_title) setValue("meta_title", aiPreview.meta_title);
+    if (aiPreview.meta_description) setValue("meta_description", aiPreview.meta_description);
+
+    toast.success("Preview content applied to form!");
+    setShowPreviewDialog(false);
+    // Jump to AI Assist step to see the applied content
+    setCurrentStep(4);
+  };
+
+  // AI Content Generation (all fields at once)
   const generateAIContent = async () => {
     const name = watch("name");
     const categoryId = watch("category_id");
@@ -637,6 +772,11 @@ export function ProductWizard({ productId }: { productId?: string }) {
                         flatCategories={flatCategories}
                         brands={brands}
                         onNameChange={generateSlug}
+                        onCreateBrand={handleCreateBrand}
+                        createBrandLoading={createBrandLoading}
+                        createBrandError={createBrandError || undefined}
+                        onPreviewAI={previewAIContent}
+                        isPreviewing={isPreviewing}
                       />
                     )}
                     {currentStep === 1 && <StepPricing />}
@@ -655,6 +795,7 @@ export function ProductWizard({ productId }: { productId?: string }) {
                       <StepAIAssist
                         isGenerating={isGenerating}
                         onGenerate={generateAIContent}
+                        onGenerateField={generateSingleField}
                         specs={specs}
                         specEntries={specEntries}
                         onSpecChange={handleSpecChange}
@@ -724,6 +865,79 @@ export function ProductWizard({ productId }: { productId?: string }) {
           </div>
         </div>
       </div>
+
+      {/* AI Preview Dialog */}
+      <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
+        <DialogContent className="sm:max-w-[600px] max-w-[calc(100%-2rem)] rounded-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg font-bold">AI Content Preview</DialogTitle>
+                <DialogDescription className="text-xs pt-0">
+                  Review the AI-generated content before applying it to your product.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {aiPreview && (
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wider">Short Description</Label>
+                <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
+                  {aiPreview.short_description || "No short description generated"}
+                </p>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wider">Full Description</Label>
+                <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg whitespace-pre-line max-h-[200px] overflow-y-auto">
+                  {aiPreview.description || "No description generated"}
+                </p>
+              </div>
+
+              <Separator />
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wider">Meta Title</Label>
+                  <p className="text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 p-3 rounded-lg">
+                    {aiPreview.meta_title || "Not generated"}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-xs font-semibold uppercase tracking-wider">Meta Description</Label>
+                  <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg line-clamp-3">
+                    {aiPreview.meta_description || "Not generated"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 flex-col sm:flex-row">
+            <Button
+              variant="outline"
+              onClick={() => setShowPreviewDialog(false)}
+              className="font-bold text-xs uppercase tracking-widest flex-1 sm:flex-auto"
+            >
+              Discard
+            </Button>
+            <Button
+              onClick={applyPreviewToForm}
+              className="rounded-xl px-6 font-bold text-xs uppercase tracking-wider flex-1 sm:flex-auto bg-primary hover:bg-primary/95"
+            >
+              <CheckCircle2 className="mr-2 h-4 w-4" />
+              Apply to Form
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -734,10 +948,20 @@ function StepGeneral({
   flatCategories,
   brands,
   onNameChange,
+  onCreateBrand,
+  createBrandLoading,
+  createBrandError,
+  onPreviewAI,
+  isPreviewing,
 }: {
   flatCategories: any[];
-  brands: { id: string; name: string }[];
+  brands: { id: string; name: string; approval_status?: string }[];
   onNameChange: (name: string) => void;
+  onCreateBrand?: (name: string) => Promise<string>;
+  createBrandLoading?: boolean;
+  createBrandError?: string;
+  onPreviewAI?: () => void;
+  isPreviewing?: boolean;
 }) {
   const { register, setValue, watch } = useFormContext();
   const name = watch("name");
@@ -811,29 +1035,22 @@ function StepGeneral({
               <Label htmlFor="brand" className="text-xs font-semibold uppercase tracking-wider">
                 Brand
               </Label>
-              <Select
+              <SearchableSelect
+                options={brands.map((b) => ({
+                  value: b.id,
+                  label: b.name,
+                  badge: b.approval_status === 'pending' ? 'Pending' : undefined,
+                }))}
                 value={watch("brand")}
-                onValueChange={(value) => setValue("brand", value)}
-              >
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Select brand..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {brands.map((b) => (
-                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 col-span-2 md:col-span-1">
-              <Label htmlFor="manufacturer" className="text-xs font-semibold uppercase tracking-wider">
-                Manufacturer
-              </Label>
-              <Input
-                id="manufacturer"
-                {...register("manufacturer")}
-                placeholder="e.g. GE Healthcare"
-                className="h-11 font-semibold"
+                onChange={(value) => setValue("brand", value)}
+                placeholder="Select brand..."
+                searchPlaceholder="Search brands..."
+                emptyMessage="No brands found."
+                className="w-full"
+                allowCreate={!!onCreateBrand}
+                onCreateOption={onCreateBrand}
+                createLoading={createBrandLoading}
+                createError={createBrandError}
               />
             </div>
             <div className="space-y-2 col-span-2">
@@ -848,6 +1065,43 @@ function StepGeneral({
               />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* AI Preview Card */}
+      <Card className="border-border/50 shadow-xl shadow-foreground/5 bg-gradient-to-br from-amber-500/[0.02] to-primary/[0.02] relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-2 opacity-5 pointer-events-none">
+          <Zap className="h-16 w-16 text-primary" />
+        </div>
+        <CardContent className="flex items-center justify-between py-4 gap-4">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl flex items-center justify-center shadow-sm bg-white border">
+              <Sparkles className="h-4 w-4 text-amber-500" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">AI Content Preview</h3>
+              <p className="text-[10px] text-muted-foreground">Preview AI-generated descriptions before creating</p>
+            </div>
+          </div>
+          <Button
+            type="button"
+            onClick={onPreviewAI}
+            disabled={isPreviewing}
+            variant="outline"
+            className="rounded-lg h-9 px-4 text-xs font-semibold gap-2 border-amber-200 text-amber-700 hover:bg-amber-50"
+          >
+            {isPreviewing ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Previewing...
+              </>
+            ) : (
+              <>
+                <Eye className="h-3.5 w-3.5" />
+                Preview AI Content
+              </>
+            )}
+          </Button>
         </CardContent>
       </Card>
     </div>
@@ -927,11 +1181,35 @@ function StepInventory({ isEdit }: { isEdit?: boolean }) {
           <CardDescription>Set up inventory levels and weight.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="grid grid-cols-4 gap-6">
-            <div className="space-y-2 col-span-4 md:col-span-1">
-              <Label htmlFor="sku" className="text-xs font-semibold uppercase tracking-wider">
-                SKU <span className="text-red-500">*</span>
-              </Label>
+          <div className="grid grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="sku" className="text-xs font-semibold uppercase tracking-wider">
+                  SKU <span className="text-red-500">*</span>
+                </Label>
+                {!isEdit && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => {
+                      const name = watch("name") || "";
+                      const brand = watch("brand") || "";
+                      const category_id = watch("category_id") || "";
+                      // Generate SKU: first 3 letters of brand (upper) + first 3 of category + random 4 digits
+                      const brandPart = (brand || "GEN").substring(0, 3).toUpperCase();
+                      const catPart = (category_id ? category_id.substring(0, 3) : "CAT").toUpperCase();
+                      const randomPart = Math.floor(1000 + Math.random() * 9000);
+                      const generatedSku = `${brandPart}-${catPart}-${randomPart}`;
+                      setValue("sku", generatedSku);
+                    }}
+                  >
+                    <Sparkles className="h-3 w-3 mr-1" />
+                    Auto-generate
+                  </Button>
+                )}
+              </div>
               <Input
                 id="sku"
                 {...register("sku")}
@@ -939,8 +1217,9 @@ function StepInventory({ isEdit }: { isEdit?: boolean }) {
                 className="h-11 font-mono"
                 disabled={isEdit}
               />
+              <p className="text-[10px] text-muted-foreground">Click auto-generate to create a unique SKU based on brand and category.</p>
             </div>
-            <div className="space-y-2 col-span-4 md:col-span-1">
+            <div className="space-y-2">
               <Label htmlFor="stock_quantity" className="text-xs font-semibold uppercase tracking-wider">
                 {isEdit ? "Stock Quantity" : "Initial Stock"} <span className="text-red-500">*</span>
               </Label>
@@ -951,7 +1230,7 @@ function StepInventory({ isEdit }: { isEdit?: boolean }) {
                 className="h-11"
               />
             </div>
-            <div className="space-y-2 col-span-4 md:col-span-1">
+            <div className="space-y-2">
               <Label htmlFor="low_stock_threshold" className="text-xs font-semibold uppercase tracking-wider">
                 Low Stock Alert
               </Label>
@@ -962,7 +1241,7 @@ function StepInventory({ isEdit }: { isEdit?: boolean }) {
                 className="h-11"
               />
             </div>
-            <div className="space-y-2 col-span-4 md:col-span-1">
+            <div className="space-y-2">
               <Label htmlFor="weight_kg" className="text-xs font-semibold uppercase tracking-wider">
                 Weight (kg)
               </Label>
@@ -1116,6 +1395,7 @@ function StepGallery({
 function StepAIAssist({
   isGenerating,
   onGenerate,
+  onGenerateField,
   specs,
   specEntries,
   onSpecChange,
@@ -1130,6 +1410,7 @@ function StepAIAssist({
 }: {
   isGenerating: boolean;
   onGenerate: () => void;
+  onGenerateField: (field: string) => void;
   specs: Record<string, string>;
   specEntries: [string, string][];
   onSpecChange: (oldKey: string, newKey: string, newValue: string) => void;
@@ -1188,15 +1469,41 @@ function StepAIAssist({
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="short_description" className="text-xs font-semibold uppercase tracking-wider">
-              Short Description
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="short_description" className="text-xs font-semibold uppercase tracking-wider">
+                Short Description
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onGenerateField("short_description")}
+                disabled={isGenerating}
+                className="h-7 text-xs gap-1.5 text-primary hover:text-primary/80"
+              >
+                <Sparkles className="h-3 w-3" />
+                AI Generate
+              </Button>
+            </div>
             <Textarea id="short_description" {...register("short_description")} rows={3} placeholder="A brief summary for listings..." className="resize-none" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="description" className="text-xs font-semibold uppercase tracking-wider">
-              Description
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="description" className="text-xs font-semibold uppercase tracking-wider">
+                Description
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onGenerateField("description")}
+                disabled={isGenerating}
+                className="h-7 text-xs gap-1.5 text-primary hover:text-primary/80"
+              >
+                <Sparkles className="h-3 w-3" />
+                AI Generate
+              </Button>
+            </div>
             <Textarea id="description" {...register("description")} rows={6} placeholder="Provide a detailed description of the product..." className="resize-none" />
           </div>
         </CardContent>
@@ -1209,15 +1516,28 @@ function StepAIAssist({
             <CardTitle>Technical Specifications</CardTitle>
             <CardDescription>Define clinical and physical specifications as key-value pairs.</CardDescription>
           </div>
-          <Button type="button" variant="outline" size="sm" onClick={onSpecAdd} className="rounded-xl h-9 text-xs font-semibold gap-2">
-            <Plus className="h-3.5 w-3.5" />
-            Add Spec
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => onGenerateField("specifications")}
+              disabled={isGenerating}
+              className="rounded-xl h-9 text-xs font-semibold gap-2"
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              AI Generate Specs
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={onSpecAdd} className="rounded-xl h-9 text-xs font-semibold gap-2">
+              <Plus className="h-3.5 w-3.5" />
+              Add Spec
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-6">
           {specEntries.length === 0 ? (
             <div className="text-center p-8 rounded-xl bg-muted/20 border border-dashed border-muted text-xs text-muted-foreground font-medium">
-              No specifications yet. Click "Generate Details" or add one manually.
+              No specifications yet. Click "AI Generate Specs" to auto-generate based on your product category, or add manually.
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1253,9 +1573,22 @@ function StepAIAssist({
 
       {/* Tags Card */}
       <Card className="border-border/50 shadow-xl shadow-foreground/5">
-        <CardHeader>
-          <CardTitle>Tags</CardTitle>
-          <CardDescription>Manage categorizations and keywords for storefront navigation.</CardDescription>
+        <CardHeader className="flex flex-row items-center justify-between space-y-0">
+          <div>
+            <CardTitle>Tags</CardTitle>
+            <CardDescription>Manage categorizations and keywords for storefront navigation.</CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onGenerateField("tags")}
+            disabled={isGenerating}
+            className="h-7 text-xs gap-1.5 text-primary hover:text-primary/80"
+          >
+            <Sparkles className="h-3 w-3" />
+            AI Generate Tags
+          </Button>
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap gap-2 p-3 min-h-[56px] rounded-xl border bg-white items-center">
@@ -1288,15 +1621,41 @@ function StepAIAssist({
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="meta_title" className="text-xs font-semibold uppercase tracking-wider">
-              Meta Title
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="meta_title" className="text-xs font-semibold uppercase tracking-wider">
+                Meta Title
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onGenerateField("meta_title")}
+                disabled={isGenerating}
+                className="h-7 text-xs gap-1.5 text-primary hover:text-primary/80"
+              >
+                <Sparkles className="h-3 w-3" />
+                AI Generate
+              </Button>
+            </div>
             <Input id="meta_title" {...register("meta_title")} placeholder="Optimal title for search engines" className="h-11" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="meta_description" className="text-xs font-semibold uppercase tracking-wider">
-              Meta Description
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="meta_description" className="text-xs font-semibold uppercase tracking-wider">
+                Meta Description
+              </Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onGenerateField("meta_description")}
+                disabled={isGenerating}
+                className="h-7 text-xs gap-1.5 text-primary hover:text-primary/80"
+              >
+                <Sparkles className="h-3 w-3" />
+                AI Generate
+              </Button>
+            </div>
             <Textarea id="meta_description" {...register("meta_description")} rows={3} placeholder="Brief description for search results..." className="resize-none" />
           </div>
         </CardContent>
@@ -1462,7 +1821,6 @@ function StepReview({ data }: { data: any }) {
               { label: "Name", value: data.name },
               { label: "Slug", value: data.slug, mono: true },
               { label: "Brand", value: data.brand },
-              { label: "Manufacturer", value: data.manufacturer },
               { label: "Category", value: data.category_id }, // Would need to resolve to name
               { label: "Model Number", value: data.model_number },
               { label: "SKU", value: data.sku, mono: true },

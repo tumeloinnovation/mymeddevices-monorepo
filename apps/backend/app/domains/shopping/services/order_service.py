@@ -10,6 +10,7 @@ from app.domains.shopping.models.order import Order, OrderItem, OrderStatus, Ord
 from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.services.cart_calculation_service import CartCalculationService
 from app.domains.auth.models.user import User
+from app.domains.catalog.models.product import Product
 
 class InvalidStateTransitionError(ValueError):
     pass
@@ -29,15 +30,30 @@ class CheckoutService:
         self.db = db
 
     async def create_order_from_cart(
-        self, 
-        cart_id: uuid.UUID, 
-        user_id: Optional[uuid.UUID] = None, 
+        self,
+        cart_id: uuid.UUID,
+        user_id: Optional[uuid.UUID] = None,
         shipping_address: dict = None,
         notes: Optional[str] = None,
         idempotency_key: Optional[str] = None,
         guest_token: Optional[str] = None
     ) -> Order:
-        """Atomic conversion of a cart to an order."""
+        """Atomic conversion of a cart to an order with idempotency support."""
+        # Check for existing order with the same idempotency key (prevent duplicate orders)
+        if idempotency_key:
+            existing_order_stmt = select(Order).where(Order.idempotency_key == idempotency_key).options(
+                selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),
+                selectinload(Order.timeline_events)
+            )
+            if user_id:
+                existing_order_stmt = existing_order_stmt.where(Order.user_id == user_id)
+            existing_order_result = await self.db.execute(existing_order_stmt)
+            existing_order = existing_order_result.scalar_one_or_none()
+
+            if existing_order:
+                logger.info(f"Found existing order with idempotency key {idempotency_key}, returning existing order")
+                return existing_order
+
         # 1. Fetch cart with items and products
         stmt = select(Cart).where(Cart.id == cart_id).options(
             selectinload(Cart.items).selectinload(CartItem.product)
@@ -159,7 +175,7 @@ class CheckoutService:
         
         # Reload with items (and their products) and user for response
         stmt = select(Order).where(Order.id == order.id).options(
-            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),
             selectinload(Order.timeline_events)
         )
         if order.user_id:
@@ -193,7 +209,7 @@ class OrderService:
             return None
 
         stmt = select(Order).options(
-            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),
             selectinload(Order.user),
             selectinload(Order.timeline_events)
         )
@@ -239,7 +255,7 @@ class OrderService:
         total = total_result.scalar_one()
 
         stmt = select(Order).options(
-            selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),
             selectinload(Order.user)
         )
 

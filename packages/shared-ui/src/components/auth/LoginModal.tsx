@@ -213,20 +213,18 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl" />
                             <div className="relative z-10">
                                 <div className="flex items-center justify-between mb-4">
-                                    <img 
-                                        src="/logo-landscape.svg" 
-                                        alt="MyMedDevices Logo" 
+                                    <img
+                                        src="/logos/logo-landscape.png"
+                                        alt="MyMedDevices Logo"
                                         className="h-10 brightness-0 invert"
                                         onError={(e) => {
                                             (e.target as HTMLImageElement).style.display = 'none';
-                                            (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
+                                            const fallback = (e.target as HTMLImageElement).nextElementSibling as HTMLElement;
+                                            if (fallback) fallback.classList.remove('hidden');
                                         }}
                                     />
-                                    <div className="hidden text-xl font-bold tracking-tight">
+                                    <div className="hidden text-xl font-bold tracking-tight text-white">
                                         MyMedDevices
-                                    </div>
-                                    <div className="p-2 bg-white/20 rounded-lg">
-                                        {mode === 'login' ? <Lock className="h-5 w-5" /> : <UserCircle className="h-5 w-5" />}
                                     </div>
                                 </div>
                                 <h2 className="text-2xl font-bold mb-1">

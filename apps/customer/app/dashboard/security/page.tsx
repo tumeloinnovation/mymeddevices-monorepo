@@ -35,6 +35,8 @@ import {
   LogOut,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { PasswordStrengthChecklist } from './_components/password-strength-checklist'
+import { SecurityScoreWidget } from './_components/security-score-widget'
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -60,17 +62,6 @@ function DeviceIcon({ type }: { type: 'desktop' | 'mobile' | 'tablet' }) {
   }
 }
 
-// ─── Password Strength ───────────────────────────────────────────────────
-
-function getPasswordStrength(password: string): 'weak' | 'medium' | 'strong' | '' {
-  if (!password) return ''
-  if (password.length < 8) return 'weak'
-  if (/[A-Z]/.test(password) && /[a-z]/.test(password) && /[0-9]/.test(password)) {
-    return 'strong'
-  }
-  return 'medium'
-}
-
 // ─── Password Section ────────────────────────────────────────────────────
 
 function PasswordSection() {
@@ -81,8 +72,6 @@ function PasswordSection() {
   })
   const [show, setShow] = useState({ current: false, new: false, confirm: false })
   const [submitting, setSubmitting] = useState(false)
-
-  const strength = getPasswordStrength(formData.newPassword)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -172,29 +161,7 @@ function PasswordSection() {
               </button>
             </div>
             {formData.newPassword && (
-              <div className="mt-1 flex flex-col gap-1">
-                <div className="flex gap-1">
-                  {['weak', 'medium', 'strong'].map((level) => (
-                    <div
-                      key={level}
-                      className={`h-1 flex-1 rounded ${
-                        strength === level ||
-                        (strength === 'strong' && (level === 'medium' || level === 'weak')) ||
-                        (strength === 'medium' && level === 'weak')
-                          ? level === 'weak'
-                            ? 'bg-red-500'
-                            : level === 'medium'
-                              ? 'bg-yellow-500'
-                              : 'bg-green-500'
-                          : 'bg-gray-200'
-                      }`}
-                    />
-                  ))}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Must be at least 8 characters with uppercase, lowercase, and a number
-                </p>
-              </div>
+              <PasswordStrengthChecklist password={formData.newPassword} />
             )}
           </div>
 
@@ -629,21 +596,7 @@ export default function SecurityPage() {
         <p className="text-muted-foreground mt-2">Manage your password and security settings.</p>
       </div>
 
-      <Card className="bg-gradient-to-br from-green-50/40 to-transparent dark:from-green-950/10 border-green-100 dark:border-green-900/30">
-        <CardContent className="p-6">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg text-green-600 dark:text-green-400">
-              <Shield className="size-6" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold text-green-900 dark:text-green-300">Your account is secure</h2>
-              <p className="text-sm text-green-700/80 dark:text-green-400/80 mt-1">
-                All main security features are active, and your medical data is fully encrypted and protected.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <SecurityScoreWidget />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <PasswordSection />

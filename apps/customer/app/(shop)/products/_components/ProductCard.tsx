@@ -45,7 +45,7 @@ interface ProductCardProps {
 
 
   // Extract product details
-  const [imgSrc, setImgSrc] = useState(product?.images?.[0]?.src || '/logo-portrait.svg');
+  const [imgSrc, setImgSrc] = useState(product?.images?.[0]?.src || (product?.images?.[0] as any)?.url || '/logos/logo-portrait.png');
   const name = product?.name || '';
   const category = product?.categories?.[0]?.name || '';
   const price = product ? parseFloat(product.on_sale ? product.sale_price : product.price) : 0;
@@ -148,7 +148,7 @@ interface ProductCardProps {
             fill
             src={imgSrc}
             alt={name}
-            onError={() => setImgSrc('/logo-portrait.svg')}
+            onError={() => setImgSrc('/logos/logo-portrait.png')}
             sizes="(max-width: 640px) 200px, (max-width: 768px) 220px, 240px"
             style={{ objectFit: 'contain' }}
             className="transition-transform duration-500 ease-in-out group-hover:scale-110 p-2"

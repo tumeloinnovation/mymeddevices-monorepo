@@ -48,7 +48,6 @@ export interface Product {
   dimensions?: Record<string, any>;
   brand?: string;
   model_number?: string;
-  manufacturer?: string;
   specifications?: Record<string, any>;
   certifications?: string[];
   ppb_classification?: PPBClassification;
@@ -83,7 +82,6 @@ export interface ProductCreate {
   dimensions?: Record<string, any>;
   brand?: string;
   model_number?: string;
-  manufacturer?: string;
   specifications?: Record<string, any>;
   certifications?: string[];
   ppb_classification?: PPBClassification;
@@ -123,7 +121,7 @@ export interface CategoryCreate {
   slug: string;
   description?: string;
   icon_url?: string;
-  parent_id?: string;
+  parent_id?: string | null;
   sort_order?: number;
   is_active?: boolean;
 }
@@ -136,6 +134,7 @@ export interface CategoryTree {
   slug: string;
   description?: string;
   icon_url?: string;
+  parent_id?: string | null;
   sort_order: number;
   is_active: boolean;
   children: CategoryTree[];
@@ -155,6 +154,20 @@ export interface AIAssistResponse {
   suggestions: Record<string, any>;
   confidence: Record<string, number>;
   message: string;
+}
+
+export interface ValidationIssue {
+  field: string;
+  severity: 'error' | 'warning';
+  message: string;
+}
+
+export interface AIValidationResponse {
+  is_valid: boolean;
+  confidence: number;
+  issues: ValidationIssue[];
+  summary: string;
+  recommendations: string[];
 }
 
 export interface CompletenessItem {
@@ -182,9 +195,14 @@ export interface Brand {
   website_url?: string;
   sort_order: number;
   is_active: boolean;
+  approval_status?: 'pending' | 'approved' | 'rejected';
   product_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface BrandQuickCreate {
+  name: string;
 }
 
 export interface BrandCreate {

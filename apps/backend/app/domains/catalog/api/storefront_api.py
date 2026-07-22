@@ -10,11 +10,12 @@ from app.domains.catalog.schemas.product_schemas import (
     StorefrontProductListResponse,
 )
 from app.domains.catalog.schemas.category_schemas import CategoryTreeResponse
+from app.core.rate_limiting import RateLimiterDependency
 
 router = APIRouter(prefix="", tags=["Public Storefront"])
 
 
-@router.get("/products", response_model=StorefrontProductListResponse)
+@router.get("/products", response_model=StorefrontProductListResponse, dependencies=[Depends(RateLimiterDependency("products_get"))])
 async def get_storefront_products(
     category_id: Optional[str] = Query(None, description="Filter by category ID"),
     category_slug: Optional[str] = Query(None, description="Filter by category slug"),
@@ -67,7 +68,7 @@ async def get_storefront_products(
     }
 
 
-@router.get("/products/{slug}", response_model=StorefrontProductResponse)
+@router.get("/products/{slug}", response_model=StorefrontProductResponse, dependencies=[Depends(RateLimiterDependency("products_get"))])
 async def get_storefront_product(
     slug: str,
     db: AsyncSession = Depends(get_db)
@@ -94,7 +95,7 @@ async def get_storefront_categories(db: AsyncSession = Depends(get_db)):
     return categories
 
 
-@router.get("/categories/{slug}/products", response_model=StorefrontProductListResponse)
+@router.get("/categories/{slug}/products", response_model=StorefrontProductListResponse, dependencies=[Depends(RateLimiterDependency("products_get"))])
 async def get_storefront_products_by_category(
     slug: str,
     price_min: Optional[float] = Query(None, ge=0),

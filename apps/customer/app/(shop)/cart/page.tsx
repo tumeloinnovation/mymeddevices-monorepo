@@ -105,22 +105,18 @@ export default function CartPage() {
                 {items.map((item) => {
                   const itemTotal = Number(item.price) * item.quantity
                   const itemId = item.id as string
+                  // Handle different image structures: catalog Product (images[].url), frontend Product (images[].src), or backend CartItem (image_url)
+                  const imageSrc = item?.images?.[0]?.url || (item?.images?.[0] as any)?.src || (item as any).image_url || '/logos/logo-portrait.png'
                   return (
                     <div key={itemId} className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
                       <div className="relative h-20 w-20 rounded-lg overflow-hidden bg-muted shrink-0">
-                        {item.images?.[0]?.url ? (
-                          <Image
-                            src={item.images[0].url}
-                            alt={item.name || ''}
-                            fill
-                            className="object-cover"
-                            sizes="80px"
-                          />
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center">
-                            <Package className="h-8 w-8 text-muted-foreground" />
-                          </div>
-                        )}
+                        <Image
+                          src={imageSrc}
+                          alt={item.name || ''}
+                          fill
+                          className="object-cover"
+                          sizes="80px"
+                        />
                       </div>
 
                       <div className="flex-1 min-w-0">

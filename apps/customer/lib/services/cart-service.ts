@@ -1,5 +1,4 @@
-import { apiClient, getApiUrl } from '@mymeddevices/core/lib/services/api-client';
-import { toast } from 'sonner';
+import { apiClient } from '@mymeddevices/shared-core';
 
 // ============================================================================
 // Types
@@ -113,8 +112,8 @@ export const cartService = {
       const params = cartToken ? { cart_token: cartToken } : undefined;
       const response = await apiClient.get<any>('/shopping/cart/my', { params });
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -134,15 +133,13 @@ export const cartService = {
         params,
       });
 
-      if (response && response.data) {
-        toast.success('Item added to cart');
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to add item to cart:', error);
-      toast.error('Failed to add item to cart');
       throw error;
     }
   },
@@ -162,15 +159,13 @@ export const cartService = {
         params,
       });
 
-      if (response && response.data) {
-        toast.success(`${response.data.added_count} items added to cart`);
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to add items to cart:', error);
-      toast.error('Failed to add items to cart');
       throw error;
     }
   },
@@ -188,15 +183,13 @@ export const cartService = {
         update
       );
 
-      if (response && response.data) {
-        toast.success('Cart updated');
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to update cart item:', error);
-      toast.error('Failed to update cart');
       throw error;
     }
   },
@@ -207,10 +200,8 @@ export const cartService = {
   async removeItem(itemId: string): Promise<void> {
     try {
       await apiClient.delete(`/shopping/cart/items/${itemId}`);
-      toast.success('Item removed from cart');
     } catch (error) {
       console.error('Failed to remove item from cart:', error);
-      toast.error('Failed to remove item');
       throw error;
     }
   },
@@ -221,18 +212,16 @@ export const cartService = {
   async removeBulkItems(itemIds: string[]): Promise<{ removed_count: number }> {
     try {
       const response = await apiClient.delete<any>('/shopping/cart/items/bulk', {
-        data: itemIds,
+        body: itemIds,
       });
 
-      if (response && response.data) {
-        toast.success(`${response.data.removed_count} items removed`);
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to remove items from cart:', error);
-      toast.error('Failed to remove items');
       throw error;
     }
   },
@@ -247,15 +236,13 @@ export const cartService = {
         params,
       });
 
-      if (response && response.data) {
-        toast.success('Cart cleared');
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to clear cart:', error);
-      toast.error('Failed to clear cart');
       throw error;
     }
   },
@@ -270,8 +257,8 @@ export const cartService = {
         params,
       });
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -290,8 +277,8 @@ export const cartService = {
         params: { cart_id: cartId },
       });
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -314,15 +301,13 @@ export const cartService = {
         merge_method: mergeMethod,
       });
 
-      if (response && response.data) {
-        toast.success('Cart merged successfully');
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to merge cart:', error);
-      toast.error('Failed to merge cart');
       throw error;
     }
   },
@@ -340,15 +325,13 @@ export const cartService = {
         }
       );
 
-      if (response && response.data) {
-        toast.success('Coupon applied successfully');
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to apply coupon:', error);
-      toast.error('Failed to apply coupon');
       throw error;
     }
   },
@@ -361,10 +344,8 @@ export const cartService = {
       await apiClient.delete('/shopping/cart/coupon', {
         params: { cart_id: cartId, discount_id: discountId },
       });
-      toast.success('Coupon removed');
     } catch (error) {
       console.error('Failed to remove coupon:', error);
-      toast.error('Failed to remove coupon');
       throw error;
     }
   },
@@ -387,15 +368,13 @@ export const cartService = {
         params: { name, description },
       });
 
-      if (response && response.data) {
-        toast.success('Cart saved successfully');
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to save cart:', error);
-      toast.error('Failed to save cart');
       throw error;
     }
   },
@@ -417,8 +396,8 @@ export const cartService = {
         params: { offset, limit },
       });
 
-      if (response && response.data && response.data.saved_carts) {
-        return response.data.saved_carts;
+      if (response && response.saved_carts) {
+        return response.saved_carts;
       }
 
       return [];
@@ -446,15 +425,13 @@ export const cartService = {
         { params: { replace } }
       );
 
-      if (response && response.data) {
-        toast.success('Cart restored successfully');
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
     } catch (error) {
       console.error('Failed to restore cart:', error);
-      toast.error('Failed to restore cart');
       throw error;
     }
   },
@@ -465,10 +442,8 @@ export const cartService = {
   async deleteSavedCart(savedCartId: string): Promise<void> {
     try {
       await apiClient.delete(`/shopping/cart/saved/${savedCartId}`);
-      toast.success('Saved cart deleted');
     } catch (error) {
       console.error('Failed to delete saved cart:', error);
-      toast.error('Failed to delete saved cart');
       throw error;
     }
   },

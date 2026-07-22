@@ -9,12 +9,18 @@ import {
   Check,
   X,
   MoreVertical,
-  Filter,
+  Plus,
+  Loader2,
+  Trash2,
+  Package,
+  Palette,
 } from "lucide-react";
 import { catalogService, Tag } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import {
@@ -33,6 +39,23 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type SortField = "name" | "slug" | "product_count" | "created_at";
 type SortOrder = "asc" | "desc";
@@ -49,6 +72,24 @@ export default function TagsPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Sheet/Dialog states
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [tagToDelete, setTagToDelete] = useState<Tag | null>(null);
+
+  // Form state
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
+  const [color, setColor] = useState("#e0752b");
+  const [isActive, setIsActive] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [userEditedSlug, setUserEditedSlug] = useState(false);
+
+  // Bulk operations state
+  const [bulkUpdating, setBulkUpdating] = useState(false);
 
   const fetchTags = async () => {
     setLoading(true);
@@ -74,6 +115,19 @@ export default function TagsPage() {
   useEffect(() => {
     fetchTags();
   }, [page]);
+
+  // Auto-generate slug from name
+  useEffect(() => {
+    if (!editingTag && !userEditedSlug && name) {
+      const generatedSlug = name
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-");
+      setSlug(generatedSlug);
+    }
+  }, [name, editingTag, userEditedSlug]);
 
   // Filter and sort tags
   const filteredTags = useMemo(() => {
@@ -170,7 +224,142 @@ export default function TagsPage() {
     setStatusFilter("all");
   };
 
-  const hasActiveFilters = search || statusFilter !== "all";
+  const hasActiveFilters = !!search || statusFilter !== "all";
+
+  // Open create sheet
+  const openCreateSheet = () => {
+    setEditingTag(null);
+    setUserEditedSlug(false);
+    setName("");
+    setSlug("");
+    setDescription("");
+    setColor("#e0752b");
+    setIsActive(true);
+    setSheetOpen(true);
+  };
+
+  // Open edit sheet
+  const openEditSheet = (tag: Tag) => {
+    setEditingTag(tag);
+    setUserEditedSlug(true);
+    setName(tag.name);
+    setSlug(tag.slug);
+    setDescription(tag.description || "");
+    setColor(tag.color || "#e0752b");
+    setIsActive(tag.is_active);
+    setSheetOpen(true);
+  };
+
+  // Handle form submit
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    try {
+      if (editingTag) {
+        await catalogService.updateTag(editingTag.id, {
+          name,
+          slug,
+          description,
+          color,
+          is_active: isActive,
+        });
+        toast.success("Tag updated successfully");
+      } else {
+        await catalogService.createTag({
+          name,
+          slug,
+          description,
+          color,
+          is_active: isActive,
+        });
+        toast.success("Tag created successfully");
+      }
+      setSheetOpen(false);
+      fetchTags();
+    } catch (error) {
+      console.error("Failed to save tag:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to save tag"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle delete
+  const openDeleteDialog = (tag: Tag) => {
+    setTagToDelete(tag);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDelete = async () => {
+    if (!tagToDelete) return;
+
+    setSaving(true);
+    try {
+      await catalogService.deleteTag(tagToDelete.id);
+      toast.success("Tag deleted successfully");
+      setDeleteDialogOpen(false);
+      fetchTags();
+    } catch (error) {
+      console.error("Failed to delete tag:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete tag"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // Handle bulk activate/deactivate
+  const handleBulkActivate = async () => {
+    if (selectedIds.size === 0) return;
+
+    setBulkUpdating(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          catalogService.updateTag(id, { is_active: true })
+        )
+      );
+      toast.success(`${selectedIds.size} tag${selectedIds.size !== 1 ? "s" : ""} activated`);
+      setSelectedIds(new Set());
+      fetchTags();
+    } catch (error) {
+      console.error("Failed to activate tags:", error);
+      toast.error("Failed to activate tags");
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  const handleBulkDeactivate = async () => {
+    if (selectedIds.size === 0) return;
+
+    setBulkUpdating(true);
+    try {
+      await Promise.all(
+        Array.from(selectedIds).map((id) =>
+          catalogService.updateTag(id, { is_active: false })
+        )
+      );
+      toast.success(`${selectedIds.size} tag${selectedIds.size !== 1 ? "s" : ""} deactivated`);
+      setSelectedIds(new Set());
+      fetchTags();
+    } catch (error) {
+      console.error("Failed to deactivate tags:", error);
+      toast.error("Failed to deactivate tags");
+    } finally {
+      setBulkUpdating(false);
+    }
+  };
+
+  // Handle view products
+  const handleViewProducts = (tag: Tag) => {
+    // Navigate to products page with tag filter
+    window.location.href = `/dashboard/catalog/products?tag=${encodeURIComponent(tag.slug)}`;
+  };
 
   return (
     <DashboardLayout>
@@ -184,38 +373,18 @@ export default function TagsPage() {
             {total} total · {stats.active} active · {stats.inactive} inactive
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button size="sm" variant="secondary">
-            <Filter className="h-3.5 w-3.5 mr-1" />
-            Filter
-          </Button>
-        </div>
+        <Button size="default" onClick={openCreateSheet}>
+          <Plus className="h-4 w-4 mr-1.5" />
+          Add Tag
+        </Button>
       </div>
 
       {/* Stat Cards */}
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <StatCard
-          label="Total Tags"
-          value={stats.total}
-          trend={null}
-        />
-        <StatCard
-          label="Active"
-          value={stats.active}
-          trend={{ value: "+12", positive: true }}
-          trendLabel="vs last month"
-        />
-        <StatCard
-          label="Inactive"
-          value={stats.inactive}
-          trend={null}
-        />
-        <StatCard
-          label="Tagged Products"
-          value={stats.totalProducts}
-          trend={{ value: "+8.2%", positive: true }}
-          trendLabel="vs last month"
-        />
+        <StatCard label="Total Tags" value={stats.total} />
+        <StatCard label="Active" value={stats.active} />
+        <StatCard label="Inactive" value={stats.inactive} />
+        <StatCard label="Tagged Products" value={stats.totalProducts} />
       </div>
 
       {/* Filter Bar */}
@@ -223,7 +392,7 @@ export default function TagsPage() {
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
-            placeholder="Filter tags..."
+            placeholder="Search tags..."
             className="h-8 pl-8 text-sm"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -231,7 +400,7 @@ export default function TagsPage() {
         </div>
 
         {/* Status Filter */}
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
           <FilterChip
             active={statusFilter === "all"}
             onClick={() => setStatusFilter("all")}
@@ -260,7 +429,7 @@ export default function TagsPage() {
             onClick={clearFilters}
           >
             <X className="h-3 w-3 mr-1" />
-            Clear filters
+            Clear
           </Button>
         )}
       </div>
@@ -272,10 +441,30 @@ export default function TagsPage() {
             {selectedIds.size} tag{selectedIds.size !== 1 ? "s" : ""} selected
           </span>
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleBulkActivate}
+              disabled={bulkUpdating}
+            >
+              {bulkUpdating ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+              ) : (
+                <Check className="h-3.5 w-3.5 mr-1" />
+              )}
               Activate
             </Button>
-            <Button size="sm" variant="destructive">
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleBulkDeactivate}
+              disabled={bulkUpdating}
+            >
+              {bulkUpdating ? (
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+              ) : (
+                <X className="h-3.5 w-3.5 mr-1" />
+              )}
               Deactivate
             </Button>
             <Button
@@ -305,7 +494,10 @@ export default function TagsPage() {
                 <TableRow className="h-[34px] bg-muted/30">
                   <TableHead className="h-[34px] w-10">
                     <Checkbox
-                      checked={selectedIds.size === filteredTags.length && filteredTags.length > 0}
+                      checked={
+                        selectedIds.size === filteredTags.length &&
+                        filteredTags.length > 0
+                      }
                       onCheckedChange={toggleSelectAll}
                       aria-label="Select all"
                     />
@@ -328,7 +520,7 @@ export default function TagsPage() {
                       onSort={handleSort}
                     />
                   </TableHead>
-                  <TableHead className="h-[34px] text-right">
+                  <TableHead className="h-[34px] text-center">
                     <SortButton
                       field="product_count"
                       label="Products"
@@ -370,8 +562,9 @@ export default function TagsPage() {
                         {tag.slug}
                       </span>
                     </TableCell>
-                    <TableCell className="p-2 text-right">
-                      <span className="text-sm text-foreground tabular-nums">
+                    <TableCell className="p-2 text-center">
+                      <span className="text-sm text-foreground tabular-nums inline-flex items-center gap-1.5">
+                        <Package className="h-3 w-3 text-muted-foreground" />
                         {tag.product_count.toLocaleString()}
                       </span>
                     </TableCell>
@@ -379,7 +572,12 @@ export default function TagsPage() {
                       <StatusBadge isActive={tag.is_active} />
                     </TableCell>
                     <TableCell className="p-2">
-                      <RowActions tag={tag} />
+                      <RowActions
+                        tag={tag}
+                        onEdit={openEditSheet}
+                        onDelete={openDeleteDialog}
+                        onViewProducts={handleViewProducts}
+                      />
                     </TableCell>
                   </TableRow>
                 ))}
@@ -415,6 +613,187 @@ export default function TagsPage() {
           )}
         </>
       )}
+
+      {/* Create/Edit Sheet */}
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+        <SheetContent className="w-full sm:max-w-[480px] p-0 gap-0">
+          <form onSubmit={handleSubmit} className="h-full flex flex-col">
+            {/* Header */}
+            <div className="p-6 border-b">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <Hash className="h-5 w-5" />
+                </div>
+                <div>
+                  <SheetTitle className="text-lg font-semibold">
+                    {editingTag ? "Edit Tag" : "Add Tag"}
+                  </SheetTitle>
+                  <SheetDescription className="text-xs">
+                    {editingTag
+                      ? "Update tag details"
+                      : "Add a new tag to your catalog"}
+                  </SheetDescription>
+                </div>
+              </div>
+            </div>
+
+            {/* Form */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Name */}
+              <div className="space-y-1.5">
+                <Label htmlFor="name" className="text-sm">
+                  Name <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="name"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g., New Arrival"
+                />
+              </div>
+
+              {/* Slug */}
+              <div className="space-y-1.5">
+                <Label htmlFor="slug" className="text-sm">Slug</Label>
+                <Input
+                  id="slug"
+                  value={slug}
+                  onChange={(e) => {
+                    setSlug(e.target.value);
+                    setUserEditedSlug(true);
+                  }}
+                  placeholder="new-arrival"
+                  className="font-mono text-sm"
+                  pattern="[a-z0-9-]+"
+                  title="Slug must contain only lowercase letters, numbers, and hyphens"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Auto-generated from name (edit to customize)
+                </p>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <Label htmlFor="description" className="text-sm">Description</Label>
+                <Textarea
+                  id="description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Brief description of this tag..."
+                  rows={3}
+                  className="resize-none"
+                />
+              </div>
+
+              {/* Color */}
+              <div className="space-y-1.5">
+                <Label htmlFor="color" className="text-sm">Color</Label>
+                <div className="flex items-center gap-3">
+                  <div
+                    className="h-10 w-10 rounded-md border border-border shadow-sm"
+                    style={{ backgroundColor: color }}
+                  />
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <Palette className="h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="color"
+                        type="color"
+                        value={color}
+                        onChange={(e) => setColor(e.target.value)}
+                        className="h-9 flex-1"
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Choose a color to visually identify this tag
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status */}
+              <div className="flex items-center gap-3 pt-2">
+                <Checkbox
+                  id="is_active"
+                  checked={isActive}
+                  onCheckedChange={(checked) =>
+                    setIsActive(checked as boolean)
+                  }
+                />
+                <div>
+                  <Label htmlFor="is_active" className="text-sm cursor-pointer">
+                    Active Status
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Visible in storefront filters
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="p-5 border-t flex items-center justify-end gap-3 bg-muted/20">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setSheetOpen(false)}
+                className="h-9 px-4"
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={saving} className="h-9 px-5">
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {editingTag ? "Save Changes" : "Create Tag"}
+              </Button>
+            </div>
+          </form>
+        </SheetContent>
+      </Sheet>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Tag</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete the tag{" "}
+              <span className="font-semibold">"{tagToDelete?.name}"</span>?
+              {tagToDelete && tagToDelete.product_count > 0 && (
+                <>
+                  {" "}
+                  This tag is currently used by{" "}
+                  <span className="font-semibold">
+                    {tagToDelete.product_count}
+                  </span>{" "}
+                  product{tagToDelete.product_count !== 1 ? "s" : ""}. The tag
+                  will be removed from these products.
+                </>
+              )}
+              {" "}This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className={buttonVariants({ variant: "destructive" })}
+              disabled={saving}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Tag
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
   );
 }
@@ -423,13 +802,9 @@ export default function TagsPage() {
 function StatCard({
   label,
   value,
-  trend,
-  trendLabel,
 }: {
   label: string;
   value: number;
-  trend?: { value: string; positive: boolean } | null;
-  trendLabel?: string;
 }) {
   return (
     <div className="px-4 py-3 bg-card border rounded-lg">
@@ -439,20 +814,6 @@ function StatCard({
       <div className="text-[24px] font-semibold tabular-nums tracking-tight">
         {value.toLocaleString()}
       </div>
-      {trend && (
-        <div className="flex items-center gap-1 mt-1">
-          <span
-            className={`text-xs font-medium tabular-nums ${
-              trend.positive ? "text-success" : "text-destructive"
-            }`}
-          >
-            {trend.value}
-          </span>
-          {trendLabel && (
-            <span className="text-xs text-muted-foreground">{trendLabel}</span>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -470,10 +831,10 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${
+      className={`h-7 px-3 rounded-md text-xs font-medium transition-all ${
         active
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted/50 text-muted-foreground hover:bg-muted"
+          ? "bg-primary text-primary-foreground shadow-sm"
+          : "bg-muted/50 text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
     >
       {children}
@@ -518,7 +879,7 @@ function SortButton({
 function ColorDot({ color }: { color?: string }) {
   return (
     <div
-      className="h-5 w-5 rounded shrink-0"
+      className="h-4 w-4 rounded-sm shrink-0 border border-border/30 shadow-sm"
       style={{ backgroundColor: color || "#e0752b" }}
     />
   );
@@ -550,24 +911,39 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
 }
 
 // Row Actions Component
-function RowActions({ tag }: { tag: Tag }) {
+function RowActions({
+  tag,
+  onEdit,
+  onDelete,
+  onViewProducts,
+}: {
+  tag: Tag;
+  onEdit: (tag: Tag) => void;
+  onDelete: (tag: Tag) => void;
+  onViewProducts: (tag: Tag) => void;
+}) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          className="h-7 w-7"
-        >
+        <Button size="icon-sm" variant="ghost" className="h-7 w-7">
           <MoreVertical className="h-3.5 w-3.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
-        <DropdownMenuItem>Edit tag</DropdownMenuItem>
-        <DropdownMenuItem>View products</DropdownMenuItem>
+      <DropdownMenuContent align="end" className="w-[160px]">
+        <DropdownMenuItem onClick={() => onEdit(tag)}>
+          Edit tag
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => onViewProducts(tag)}>
+          <Package className="h-3.5 w-3.5 mr-2" />
+          View products
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-destructive">
-          {tag.is_active ? "Deactivate" : "Activate"}
+        <DropdownMenuItem
+          onClick={() => onDelete(tag)}
+          className="text-destructive"
+        >
+          <Trash2 className="h-3.5 w-3.5 mr-2" />
+          Delete tag
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -25,7 +25,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const cleanDescription = category.description?.replace(/<[^>]*>/g, '')
     || `Browse ${category.name} medical devices and equipment at MyMedDevices - Kenya's trusted healthcare store.`
 
-  const categoryImage = category.image?.src || '/logos/logo.png'
+  const categoryImage = category.image?.src || '/logos/logo-portrait.png'
   const categoryUrl = `${SITE_URL}/categories/${slug}`
 
   return {

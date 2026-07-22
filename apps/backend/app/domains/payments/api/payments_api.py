@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.logging import logger
+from app.core.dependencies import get_current_user
 from app.domains.payments.services import PaymentService
 from app.domains.payments.schemas import (
     # Payment methods
@@ -470,6 +471,7 @@ async def approve_refund(
     refund_id: uuid.UUID,
     approval: RefundApproval,
     payment_service: PaymentService = Depends(get_payment_service),
+    current_user = Depends(get_current_user)
 ):
     """
     Approve or reject refund.
@@ -477,9 +479,8 @@ async def approve_refund(
     Approved refunds will be processed via M-Pesa reversal.
     """
     try:
-        # In a real app, get user ID from auth context
-        approved_by = uuid.uuid4()  # Placeholder
-
+        approved_by = current_user.id
+ 
         refund = await payment_service.approve_refund(
             refund_id=refund_id,
             approved=approval.approved,

@@ -326,12 +326,16 @@ export const apiClient = {
       let attempts = 0;
       const maxAttempts = 2; // Original + 1 retry after refresh
 
+      // Check if this is an auth/otp endpoint BEFORE the loop
+      // Auth endpoints should not trigger token refresh on 401
+      const isAuthOrOtp = options.endpoint.includes('/auth/') || options.endpoint.includes('/otp/');
+
       while (attempts < maxAttempts) {
         try {
           const response = await this.rawRequest(options);
 
-          // Handle 401 with token refresh
-          if (response.status === 401 && attempts === 0) {
+          // Handle 401 with token refresh - skip for auth/otp endpoints
+          if (response.status === 401 && attempts === 0 && !isAuthOrOtp) {
             const newToken = await tokenManager.refreshAccessToken();
             if (newToken) {
               attempts++;
@@ -343,7 +347,6 @@ export const apiClient = {
             }
           }
 
-          const isAuthOrOtp = options.endpoint.includes('/auth/') || options.endpoint.includes('/otp/');
           let responseData: any = null;
           if (isAuthOrOtp && response.ok) {
             try {
@@ -371,7 +374,6 @@ export const apiClient = {
           const data = await this.parseResponse<T>(response);
           return data;
         } catch (error: any) {
-          const isAuthOrOtp = options.endpoint.includes('/auth/') || options.endpoint.includes('/otp/');
           if (isAuthOrOtp) {
             console.log(`[AUTH LOG] Request failed:`, {
               endpoint: options.endpoint,

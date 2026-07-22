@@ -47,14 +47,23 @@ class AIAssistService:
         )
 
         system_instruction = (
-            "You are an expert AI catalog assistant for MyMedDevices, a medical device e-commerce marketplace. "
+            "You are an expert AI catalog assistant for MyMedDevices, a medical device e-commerce marketplace in Kenya. "
             "Your goal is to generate professional, highly accurate, and compliant product details based on a product name and brand. "
-            "The data you generate must use correct medical device terminology, professional tone, and mention relevant specs. "
-            "Ensure descriptions are comprehensive, covering clinical/intended use, features, and patient safety. "
-            "The short description should be 1-2 sentences perfect for product listings. "
-            "The long description should be detailed, covering specifications, applications, and benefits (3-5 paragraphs). "
-            "Additionally, generate SEO-optimized metadata: a meta title (50-60 characters) and meta description (150-160 characters) "
-            "that accurately represent the product for search engines."
+            "You specialize in medical device taxonomy, clinical terminology, and regulatory compliance for the African healthcare market.\n\n"
+            "KEY REQUIREMENTS:\n"
+            "1. Use proper medical device nomenclature and clinical terminology\n"
+            "2. Mention relevant clinical applications, intended use, and patient populations\n"
+            "3. Include technical specifications relevant to the device category (imaging parameters, sterilization, power requirements, etc.)\n"
+            "4. Reference appropriate regulatory standards (ISO 13485, IEC 60601 for electrical medical equipment, etc.)\n"
+            "5. Consider Kenya Medical Supplies Authority (KEMSA) and Pharmacy & Poisons Board (PPB) requirements\n"
+            "6. Maintain professional clinical tone suitable for healthcare procurement\n\n"
+            "CONTENT GUIDELINES:\n"
+            "- Short description: 1-2 compelling sentences for product listings (15-25 words)\n"
+            "- Long description: 3-4 detailed paragraphs covering: clinical applications, key features, technical specifications, "
+            "and regulatory/compliance information (150-250 words)\n"
+            "- Meta title: 50-60 characters, SEO-optimized with brand and model\n"
+            "- Meta description: 150-160 characters, keyword-rich for search visibility\n\n"
+            "Always prioritize accuracy over marketing fluff. Healthcare professionals need precise, factual information."
         )
 
         payload = {
@@ -114,22 +123,25 @@ class AIAssistService:
         suggestions = {
             "short_description": (
                 f"Professional {category_name.lower()} by {brand}. "
-                f"High-quality medical equipment designed for healthcare professionals."
+                f"Reliable medical equipment designed for clinical accuracy and patient safety."
             ),
             "description": (
-                f"The {product_name} by {brand} represents excellence in medical equipment technology. "
-                f"Designed for healthcare professionals who demand precision and reliability, "
-                f"this {category_name.lower()} delivers exceptional performance in critical care environments.\n\n"
-                f"Key features include advanced diagnostic capabilities, user-friendly interface, "
-                f"and robust construction built to withstand the demands of daily clinical use. "
-                f"The equipment meets international medical device standards and comes with comprehensive manufacturer support.\n\n"
-                f"Ideal for hospitals, clinics, and medical facilities seeking to upgrade their "
-                f"diagnostic capabilities with proven, reliable technology from {brand}."
+                f"The {product_name} by {brand} is a professional-grade {category_name.lower()} "
+                f"designed for healthcare facilities in Kenya. Built to meet international medical device standards, "
+                f"this equipment delivers reliable performance for diagnostic and therapeutic applications.\n\n"
+                f"Clinical Applications:\n"
+                f"Suitable for hospitals, clinics, and diagnostic centers requiring accurate and consistent results. "
+                f"The device features intuitive controls and clear displays for efficient operation by trained healthcare professionals.\n\n"
+                f"Technical Specifications:\n"
+                f"Engineered for durability with quality components and construction. "
+                f"Meets relevant electrical safety and performance standards for medical equipment.\n\n"
+                f"Ideal for healthcare facilities seeking dependable medical equipment from {brand}, "
+                f"a trusted name in medical technology."
             ),
-            "meta_title": f"{product_name} | {brand} - MyMedDevices",
+            "meta_title": f"{product_name} | {brand} Medical - MyMedDevices Kenya",
             "meta_description": (
                 f"Shop {product_name} by {brand}. Professional {category_name.lower()} "
-                f"for healthcare facilities. Quality medical equipment with warranty."
+                f"for hospitals & clinics in Kenya. Quality medical equipment with warranty."
             )
         }
 
@@ -177,18 +189,32 @@ class AIAssistService:
         )
         if product.brand:
             prompt += f"Brand: {product.brand}\n"
-        if product.manufacturer:
-            prompt += f"Manufacturer: {product.manufacturer}\n"
         if product.model_number:
             prompt += f"Model Number: {product.model_number}\n"
 
         system_instruction = (
-            "You are an expert AI catalog assistant for MyMedDevices, a medical device e-commerce marketplace. "
-            "Your goal is to generate professional, highly accurate, and compliant product details based on a product name and category. "
-            "The data you generate must use correct medical device terminology, professional tone, and mention relevant specs. "
-            "Enforce safety, regulatory, and quality classifications where applicable. "
-            "Ensure descriptions are comprehensive, covering clinical/intended use and patient safety (at least 50 characters). "
-            "Ensure specifications are structured key-value pairs representing material, power source, certifications (CE/FDA/ISO/PPB), and dimensions."
+            "You are an expert AI catalog assistant for MyMedDevices, a medical device e-commerce marketplace in Kenya. "
+            "You specialize in medical device taxonomy, clinical terminology, and regulatory compliance.\n\n"
+            "PRODUCT DESCRIPTION REQUIREMENTS:\n"
+            "- Use precise clinical and technical terminology appropriate for the device category\n"
+            "- Cover intended use, clinical applications, and target patient population\n"
+            "- Mention relevant features, modes, and technical capabilities\n"
+            "- Include safety considerations and regulatory compliance information\n"
+            "- Minimum 150 characters for full descriptions\n\n"
+            "TECHNICAL SPECIFICATIONS GUIDELINES:\n"
+            "- Generate 5-8 relevant key-value specification pairs based on device type\n"
+            "- Common specifications by category:\n"
+            "  * Imaging (X-ray, Ultrasound, MRI): kVp/mA range, frequency, resolution, detector type, image processing\n"
+            "  * Monitoring (Patient monitors, ECG): display size, parameters measured, alarm functions, battery life\n"
+            "  * Surgical (Instruments, tables): material grade (stainless steel 316L), dimensions, weight capacity, sterilization method\n"
+            "  * Laboratory (Centrifuges, analyzers): RPM range, capacity, voltage, temperature range, throughput\n"
+            "  * Diagnostic (Thermometers, BP monitors): accuracy range, measurement range, response time, power source\n\n"
+            "TAGS GENERATION:\n"
+            "- Include: device category, brand, clinical specialty, key features, power type (if applicable)\n"
+            "- Use 5-8 relevant tags for discoverability\n\n"
+            "SEO METADATA:\n"
+            "- Meta title: 50-60 characters with brand, product name, and key differentiator\n"
+            "- Meta description: 150-160 characters with clinical use case and key benefit"
         )
 
         # Build JSON response schema for Gemini Structured Output
@@ -262,53 +288,125 @@ class AIAssistService:
         suggestions = {}
         confidence = {}
         category_name = category.name if category else "Medical Device"
+        category_slug = category.slug if category else "medical-device"
 
         for field in fields_to_generate:
             if field == "description" and not product.description:
                 suggestions["description"] = (
-                    f"{product.name} is a high-quality {category_name.lower()} "
-                    f"designed for medical professionals. "
-                    f"This product meets rigorous quality standards and is suitable "
-                    f"for clinical and healthcare settings. "
-                    f"Please update this AI-generated description with specific details "
-                    f"about features, specifications, and intended use."
+                    f"The {product.name} by {product.brand or 'the manufacturer'} is a professional {category_name.lower()} "
+                    f"designed for clinical applications in hospitals, clinics, and healthcare facilities.\n\n"
+                    f"Designed for accuracy and reliability, this {category_name.lower()} meets international medical device standards "
+                    f"and is suitable for diagnostic and therapeutic use by trained healthcare professionals.\n\n"
+                    f"Technical features include intuitive operation, durable construction, and compliance with relevant "
+                    f"safety regulations. Please update this description with specific technical specifications, "
+                    f"clinical applications, and intended use."
                 )
                 confidence["description"] = 0.3
 
             elif field == "short_description" and not product.short_description:
                 suggestions["short_description"] = (
-                    f"Professional-grade {category_name.lower()} for healthcare facilities."
+                    f"Professional {category_name.lower()} designed for clinical accuracy and reliability. "
+                    f"Suitable for hospitals and healthcare facilities."
                 )
                 confidence["short_description"] = 0.3
 
             elif field == "specifications" and not product.specifications:
-                suggestions["specifications"] = {
-                    "Material": "",
-                    "Dimensions": "",
-                    "Weight": "",
-                    "Power Source": "",
-                    "Sterilization": ""
-                }
-                confidence["specifications"] = 0.2
+                # Category-aware specification suggestions
+                category_lower = category_name.lower()
+                specs = {}
+
+                # Base specifications for all medical devices
+                specs["Device Type"] = category_name
+                specs["Intended Use"] = "Clinical/Diagnostic"
+
+                # Category-specific specifications
+                if any(word in category_lower for word in ["imaging", "x-ray", "ultrasound", "mri", "ct", "scanner"]):
+                    specs.update({
+                        "Power Supply": "220-240V AC, 50/60Hz",
+                        "Imaging Technology": "Digital",
+                        "Display": "High-resolution medical grade monitor",
+                        "Image Storage": "DICOM compliant",
+                        "Safety Standards": "IEC 60601-1 compliant"
+                    })
+                elif any(word in category_lower for word in ["monitor", "patient", "ecg", "pulse", "oximeter"]):
+                    specs.update({
+                        "Display": "LCD/LED touchscreen",
+                        "Battery Backup": "Yes, minimum 4 hours",
+                        "Parameters Monitored": "Multi-parameter",
+                        "Alarm System": "Audio-visual with adjustable thresholds",
+                        "Data Export": "HL7/EMR compatible"
+                    })
+                elif any(word in category_lower for word in ["surgical", "instrument", "table", "light", "microscope"]):
+                    specs.update({
+                        "Material": "Medical-grade stainless steel",
+                        "Sterilization": "Autoclave compatible",
+                        "Dimensions": "Standard hospital size",
+                        "Weight Capacity": "Standard patient weight",
+                        "Finish": "Corrosion-resistant"
+                    })
+                elif any(word in category_lower for word in ["laboratory", "centrifuge", "analyzer", "microscope"]):
+                    specs.update({
+                        "Power Requirements": "220-240V AC",
+                        "Capacity": "Standard tube/sample size",
+                        "Speed/Range": "Variable speed control",
+                        "Temperature Control": "Ambient to specified range",
+                        "Noise Level": "Low operation noise"
+                    })
+                elif any(word in category_lower for word in ["thermometer", "bp", "blood pressure", "weighing", "scale"]):
+                    specs.update({
+                        "Measurement Range": "Standard clinical range",
+                        "Accuracy": "Clinically validated accuracy",
+                        "Display": "Digital LCD/LED",
+                        "Power Source": "Battery + AC adapter",
+                        "Response Time": "< 5 seconds"
+                    })
+                else:
+                    # Generic specifications
+                    specs.update({
+                        "Power Supply": "220-240V AC, 50Hz",
+                        "Operating Temperature": "15-35°C",
+                        "Storage Temperature": "-10 to 50°C",
+                        "Humidity Range": "20-80% RH non-condensing",
+                        "Safety Certifications": "CE/ISO compliant"
+                    })
+
+                suggestions["specifications"] = specs
+                confidence["specifications"] = 0.4
 
             elif field == "tags" and not product.tags:
-                tags = ["medical", "healthcare"]
+                tags = ["medical", "healthcare", "hospital", "clinic"]
                 if category:
-                    tags.append(category.slug)
+                    tags.extend([
+                        category_slug,
+                        category_name.lower().replace(" ", "-"),
+                        "kenya"
+                    ])
                 if product.brand:
-                    tags.append(product.brand.lower())
-                suggestions["tags"] = tags
-                confidence["tags"] = 0.5
+                    tags.append(product.brand.lower().replace(" ", "-"))
+                # Add category-specific tags
+                category_lower = category_name.lower()
+                if any(word in category_lower for word in ["imaging", "x-ray", "ultrasound", "ct"]):
+                    tags.extend(["diagnostic", "radiology", "medical-imaging"])
+                elif any(word in category_lower for word in ["monitor", "patient"]):
+                    tags.extend(["patient-care", "icu", "critical-care"])
+                elif any(word in category_lower for word in ["surgical"]):
+                    tags.extend(["ot", "operating-room", "surgery"])
+                elif any(word in category_lower for word in ["laboratory"]):
+                    tags.extend(["diagnostic-lab", "pathology", "lab-equipment"])
+
+                # Dedupe and limit
+                suggestions["tags"] = list(dict.fromkeys(tags))[:8]
+                confidence["tags"] = 0.6
 
             elif field == "meta_title" and not product.meta_title:
                 brand_part = f" | {product.brand}" if product.brand else ""
-                suggestions["meta_title"] = f"{product.name}{brand_part} - MyMedDevices"
+                suggestions["meta_title"] = f"{product.name}{brand_part} - {category_name} - MyMedDevices Kenya"
                 confidence["meta_title"] = 0.6
 
             elif field == "meta_description" and not product.meta_description:
                 suggestions["meta_description"] = (
-                    f"Shop {product.name} - professional {category_name.lower()} "
-                    f"available at MyMedDevices. Quality medical equipment with warranty."
+                    f"Shop {product.name} {product.brand or ''} - Professional {category_name.lower()} "
+                    f"for hospitals & clinics in Kenya. Quality medical equipment with warranty. Fast delivery."
                 )
                 confidence["meta_description"] = 0.5
 
@@ -345,11 +443,11 @@ class AIAssistService:
             })
 
         # Medical device specifics
-        if not product.brand and not product.manufacturer:
+        if not product.brand:
             issues.append({
                 "field": "brand",
                 "severity": "warning",
-                "message": "Adding brand or manufacturer info improves buyer trust for medical devices"
+                "message": "Adding brand info improves buyer trust for medical devices"
             })
 
         if not product.certifications and not product.ce_marking_or_fda_clearance:
@@ -375,3 +473,254 @@ class AIAssistService:
 
         logger.info(f"Product validation found {len(issues)} issues for product {product.id}")
         return issues
+
+    async def ai_validate_product(
+        self,
+        product: Product,
+        category: Optional[Category] = None
+    ) -> Dict[str, Any]:
+        """
+        AI-powered validation of product data for medical device taxonomy compliance.
+
+        Uses Google Gemini API to perform comprehensive validation against medical device
+        standards, checking for clinical inconsistencies, missing regulatory information,
+        and taxonomy compliance issues.
+
+        Args:
+            product: The product to validate
+            category: Optional category for additional context
+
+        Returns:
+            Dict with validation results:
+            {
+                "is_valid": bool,
+                "confidence": float,
+                "issues": [{"field": "...", "severity": "error|warning", "message": "..."}],
+                "summary": str,
+                "recommendations": [str]
+            }
+        """
+        api_key = catalog_settings.GEMINI_API_KEY
+        category_name = category.name if category else "Medical Device"
+        model_name = catalog_settings.GEMINI_MODEL or "gemini-1.5-pro"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
+
+        if not api_key:
+            logger.warning("GEMINI_API_KEY not configured. Using rule-based validation.")
+            return await self._rule_based_validate(product, category_name)
+
+        # Build product context for validation
+        prompt = f"""
+Please validate the following medical device product listing for taxonomy compliance and clinical accuracy:
+
+Product Name: {product.name}
+Brand: {product.brand or 'Not specified'}
+Category: {category_name}
+Model Number: {product.model_number or 'Not specified'}
+
+Description: {product.description or 'Not provided'}
+Short Description: {product.short_description or 'Not provided'}
+
+Pricing:
+- Retail Price: {product.price} {product.currency}
+- Base Price: {product.base_price} {product.currency}
+- Cost Price: {product.cost_price} {product.currency}
+
+Regulatory & Compliance:
+- Certifications: {', '.join(product.certifications) if product.certifications else 'None specified'}
+- CE/FDA Clearance: {product.ce_marking_or_fda_clearance or 'Not specified'}
+- KMPDB Registration: {product.kmpdb_registration_number or 'Not specified'}
+- PPB Classification: {product.ppb_classification or 'Not specified'}
+
+Technical Details:
+- Specifications: {product.specifications or 'Not provided'}
+- Dimensions: {product.dimensions or 'Not provided'}
+- Weight: {f'{product.weight_kg} kg' if product.weight_kg else 'Not specified'}
+
+Marketing:
+- Tags: {', '.join(product.tags) if product.tags else 'None'}
+- Meta Title: {product.meta_title or 'Not provided'}
+- Meta Description: {product.meta_description or 'Not provided'}
+
+Images: {len(product.images) if product.images else 0} image(s) uploaded
+"""
+
+        system_instruction = (
+            "You are an expert medical device regulatory compliance analyst and taxonomy specialist for MyMedDevices, "
+            "a medical device e-commerce marketplace in Kenya. Your role is to validate product listings against:\n"
+            "1. Kenya Pharmacy and Poisons Board (PPB) classification standards (Class A/B/C/D)\n"
+            "2. Medical device taxonomy and nomenclature conventions\n"
+            "3. Clinical accuracy and consistency in descriptions\n"
+            "4. Regulatory documentation completeness (CE, FDA, ISO, KMPDB)\n"
+            "5. Medical device marketing best practices\n\n"
+            "Analyze the product listing and identify:\n"
+            "- Critical errors that would prevent publication (missing mandatory fields, invalid pricing, clinical inconsistencies)\n"
+            "- Warnings for recommended improvements (missing optional but important fields, weak descriptions)\n"
+            "- Recommendations for optimization (SEO, clinical accuracy, taxonomy alignment)\n\n"
+            "Be thorough but practical. Focus on genuine issues that affect product quality, safety, or compliance."
+        )
+
+        payload = {
+            "systemInstruction": {
+                "parts": [{"text": system_instruction}]
+            },
+            "contents": [
+                {"parts": [{"text": prompt}]}
+            ],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "responseSchema": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "is_valid": {
+                            "type": "BOOLEAN",
+                            "description": "Whether the product passes critical validation checks"
+                        },
+                        "confidence": {
+                            "type": "NUMBER",
+                            "description": "Confidence score of the validation (0-1)"
+                        },
+                        "issues": {
+                            "type": "ARRAY",
+                            "items": {
+                                "type": "OBJECT",
+                                "properties": {
+                                    "field": {"type": "STRING"},
+                                    "severity": {"type": "STRING", "enum": ["error", "warning"]},
+                                    "message": {"type": "STRING"}
+                                },
+                                "required": ["field", "severity", "message"]
+                            }
+                        },
+                        "summary": {
+                            "type": "STRING",
+                            "description": "Overall validation summary"
+                        },
+                        "recommendations": {
+                            "type": "ARRAY",
+                            "items": {"type": "STRING"},
+                            "description": "Specific recommendations for improvement"
+                        }
+                    },
+                    "required": ["is_valid", "confidence", "issues", "summary"]
+                }
+            }
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(url, json=payload)
+                response.raise_for_status()
+                data = response.json()
+
+                # Parse output
+                text_out = data["candidates"][0]["content"]["parts"][0]["text"]
+                validation_result = json.loads(text_out)
+
+                logger.info(f"AI validation completed for product {product.id}. Valid: {validation_result.get('is_valid')}, Issues: {len(validation_result.get('issues', []))}")
+
+                return validation_result
+
+        except Exception as e:
+            logger.error(f"Failed to perform AI validation using Gemini API: {str(e)}. Falling back to rule-based validation.")
+            return await self._rule_based_validate(product, category_name)
+
+    async def _rule_based_validate(
+        self,
+        product: Product,
+        category_name: str
+    ) -> Dict[str, Any]:
+        """
+        Fallback rule-based validation if AI API call fails or key is missing.
+        """
+        issues = []
+        recommendations = []
+
+        # Critical errors
+        actual_price = product.base_price or product.price
+        if not actual_price or actual_price <= 0:
+            issues.append({
+                "field": "price",
+                "severity": "error",
+                "message": "Valid pricing information is required for publication"
+            })
+
+        if not product.name or not product.slug:
+            issues.append({
+                "field": "name",
+                "severity": "error",
+                "message": "Product name and slug are required"
+            })
+
+        if not product.description or len(product.description) < 50:
+            issues.append({
+                "field": "description",
+                "severity": "error",
+                "message": "Description must be at least 50 characters for verification"
+            })
+
+        # Warnings
+        if not product.brand:
+            issues.append({
+                "field": "brand",
+                "severity": "warning",
+                "message": "Brand information improves buyer trust and searchability"
+            })
+            recommendations.append("Add manufacturer/brand information")
+
+        if not product.certifications and not product.ce_marking_or_fda_clearance:
+            issues.append({
+                "field": "certifications",
+                "severity": "warning",
+                "message": "Medical devices should include certification or clearance details"
+            })
+            recommendations.append("Add regulatory certifications (CE, FDA, ISO 13485)")
+
+        if not product.kmpdb_registration_number:
+            issues.append({
+                "field": "kmpdb_registration_number",
+                "severity": "warning",
+                "message": "KMPDB registration is recommended for Kenya market compliance"
+            })
+            recommendations.append("Add KMPDB registration number for local compliance")
+
+        if not product.ppb_classification:
+            issues.append({
+                "field": "ppb_classification",
+                "severity": "warning",
+                "message": "PPB risk classification (Class A/B/C/D) is highly recommended"
+            })
+            recommendations.append("Assign PPB risk classification")
+
+        if not product.images or len(product.images) == 0:
+            issues.append({
+                "field": "images",
+                "severity": "warning",
+                "message": "Product images are essential for buyer confidence"
+            })
+            recommendations.append("Upload high-quality product images")
+
+        if not product.specifications or not isinstance(product.specifications, dict) or len(product.specifications) == 0:
+            issues.append({
+                "field": "specifications",
+                "severity": "warning",
+                "message": "Technical specifications help buyers compare products"
+            })
+            recommendations.append("Add detailed technical specifications")
+
+        is_valid = all(issue["severity"] != "error" for issue in issues)
+        confidence = 0.7 if is_valid else 0.5
+
+        summary = (
+            f"Product validation {'passed' if is_valid else 'failed'}. "
+            f"Found {len([i for i in issues if i['severity'] == 'error'])} critical issue(s) "
+            f"and {len([i for i in issues if i['severity'] == 'warning'])} warning(s)."
+        )
+
+        return {
+            "is_valid": is_valid,
+            "confidence": confidence,
+            "issues": issues,
+            "summary": summary,
+            "recommendations": recommendations
+        }

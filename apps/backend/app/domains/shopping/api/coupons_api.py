@@ -23,7 +23,7 @@ from app.domains.shopping.services.coupon_service import CouponService
 from app.domains.shopping.services.cart_calculation_service import CartCalculationService
 from app.domains.shopping.models.cart_discount import CartDiscount
 from app.domains.shopping.models.coupon import Coupon, CouponUsage
-from app.domains.shopping.models.cart import Cart
+from app.domains.shopping.models.cart import Cart, CartItem
 from sqlalchemy.orm import selectinload
 
 router = APIRouter(prefix="/cart/coupon", tags=["Cart Coupons"])
@@ -94,14 +94,38 @@ async def apply_coupon_to_cart(
 
     # 4. Apply coupon (create CartDiscount)
     # Calculate the discount amount upfront
+    applicable_subtotal = totals["subtotal"]
+    if coupon.discount_scope == "specific_categories":
+        allowed_categories = {c.category for c in coupon.categories}
+        stmt = select(Cart).where(Cart.id == cart_id).options(selectinload(Cart.items).selectinload(CartItem.product))
+        cart_res = await db.execute(stmt)
+        cart = cart_res.scalar_one_or_none()
+        if cart:
+            applicable_subtotal = 0.0
+            for item in cart.items:
+                if item.product and item.product.category_id and str(item.product.category_id) in allowed_categories:
+                    price = float(item.unit_price) if item.unit_price is not None else float(item.product.price or 0.0)
+                    applicable_subtotal += price * item.quantity
+    elif coupon.discount_scope == "specific_products":
+        allowed_products = {p.product_id for p in coupon.products}
+        stmt = select(Cart).where(Cart.id == cart_id).options(selectinload(Cart.items).selectinload(CartItem.product))
+        cart_res = await db.execute(stmt)
+        cart = cart_res.scalar_one_or_none()
+        if cart:
+            applicable_subtotal = 0.0
+            for item in cart.items:
+                if item.product_id in allowed_products:
+                    price = float(item.unit_price) if item.unit_price is not None else float(item.product.price or 0.0)
+                    applicable_subtotal += price * item.quantity
+
     discount_amount = Decimal("0")
     if coupon.coupon_type == "percentage":
-        discount_amount = Decimal(str(round((totals["subtotal"] * float(coupon.discount_value)) / 100.0, 2)))
+        discount_amount = Decimal(str(round((applicable_subtotal * float(coupon.discount_value)) / 100.0, 2)))
         # Apply max discount limit if exists
         if coupon.restrictions and coupon.restrictions.max_discount_amount:
             discount_amount = min(discount_amount, Decimal(str(coupon.restrictions.max_discount_amount)))
     elif coupon.coupon_type == "fixed_amount":
-        discount_amount = coupon.discount_value
+        discount_amount = Decimal(str(min(float(coupon.discount_value), applicable_subtotal)))
     elif coupon.coupon_type == "free_shipping":
         discount_amount = Decimal("0")  # Will be handled in shipping calculation
 
@@ -242,14 +266,34 @@ async def validate_coupon_code(
 
     if is_valid and coupon:
         # Calculate potential discount
+        applicable_subtotal = subtotal
+        if cart_id and coupon.discount_scope in ("specific_categories", "specific_products"):
+            stmt = select(Cart).where(Cart.id == cart_id).options(selectinload(Cart.items).selectinload(CartItem.product))
+            cart_res = await db.execute(stmt)
+            cart = cart_res.scalar_one_or_none()
+            if cart:
+                applicable_subtotal = 0.0
+                if coupon.discount_scope == "specific_categories":
+                    allowed_categories = {c.category for c in coupon.categories}
+                    for item in cart.items:
+                        if item.product and item.product.category_id and str(item.product.category_id) in allowed_categories:
+                            price = float(item.unit_price) if item.unit_price is not None else float(item.product.price or 0.0)
+                            applicable_subtotal += price * item.quantity
+                elif coupon.discount_scope == "specific_products":
+                    allowed_products = {p.product_id for p in coupon.products}
+                    for item in cart.items:
+                        if item.product_id in allowed_products:
+                            price = float(item.unit_price) if item.unit_price is not None else float(item.product.price or 0.0)
+                            applicable_subtotal += price * item.quantity
+
         discount_amount = 0.0
         if coupon.coupon_type == "percentage":
-            discount_amount = round(subtotal * float(coupon.discount_value) / 100.0, 2)
+            discount_amount = round(applicable_subtotal * float(coupon.discount_value) / 100.0, 2)
             # Apply max discount limit if exists
             if coupon.restrictions and coupon.restrictions.max_discount_amount:
                 discount_amount = min(discount_amount, float(coupon.restrictions.max_discount_amount))
         elif coupon.coupon_type == "fixed_amount":
-            discount_amount = min(float(coupon.discount_value), subtotal)
+            discount_amount = min(float(coupon.discount_value), applicable_subtotal)
 
         return success_response({
             "is_valid": True,

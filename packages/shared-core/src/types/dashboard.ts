@@ -6,6 +6,13 @@ export interface DashboardStats {
     wishlistCount: number;
     savedAddresses: number;
     memberSince: string;
+    // Trend data (optional, for displaying trends vs last month)
+    ordersTrend?: number; // percentage change
+    spentTrend?: number; // percentage change
+    // Loyalty data (optional)
+    loyaltyTier?: 'bronze' | 'silver' | 'gold' | 'platinum';
+    loyaltyPoints?: number;
+    pointsToNext?: number;
 }
 
 export interface OrderHistoryItem {

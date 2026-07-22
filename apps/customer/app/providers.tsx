@@ -6,6 +6,8 @@ import { ThemeProvider } from '@mymeddevices/ui/components/theme-provider';
 import { SessionExpiredWatcher } from '@/components/auth/SessionExpiredWatcher';
 import { ShopFiltersProvider } from '@/lib/context/ShopFiltersContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { CartInitializer } from '@/components/cart/CartInitializer';
+import { AuthCartSync } from '@/components/cart/AuthCartSync';
 
 interface ProvidersProps {
   children: ReactNode;
@@ -65,6 +67,8 @@ export default function Providers({ children }: ProvidersProps) {
           <TooltipProvider delayDuration={0}>
             {children}
             <SessionExpiredWatcher />
+            <CartInitializer />
+            <AuthCartSync />
           </TooltipProvider>
         </ShopFiltersProvider>
       </ThemeProvider>

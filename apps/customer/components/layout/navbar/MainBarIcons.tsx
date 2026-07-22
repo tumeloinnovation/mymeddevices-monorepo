@@ -126,13 +126,37 @@ export const MainBarIcons = () => {
       {items.map((item) => {
         const id = item?.id ?? item?.sku ?? item?.slug;
         const name = item?.name ?? String(id ?? "");
-        const image =
-          item?.image ??
-          (item?.images
-            ? Array.isArray(item.images)
-              ? item.images[0]?.src ?? item.images[0]
-              : undefined
-            : undefined);
+
+        // Safely extract image URL with proper fallback
+        const getImageSrc = (): string => {
+          const rawImage =
+            item?.image ??
+            (item?.images
+              ? Array.isArray(item.images)
+                ? item.images[0]?.src ?? item.images[0]?.url ?? item.images[0]
+                : undefined
+              : undefined);
+
+          // Handle empty string, undefined, null, or empty object
+          if (!rawImage || rawImage === "" || (typeof rawImage === "object" && Object.keys(rawImage).length === 0)) {
+            return "/logos/logo-portrait.png";
+          }
+
+          // If it's a non-empty string, return it
+          if (typeof rawImage === "string") {
+            return rawImage;
+          }
+
+          // If it's an object with src or url property
+          if (typeof rawImage === "object") {
+            return rawImage?.src ?? rawImage?.url ?? "/logos/logo-portrait.png";
+          }
+
+          // Default fallback
+          return "/logos/logo-portrait.png";
+        };
+
+        const imageSrc = getImageSrc();
         const price = Number(item?.price ?? item?.regular_price ?? 0);
 
         return (
@@ -142,7 +166,7 @@ export const MainBarIcons = () => {
           >
             <div className="relative w-10 h-10 rounded-md overflow-hidden shrink-0">
               <Image
-                src={image || "/logos/logo-portrait.png"}
+                src={imageSrc}
                 alt={name}
                 fill
                 className="object-cover"

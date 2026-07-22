@@ -321,8 +321,10 @@ export default function HybridCheckout() {
         disabled={
           !customerData.name ||
           !customerData.phone ||
+          !customerData.email ||
           !delivery ||
           shippingLoading ||
+          !calculateRequested ||
           isProcessingMpesa ||
           isAddingNotes
         }

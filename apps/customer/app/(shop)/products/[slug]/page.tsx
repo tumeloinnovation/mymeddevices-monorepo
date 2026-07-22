@@ -83,7 +83,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     || product.description?.replace(/<[^>]*>/g, '')?.slice(0, 160)
     || `Shop ${product.name} at MyMedDevices - Kenya's trusted medical devices store.`
 
-  const productImage = product.images?.[0]?.src || '/logos/logo.png'
+  const productImage = product.images?.[0]?.src || '/logos/logo-portrait.png'
   const productUrl = `${SITE_URL}/products/${slug}`
   const brandName = product.brands?.[0]?.name || 'MyMedDevices'
   const formattedPrice = product.price

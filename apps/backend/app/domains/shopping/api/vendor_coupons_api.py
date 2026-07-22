@@ -97,7 +97,9 @@ async def vendor_create_coupon(
             is_stackable=data.is_stackable,
             distribution_type="public",  # Vendor coupons are always public
             first_purchase_only=data.first_purchase_only,
-            one_time_per_user=data.one_time_per_user
+            one_time_per_user=data.one_time_per_user,
+            category_ids=data.category_ids,
+            product_ids=data.product_ids
         )
         return success_response(coupon)
     except ValueError as e:

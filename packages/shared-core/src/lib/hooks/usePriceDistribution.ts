@@ -25,7 +25,7 @@ export const usePriceDistribution = (binSize: number = 250) => {
 
     productItems.forEach((product) => {
       // Try to get the price, fallback to regular_price, then sale_price
-      const priceStr = product.price || product.regular_price || product.sale_price || '0';
+      const priceStr = (product as any).price || (product as any).regular_price || (product as any).sale_price || '0';
       const price = parseFloat(priceStr);
 
       if (!isNaN(price) && price > 0) {
