@@ -63,8 +63,8 @@ android/app/.cxx/
 *.db
 *.sqlite
 *.sqlite3
-static/uploads/*
-!static/uploads/.gitkeep
+**/static/uploads/*
+!**/static/uploads/.gitkeep
 
 # Test artifacts
 **/test-results/

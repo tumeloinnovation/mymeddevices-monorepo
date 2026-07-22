@@ -1,69 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MyMedDevices Customer Portal (`apps/customer`)
 
-## Getting Started
+> [!TIP]
+> For the complete step-by-step user journey, prescription gate, checkout, and M-Pesa payment flow diagrams, see [Customer Feature Flow](file:///home/nickm/Developer/company/MyMedDevices/apps/customer/FLOW.md).
 
-First, run the development server:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+The Customer Portal is the primary B2C and healthcare procurement e-commerce web application where customers browse medical equipment catalogs, add items to cart, checkout with M-Pesa, manage prescriptions, and track orders.
+
+---
+
+## Technical Stack & Configuration
+
+- **Framework**: Next.js 16.0.7 (App Router)
+- **Port**: `:3000`
+- **React**: 19.2.1
+- **State Management**: Zustand 5.0 (`useAuthStore`, `useCartStore`) + TanStack React Query 5.100 + `nuqs`
+- **Forms & Validation**: `react-hook-form` + Zod v3/v4 (`standardSchemaResolver`)
+- **Styling**: Tailwind CSS v4 + `@import "tw-animate-css";` + Framer Motion 12
+- **Integrations**: Google Maps JS API (Address picker), Sonner (Toasts)
+
+---
+
+## Page Route Map
+
+```
+apps/customer/app/
+├── (shop)/                  # Storefront catalog routes
+│   ├── page.tsx             # Home page (Hero, Categories, Best Sellers)
+│   ├── products/            # Catalog search & filtered grid
+│   ├── products/[slug]/     # Public product detail page
+│   ├── categories/          # Category browser
+│   ├── brands/              # Brand browser
+│   ├── cart/                # Active shopping cart
+│   └── wishlist/            # Saved wishlist items
+├── checkout/                # Multi-step checkout (Address, Shipping, M-Pesa)
+├── dashboard/               # Customer Account Portal
+│   ├── overview             # Account summary & stats
+│   ├── orders               # Order history & status timeline
+│   ├── prescriptions        # Uploaded medical prescriptions
+│   ├── addresses            # Saved delivery & billing addresses
+│   ├── payment-methods      # Tokenized payment methods
+│   ├── insurance            # Insurance policy details
+│   ├── loyalty              # Loyalty tier & points ledger
+│   ├── coupons              # Active promotional codes
+│   ├── tickets              # Support tickets portal
+│   └── returns              # Order return requests
+├── (website)/               # Marketing & legal pages
+│   ├── about-us, contact-us, privacy-policy, return-policy, terms
+└── login/                   # Redirects to home page inline login modal (?login=true)
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Auth & Hybrid Cart Behavior
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. **Inline Login Modal**: Visiting `/login` opens the standard authentication modal overlay on top of the storefront (`/?login=true`).
+2. **Hybrid Cart Management**:
+   - Guest items are maintained locally in Zustand `useCartStore` (`localStorage`).
+   - Upon successful login/registration, `syncLocalItemsToBackend()` merges guest items into the customer's remote backend cart seamlessly.
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Key Development Commands
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```sh
+# Run dev server standalone on port 3000
+pnpm --filter=customer dev
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Type check application
+pnpm --filter=customer exec tsc --noEmit
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
-
-## Testing
-
-### Run Critical Tests (Checkout & Orders)
-```bash
-pnpm test:critical
+# Build production bundle
+pnpm --filter=customer build
 ```
 
-This runs 39 critical tests covering:
-- Order API validation (12 tests)
-- M-Pesa payment flow (7 tests)
-- Order validation logic (20 tests)
+---
 
-### Pre-Deployment Check
-```bash
-pnpm pre-deploy
-```
+## Environment Variables
 
-This automated script runs:
-1. Dependency check
-2. TypeScript compilation
-3. ESLint validation
-4. All critical tests
-5. Build verification
-
-### Test Documentation
-- `IMPLEMENTATION_COMPLETE.md` - Implementation summary
-- `QUICK_TEST_REFERENCE.md` - Quick reference guide
-- `TEST_EXECUTION_SUMMARY.md` - Detailed test results
-- `TEST_PLAN.md` - Complete test strategy
-
-### Known Issues
-All core unit tests are passing with React 19.
+Defined in `apps/customer/.env`:
+- `NEXT_PUBLIC_API_URL`: Backend API URL (default: `http://localhost:8000`)
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`: Google Maps JavaScript API key
+- `NEXT_PUBLIC_GOOGLE_MAP_ID`: Google Maps Map ID

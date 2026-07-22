@@ -1,36 +1,79 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# MyMedDevices Admin Portal (`apps/admin`)
 
-## Getting Started
+> [!TIP]
+> For the complete step-by-step internal governance workflows, vendor application moderation desk, product catalog oversight, and system gateway flows, see [Admin Feature Flow](file:///home/nickm/Developer/company/MyMedDevices/apps/admin/FLOW.md).
 
-First, run the development server:
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+The Admin Portal is an internal management application for marketplace governance, vendor onboardings and approvals, global product catalog moderation, financial tracking, and system configuration.
+
+---
+
+## Technical Stack & Configuration
+
+- **Framework**: Next.js 16.2.9 (App Router)
+- **Port**: `:3001`
+- **React**: 19.2.4
+- **State Management**: Zustand 5.0 + TanStack React Query 5.101 + `nuqs` (URL state)
+- **Forms & Validation**: `react-hook-form` + Zod v4 (`standardSchemaResolver`)
+- **Styling**: Tailwind CSS v4 + Framer Motion 12
+- **Theme**: Warm Orange / Olive back-office theme (`#e0752b`, `#a69d61`)
+- **Special Libraries**: `@dnd-kit` (drag-and-drop), `dinero.js` (monetary operations), `xlsx` (data exporting), `socket.io-client` (real-time updates)
+
+---
+
+## Page Route Map
+
+```
+apps/admin/app/
+├── (auth)/
+│   ├── login/               # Admin login page
+│   ├── forgot-password/     # Password reset request
+│   └── reset-password/      # Password reset confirmation
+├── dashboard/
+│   ├── page.tsx             # Main admin metrics overview
+│   ├── catalog/             # Product catalog control
+│   │   ├── products/        # Published product listing moderation
+│   │   ├── categories/      # Category taxonomy tree management
+│   │   ├── brands/          # Brand approval desk
+│   │   └── tags/            # Tag management
+│   ├── vendors/             # Vendor application approval desk
+│   ├── users/               # Customer & staff user account management
+│   ├── payments/            # Financial transaction ledgers & gateways
+│   ├── shipping/            # Shipping rates & carrier settings
+│   └── shopping/            # Global order management
+├── system/                  # System health, SMTP mailer settings, rate limits
+├── users/                   # Invite new admin staff members
+└── settings/                # Admin profile & security settings
 ```
 
-Open [http://localhost:3001](http://localhost:3001) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Core Components & Shared Layouts
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- **`DashboardLayout`**: Shared back-office sidebar layout imported from `@mymeddevices/shared-admin`.
+- **`AdminMap`**: Geographical vendor distribution map (`components/admin-map.tsx`).
+- **`InviteModal`**: Admin invitation modal (`components/invite-modal.tsx`).
 
-## Learn More
+---
 
-To learn more about Next.js, take a look at the following resources:
+## Key Development Commands
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```sh
+# Run dev server standalone on port 3001
+pnpm --filter=admin dev
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# Type check application
+pnpm --filter=admin exec tsc --noEmit
 
-## Deploy on Vercel
+# Build production bundle
+pnpm --filter=admin build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Environment Variables
+
+Defined in `apps/admin/.env`:
+- `NEXT_PUBLIC_API_URL`: Backend API URL (default: `http://localhost:8000`)
+- `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY`: Google Maps JavaScript API key
+- `NEXT_PUBLIC_GOOGLE_MAP_ID`: Google Maps Map ID for vector styling
