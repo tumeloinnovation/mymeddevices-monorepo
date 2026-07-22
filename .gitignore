@@ -7,6 +7,7 @@ node_modules
 .next
 out
 next-env.d.ts
+*.tsbuildinfo
 dist
 build
 
@@ -25,9 +26,15 @@ __pycache__
 # Logs
 logs/
 *.log
+turbo-build.log
+CMakeError.log
+CMakeOutput.log
+CMakeFiles/CMakeTmp/
 
 # Environment
 .env
+.env.bk
+.env.backup
 .env.local
 .env.development.local
 .env.test.local
@@ -45,8 +52,23 @@ Thumbs.db
 *.swp
 *.swo
 
+# Android/Expo
+.expo
+android/.gradle/
+android/build/
+android/app/build/
+android/app/.cxx/
+
 # Project specific
+*.db
+*.sqlite
+*.sqlite3
 static/uploads/*
 !static/uploads/.gitkeep
+
+# Test artifacts
+**/test-results/
+**/playwright-report/
+**/.playwright-*/
 backend/compiled_emails/*
 !backend/compiled_emails/.gitkeep
