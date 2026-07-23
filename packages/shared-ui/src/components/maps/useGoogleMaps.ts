@@ -51,7 +51,11 @@ export function useGoogleMaps(
     }
 
     // Get API key from env if not provided
-    const key = apiKey || process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
+    // Try multiple sources for the API key
+    const key =
+      apiKey ||
+      (typeof window !== 'undefined' && (window as any).NEXT_PUBLIC_GOOGLE_MAPS_API_KEY) ||
+      process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
     if (!key) {
       const err = new Error(

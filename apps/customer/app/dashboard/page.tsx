@@ -3,7 +3,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useDashboardStats, useCustomerOrders, useActiveOrders } from '@/hooks/useDashboard';
+import { useDashboardStats, useCustomerOrders } from '@/hooks/useDashboard';
 import { useAuthStore } from '@mymeddevices/shared-core';
 import { formatCurrency } from '@/lib/utils/utils';
 import {
@@ -28,12 +28,13 @@ export default function DashboardPage() {
         1,
         10
     );
-    const { data: activeOrders } = useActiveOrders();
 
     const recentOrders = ordersData?.slice(0, 3);
 
-    // Get the most recent active order for the banner
-    const activeOrder = activeOrders?.items?.[0];
+    // Get the most recent active order for the banner (not completed/delivered)
+    const activeOrder = ordersData?.find(
+        (order) => order.status !== 'completed' && order.status !== 'delivered' && order.status !== 'cancelled'
+    );
 
     const firstName = user?.firstName || user?.displayName?.split(' ')[0] || 'Guest';
 
@@ -45,8 +46,8 @@ export default function DashboardPage() {
             {/* Active Order Banner */}
             {activeOrder && (
                 <ActiveOrderBanner
-                    orderId={activeOrder.id}
-                    orderNumber={activeOrder.order_number || activeOrder.id?.slice(-6)}
+                    orderId={String(activeOrder.id)}
+                    orderNumber={activeOrder.number}
                     estimatedDelivery={activeOrder.estimated_delivery}
                     status={activeOrder.status}
                 />

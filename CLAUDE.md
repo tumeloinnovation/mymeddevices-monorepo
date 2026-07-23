@@ -77,7 +77,6 @@ pnpm dev          # Start dev server
 pnpm build        # Production build
 pnpm test         # Vitest unit tests
 pnpm test:ui      # Vitest UI
-pnpm test:e2e     # Playwright E2E tests
 pnpm pre-deploy   # Pre-deployment validation (TS, lint, critical tests)
 
 # Admin app

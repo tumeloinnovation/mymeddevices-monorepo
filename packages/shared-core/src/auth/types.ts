@@ -19,6 +19,8 @@ export interface BaseUser {
   displayName?: string;
   isVendor?: boolean;
   isVendorVerified?: boolean;
+  loyaltyTier?: 'bronze' | 'silver' | 'gold' | 'platinum';
+  loyaltyPoints?: number;
 }
 
 export interface AdminUser extends BaseUser {

@@ -2,7 +2,6 @@ import Loading from '@/app/loading';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { Toaster } from 'sonner';
-import { Geist, Geist_Mono } from 'next/font/google';
 
 import FloatingWhatsAppButton from '@/components/common/FloatingWhatsAppButton';
 import { LayoutWrapper } from '@/components/layout/LayoutWrapper';
@@ -13,17 +12,19 @@ import { OrganizationJsonLd } from '@/components/seo';
 
 import './globals.css';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-  display: 'swap',
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-  display: 'swap',
-});
+// Using system fonts as fallback to avoid build-time network issues
+// TODO: Re-enable Google Fonts when build environment has network access
+// const geistSans = Geist({
+//   variable: '--font-geist-sans',
+//   subsets: ['latin'],
+//   display: 'swap',
+// });
+//
+// const geistMono = Geist_Mono({
+//   variable: '--font-geist-mono',
+//   subsets: ['latin'],
+//   display: 'swap',
+// });
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://mymeddevices.com'),
@@ -96,7 +97,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable}`} suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <OrganizationJsonLd />
       </head>

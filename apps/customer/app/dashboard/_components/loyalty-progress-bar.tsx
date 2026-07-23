@@ -42,7 +42,7 @@ export function LoyaltyProgressBar({
 
   // Calculate progress percentage
   const tierRequired = progress?.required || 100;
-  const tierProgress = Math.min((currentPoints / tierRequired) * 100, 100);
+  const progressPercent = Math.min((currentPoints / tierRequired) * 100, 100);
   const pointsRemaining = Math.max(tierRequired - currentPoints, 0);
 
   return (
@@ -99,12 +99,12 @@ export function LoyaltyProgressBar({
                     <motion.div
                       className={cn('h-full rounded-full', config.color.replace('from-', 'bg-').replace(' to-', ' '))}
                       initial={{ width: 0 }}
-                      animate={{ width: `${tierProgress}%` }}
+                      animate={{ width: `${progressPercent}%` }}
                       transition={{ duration: 0.5, delay: 0.2 }}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {Math.round(tierProgress)}% to {nextTierConfig?.name}
+                    {Math.round(progressPercent)}% to {nextTierConfig?.name}
                   </p>
                 </div>
               )}

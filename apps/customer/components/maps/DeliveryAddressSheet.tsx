@@ -59,6 +59,8 @@ interface DeliveryAddressSheetProps {
   delivery?: Address | null;
   onSelect: (address: Address) => void;
   children?: ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const TAG_ICONS: Record<string, React.ComponentType<any>> = {
@@ -71,8 +73,13 @@ export default function DeliveryAddressSheet({
   delivery,
   onSelect,
   children,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: DeliveryAddressSheetProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
+  const setOpen = controlledOnOpenChange || setInternalOpen;
+
   const [selectedAddress, setSelectedAddress] = useState<Address | null>(delivery || null);
   const [selectedTag, setSelectedTag] = useState<AddressTag | "">("");
   const [customTagInput, setCustomTagInput] = useState("");

@@ -1,5 +1,9 @@
 'use client';
 
+/**
+ * @deprecated Use CustomerAuthModal from @mymeddevices/shared-ui instead.
+ */
+
 import { useState, useEffect } from 'react';
 import { User, Phone, Lock, Loader2, Check, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';

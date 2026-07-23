@@ -387,6 +387,8 @@ export interface AuthUser {
   wooCustomerId?: number;
   billing?: Address;
   shipping?: Address;
+  loyaltyTier?: 'bronze' | 'silver' | 'gold' | 'platinum';
+  loyaltyPoints?: number;
 }
 
 export type CheckoutStep = 'email' | 'login' | 'otp' | 'profile' | 'complete';

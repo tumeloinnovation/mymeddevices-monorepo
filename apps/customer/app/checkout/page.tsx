@@ -14,7 +14,7 @@ import ReviewSection from './_components/ReviewSection';
 import Section from './_components/Section';
 import SummaryPanel from './_components/SummaryPanel';
 import MobileBottomSummary from './_components/MobileBottomSummary';
-import { CheckoutAuthModal } from './_components/CheckoutAuthModal';
+import { CustomerAuthModal } from '@mymeddevices/shared-ui';
 
 export default function HybridCheckout() {
   const {
@@ -369,10 +369,12 @@ export default function HybridCheckout() {
       )}
 
       {showAuthModal && (
-        <CheckoutAuthModal
+        <CustomerAuthModal
           open={showAuthModal}
           onOpenChange={setShowAuthModal}
           onComplete={handleAuthComplete}
+          context="checkout"
+          allowGuestCheckout={true}
           delivery={delivery}
           customer={customerData}
         />

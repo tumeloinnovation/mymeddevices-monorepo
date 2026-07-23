@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @deprecated Use CustomerAuthModal instead. This component will be removed in v2.0.0.
+ * CustomerAuthModal provides a unified teal/cyan theme and works across all contexts.
+ */
+
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '../ui/dialog';
 import { Button } from '../ui/button';

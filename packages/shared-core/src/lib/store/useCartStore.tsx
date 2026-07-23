@@ -59,7 +59,7 @@ interface CartState {
   // Backend sync actions
   syncWithBackend: (options?: { force?: boolean }) => Promise<void>;
   syncLocalItemsToBackend: () => Promise<void>;
-  addItemToBackend: (productId: string, quantity?: number, notes?: string) => Promise<CartItem>;
+  addItemToBackend: (productId: string, quantity?: number, notes?: string) => Promise<Cart>;
   updateItemInBackend: (itemId: string, update: { quantity?: number; notes?: string }) => Promise<void>;
   removeItemFromBackend: (itemId: string) => Promise<void>;
   clearBackendCart: () => Promise<void>;

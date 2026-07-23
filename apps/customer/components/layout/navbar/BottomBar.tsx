@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ChevronLeft, ChevronRight } from "lucide-react"
+import { ChevronLeft, ChevronRight, Stethoscope, Home, Banknote, RotateCcw, BadgeCheck } from "lucide-react"
 import { formatCurrency } from "@/lib/utils/utils"
 import { useRouter } from "next/navigation"
 
@@ -39,45 +39,87 @@ export function BottomBar() {
   // Fetch new arrivals
   const newArrivalProducts = useProducts({ orderby: 'date', per_page: 10 });
 
-  const renderProductCards = (products: Product[]) => {
+  // Seeded intent-based categories with context
+  const byConditionCategories = [
+    { name: 'Diabetes Care', slug: 'diabetic-care', description: 'Glucose monitors, test strips, lancets', context: 'Daily blood sugar management' },
+    { name: 'Hypertension', slug: 'bp-monitors', description: 'BP monitors, cuffs, accessories', context: 'Regular blood pressure tracking' },
+    { name: 'Mobility Aids', slug: 'mobility-rehabilitation-aids', description: 'Wheelchairs, walkers, canes', context: 'Support for independent movement' },
+    { name: 'Respiratory Care', slug: 'respiratory', description: 'Nebulizers, oxygen equipment', context: 'Breathing support solutions' },
+    { name: 'Elderly Care', slug: 'elderly-care', description: 'Daily living aids, safety equipment', context: 'Comfort and dignity at home' },
+    { name: 'First Aid', slug: 'first-aid', description: 'Bandages, antiseptics, emergency kits', context: 'Emergency preparedness' },
+  ];
+
+  const byCareSettingCategories = [
+    { name: 'Home Care', slug: 'home-care', description: 'Equipment for home healthcare', context: 'Professional care at home' },
+    { name: 'Hospital Equipment', slug: 'hospital-equipment', description: 'Professional medical devices', context: 'Clinical-grade reliability' },
+    { name: 'Clinic Supplies', slug: 'clinic-supplies', description: 'Examination room essentials', context: 'Daily practice needs' },
+    { name: 'Personal Care', slug: 'personal-care', description: 'Personal health and wellness', context: 'Self-care made easy' },
+  ];
+
+  // Enhanced product card with better presentation
+  const renderProductCard = (product: Product) => {
+    const discountPercent = product.on_sale && product.regular_price
+      ? Math.round((1 - parseFloat(product.price) / parseFloat(product.regular_price)) * 100)
+      : 0;
+
     return (
-      Array.isArray(products) ? products.slice(0, 5).map((product) => (
-        <div key={product.id} onClick={() => router.push(`/products/${product.slug}`)} className="flex-shrink-0 w-48 bg-card rounded-lg border border-border shadow-sm overflow-hidden transform transition-transform duration-200 hover:scale-[1.02] hover:shadow-md cursor-pointer">
-          <div className="flex h-full flex-col">
-            <div className="p-4 flex items-center justify-center h-28 bg-muted/50">
-              <Image
-                src={product.images?.[0]?.src || '/logos/logo-portrait.png'}
-                alt={product.name}
-                width={100}
-                height={100}
-                className="max-h-full max-w-full object-contain"
-              />
+      <div
+        key={product.id}
+        onClick={() => router.push(`/products/${product.slug}`)}
+        className="group relative flex-shrink-0 w-44 bg-card rounded-xl border border-border overflow-hidden hover:shadow-lg hover:border-primary/30 transition-all duration-200 cursor-pointer"
+      >
+        {/* Image Section */}
+        <div className="relative aspect-square bg-gradient-to-br from-muted/50 to-muted/30 p-3">
+          <Image
+            src={product.images?.[0]?.src || '/logos/logo-portrait.png'}
+            alt={product.name}
+            width={160}
+            height={160}
+            className="w-full h-full object-contain mix-blend-multiply"
+          />
+          {product.on_sale && discountPercent > 0 && (
+            <span className="absolute top-2 left-2 bg-destructive text-destructive-foreground text-xs font-semibold px-2 py-0.5 rounded-full">
+              -{discountPercent}%
+            </span>
+          )}
+          {product.featured && (
+            <span className="absolute top-2 right-2 bg-primary/90 text-primary-foreground text-xs font-medium px-2 py-0.5 rounded-full">
+              ⭐ Featured
+            </span>
+          )}
+        </div>
+
+        {/* Info Section */}
+        <div className="p-3">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">
+            {product.categories?.[0]?.name || 'Medical Supplies'}
+          </p>
+          <h3 className="text-sm font-semibold text-card-foreground line-clamp-2 leading-tight mb-2 group-hover:text-primary transition-colors">
+            {product.name}
+          </h3>
+
+          {/* Price & Rating */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-baseline gap-1.5">
+              <span className="text-base font-bold text-primary">
+                {formatCurrency(parseFloat(product.price))}
+              </span>
+              {product.on_sale && product.regular_price && (
+                <span className="text-xs text-muted-foreground line-through">
+                  {formatCurrency(parseFloat(product.regular_price))}
+                </span>
+              )}
             </div>
-            <div className="p-3 border-t border-border bg-card flex-1 flex flex-col justify-between">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">
-                  {product.categories?.[0]?.name || 'Category'}
-                </div>
-                <h3 className="text-sm font-medium text-card-foreground line-clamp-2 min-h-[2.5rem]">
-                  {product.name}
-                </h3>
+            {product.average_rating && (
+              <div className="flex items-center gap-0.5">
+                <span className="text-[10px] font-medium text-amber-600">
+                  ★ {parseFloat(product.average_rating).toFixed(1)}
+                </span>
               </div>
-              <div className="mt-2 flex items-baseline justify-between">
-                <div className="flex items-baseline space-x-2">
-                  <p className="text-lg font-bold text-primary">
-                    Ksh. {formatCurrency(parseFloat(product.price))}
-                  </p>
-                  {product.on_sale && product.regular_price && (
-                    <p className="text-sm text-muted-foreground line-through">
-                      Ksh. {formatCurrency(parseFloat(product.regular_price))}
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         </div>
-      )) : []
+      </div>
     );
   };
 
@@ -87,84 +129,196 @@ export function BottomBar() {
         <ShopFiltersProvider>
           <NavigationMenu>
             <NavigationMenuList>
-              {/* === Shop by Category Dropdown === */}
+              {/* === By Condition === */}
               <NavigationMenuItem>
-                <NavigationMenuTrigger>Shop by Category</NavigationMenuTrigger>
-                <NavigationMenuContent >
-                  <ul className="grid w-full gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px]">
-                    {Array.isArray(categories) && categories.map((component) => (
-                      <CategoryListItem
-                        key={component.name}
-                        title={component.name}
-                        href={`/categories/${component.slug}`}
-                        slug={component.slug}
-                      >
-                        {component.description}
-                      </CategoryListItem>
+                <NavigationMenuTrigger>By Condition</NavigationMenuTrigger>
+                <NavigationMenuContent>
+                  <div className="grid w-[480px] gap-0 p-4 md:w-[600px] lg:w-[700px]">
+                    <div className="col-span-2 border-b border-border pb-4 mb-4">
+                      <h3 className="text-lg font-semibold text-foreground mb-1">Shop by Condition</h3>
+                      <p className="text-sm text-muted-foreground">Find products tailored to your specific health needs</p>
+                    </div>
+                    {byConditionCategories.map((category) => (
+                      <NavigationMenuLink key={category.slug} asChild>
+                        <NavigationLink
+                          href={`/categories/${category.slug}`}
+                          className="group flex flex-col rounded-lg border border-border bg-card p-4 hover:border-primary/50 hover:shadow-sm transition-all no-underline outline-none"
+                          pendingClassName="opacity-50"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                              <h4 className="text-sm font-semibold text-foreground mb-1 group-hover:text-primary transition-colors">
+                                {category.name}
+                              </h4>
+                              <p className="text-xs text-muted-foreground mb-2">{category.description}</p>
+                              <p className="text-[10px] text-primary/80 italic">{category.context}</p>
+                            </div>
+                            <span className="text-muted-foreground group-hover:text-primary transition-colors">→</span>
+                          </div>
+                        </NavigationLink>
+                      </NavigationMenuLink>
                     ))}
-                  </ul>
+                  </div>
                 </NavigationMenuContent>
               </NavigationMenuItem>
-              {/* === Featured Products Dropdown === */}
+
+              {/* === By Care Setting === */}
               <NavigationMenuItem>
-                <NavigationMenuTrigger>Featured Products</NavigationMenuTrigger>
+                <NavigationMenuTrigger>Care Setting</NavigationMenuTrigger>
                 <NavigationMenuContent>
-                  {/* Grid container to hold left gradient link and right scrollable product cards */}
-                  <div className="grid w-full gap-3 p-4 md:w-[700px] md:grid-cols-3 lg:w-[900px]">
-                    {/* Left panel: keep the gradient link to /deals/new-arrivals */}
-                    <div className="col-span-1">
-                      <NavigationMenuLink asChild>
+                  <div className="grid w-[400px] gap-0 p-4 md:w-[500px] lg:w-[600px] md:grid-cols-2">
+                    <div className="col-span-2 border-b border-border pb-4 mb-4">
+                      <h3 className="text-lg font-semibold text-foreground mb-1">Shop by Care Setting</h3>
+                      <p className="text-sm text-muted-foreground">Equipment for home care, clinics, hospitals, and personal use</p>
+                    </div>
+                    {byCareSettingCategories.map((category) => (
+                      <NavigationMenuLink key={category.slug} asChild>
                         <NavigationLink
-                          className="from-primary/5 to-primary/10 flex h-full select-none flex-col justify-end rounded-md bg-gradient-to-b p-6 no-underline outline-none focus:shadow-md"
-                          href="/featured"
+                          href={`/categories/${category.slug}`}
+                          className="group flex flex-col rounded-lg border border-border bg-card p-4 hover:border-primary/50 hover:shadow-sm transition-all no-underline outline-none"
                           pendingClassName="opacity-50"
                         >
-                          <div className="mb-2 mt-4 text-lg font-medium">Featured Products</div>
-                          <p className="text-sm leading-tight text-muted-foreground">
-                            Explore our handpicked selection of top medical devices.
-                          </p>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                              <h4 className="text-sm font-semibold text-foreground mb-1 group-hover:text-primary transition-colors">
+                                {category.name}
+                              </h4>
+                              <p className="text-xs text-muted-foreground mb-2">{category.description}</p>
+                              <p className="text-[10px] text-primary/80 italic">{category.context}</p>
+                            </div>
+                            <span className="text-muted-foreground group-hover:text-primary transition-colors">→</span>
+                          </div>
+                        </NavigationLink>
+                      </NavigationMenuLink>
+                    ))}
+                  </div>
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+
+              {/* === By Budget === */}
+              <NavigationMenuItem>
+                <NavigationMenuTrigger>Budget</NavigationMenuTrigger>
+                <NavigationMenuContent>
+                  <div className="w-[400px] p-4 md:w-[480px]">
+                    <div className="border-b border-border pb-3 mb-3">
+                      <h3 className="text-base font-semibold text-foreground">Shop by Budget</h3>
+                      <p className="text-xs text-muted-foreground mt-1">Find products within your price range</p>
+                    </div>
+
+                    <div className="space-y-2">
+                      <NavigationMenuLink asChild>
+                        <NavigationLink
+                          href="/products?min_price=0&max_price=1000"
+                          className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-primary/40 hover:bg-accent/50 transition-all no-underline outline-none group"
+                          pendingClassName="opacity-50"
+                        >
+                          <div>
+                            <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Essentials</div>
+                            <div className="text-xs text-muted-foreground">Daily supplies — test strips, bandages, masks</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-foreground">Under Ksh 1,000</div>
+                            <div className="text-[10px] text-muted-foreground">From Ksh 200</div>
+                          </div>
+                        </NavigationLink>
+                      </NavigationMenuLink>
+
+                      <NavigationMenuLink asChild>
+                        <NavigationLink
+                          href="/products?min_price=1000&max_price=5000"
+                          className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-primary/40 hover:bg-accent/50 transition-all no-underline outline-none group"
+                          pendingClassName="opacity-50"
+                        >
+                          <div>
+                            <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Everyday</div>
+                            <div className="text-xs text-muted-foreground">Mid-range equipment — BP monitors, thermometers</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-foreground">Ksh 1,000 – 5,000</div>
+                            <div className="text-[10px] text-muted-foreground">From Ksh 1,200</div>
+                          </div>
+                        </NavigationLink>
+                      </NavigationMenuLink>
+
+                      <NavigationMenuLink asChild>
+                        <NavigationLink
+                          href="/products?min_price=5000"
+                          className="flex items-center justify-between p-3 rounded-lg border border-border hover:border-primary/40 hover:bg-accent/50 transition-all no-underline outline-none group"
+                          pendingClassName="opacity-50"
+                        >
+                          <div>
+                            <div className="text-sm font-semibold text-foreground group-hover:text-primary transition-colors">Premium</div>
+                            <div className="text-xs text-muted-foreground">Professional grade — wheelchairs, nebulizers</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm font-semibold text-foreground">Ksh 5,000+</div>
+                            <div className="text-[10px] text-muted-foreground">From Ksh 5,500</div>
+                          </div>
                         </NavigationLink>
                       </NavigationMenuLink>
                     </div>
 
-                    {/* Right panel: horizontally scrollable product cards to mimic NewArrivals component */}
-                    <div className="col-span-2 w-full md:col-span-2 relative">
-                      {/* Left chevron (visible on md+) */}
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">All prices include VAT</span>
+                        <NavigationMenuLink asChild>
+                          <NavigationLink
+                            href="/products"
+                            className="text-primary hover:underline no-underline outline-none"
+                            pendingClassName="opacity-50"
+                          >
+                            View all products →
+                          </NavigationLink>
+                        </NavigationMenuLink>
+                      </div>
+                    </div>
+                  </div>
+                </NavigationMenuContent>
+              </NavigationMenuItem>
+
+              {/* === Clinician's Picks === */}
+              <NavigationMenuItem>
+                <NavigationMenuTrigger>Clinician's Picks</NavigationMenuTrigger>
+                <NavigationMenuContent>
+                  <div className="w-[750px] p-4 md:w-[850px]">
+                    <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-foreground mb-1">Clinician's Picks</h3>
+                        <p className="text-sm text-muted-foreground">Hand-selected by our medical team for reliability and quality</p>
+                      </div>
+                      <NavigationMenuLink asChild>
+                        <NavigationLink
+                          href="/products?featured=true"
+                          className="text-xs font-medium text-primary hover:underline no-underline outline-none"
+                          pendingClassName="opacity-50"
+                        >
+                          See all →
+                        </NavigationLink>
+                      </NavigationMenuLink>
+                    </div>
+
+                    <div className="relative">
                       <button
                         type="button"
                         aria-label="Scroll left"
-                        onClick={() => scrollBy(-240)}
-                        className="hidden md:flex items-center justify-center absolute left-1 top-1/2 z-20 -translate-y-1/2 rounded-full bg-card p-1 shadow-sm hover:bg-accent border"
-                        data-role="left-chev"
+                        onClick={() => scrollBy(-190)}
+                        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-card border border-border shadow-sm hover:bg-accent transition-colors"
                       >
-                        <ChevronLeft size={18} />
+                        <ChevronLeft size={16} />
                       </button>
 
-                      {/* Right chevron (visible on md+) */}
                       <button
                         type="button"
                         aria-label="Scroll right"
-                        onClick={() => scrollBy(240)}
-                        className="hidden md:flex items-center justify-center absolute right-1 top-1/2 z-20 -translate-y-1/2 rounded-full bg-card p-1 shadow-sm hover:bg-accent border"
-                        data-role="right-chev"
+                        onClick={() => scrollBy(190)}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-card border border-border shadow-sm hover:bg-accent transition-colors"
                       >
-                        <ChevronRight size={18} />
+                        <ChevronRight size={16} />
                       </button>
 
-                      {/* Scroll rail with ref (hide native scrollbar) */}
                       <div ref={scrollRef} className="overflow-x-auto hide-scrollbar">
-                        <div className="flex space-x-6 pb-4">
-                          {renderProductCards(featuredProducts.products)}
-                        </div>
-
-                        {/* Left fade */}
-                        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-10 md:block hidden">
-                          <div className="h-full w-full bg-gradient-to-r from-card/80 to-transparent dark:from-card/60"></div>
-                        </div>
-
-                        {/* Right fade */}
-                        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 md:block hidden">
-                          <div className="h-full w-full bg-gradient-to-l from-card/80 to-transparent dark:from-card/60"></div>
+                        <div className="flex gap-3 pb-2">
+                          {featuredProducts.products?.slice(0, 6).map(renderProductCard)}
                         </div>
                       </div>
                     </div>
@@ -172,66 +326,49 @@ export function BottomBar() {
                 </NavigationMenuContent>
               </NavigationMenuItem>
 
-              {/* === Shop by New Arrivals Dropdown === */}
+              {/* === What's New === */}
               <NavigationMenuItem>
-                <NavigationMenuTrigger>New Arrivals</NavigationMenuTrigger>
+                <NavigationMenuTrigger>What's New</NavigationMenuTrigger>
                 <NavigationMenuContent>
-                  {/* Grid container to hold left gradient link and right scrollable product cards */}
-                  <div className="grid w-full gap-3 p-4 md:w-[700px] md:grid-cols-3 lg:w-[900px]">
-                    {/* Left panel: keep the gradient link to /deals/new-arrivals */}
-                    <div className="col-span-1">
+                  <div className="w-[750px] p-4 md:w-[850px]">
+                    <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-foreground mb-1">What's New</h3>
+                        <p className="text-sm text-muted-foreground">Explore the latest medical technology and equipment</p>
+                      </div>
                       <NavigationMenuLink asChild>
                         <NavigationLink
-                          className="from-primary/5 to-primary/10 flex h-full select-none flex-col justify-end rounded-md bg-gradient-to-b p-6 no-underline outline-none focus:shadow-md"
-                          href="/new-arrivals"
+                          href="/products?orderby=date"
+                          className="text-xs font-medium text-primary hover:underline no-underline outline-none"
                           pendingClassName="opacity-50"
                         >
-                          <div className="mb-2 mt-4 text-lg font-medium">New Arrivals</div>
-                          <p className="text-sm leading-tight text-muted-foreground">
-                            Check out the latest technology in medical equipment.
-                          </p>
+                          See all →
                         </NavigationLink>
                       </NavigationMenuLink>
                     </div>
 
-                    {/* Right panel: horizontally scrollable product cards to mimic NewArrivals component */}
-                    <div className="col-span-2 w-full md:col-span-2 relative">
-                      {/* Left chevron (visible on md+) */}
+                    <div className="relative">
                       <button
                         type="button"
                         aria-label="Scroll left"
-                        onClick={() => scrollBy(-240)}
-                        className="hidden md:flex items-center justify-center absolute left-1 top-1/2 z-20 -translate-y-1/2 rounded-full bg-card p-1 shadow-sm hover:bg-accent border"
-                        data-role="left-chev"
+                        onClick={() => scrollBy(-190)}
+                        className="absolute left-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-card border border-border shadow-sm hover:bg-accent transition-colors"
                       >
-                        <ChevronLeft size={18} />
+                        <ChevronLeft size={16} />
                       </button>
 
-                      {/* Right chevron (visible on md+) */}
                       <button
                         type="button"
                         aria-label="Scroll right"
-                        onClick={() => scrollBy(240)}
-                        className="hidden md:flex items-center justify-center absolute right-1 top-1/2 z-20 -translate-y-1/2 rounded-full bg-card p-1 shadow-sm hover:bg-accent border"
-                        data-role="right-chev"
+                        onClick={() => scrollBy(190)}
+                        className="absolute right-0 top-1/2 -translate-y-1/2 z-10 flex items-center justify-center w-8 h-8 rounded-full bg-card border border-border shadow-sm hover:bg-accent transition-colors"
                       >
-                        <ChevronRight size={18} />
+                        <ChevronRight size={16} />
                       </button>
 
-                      {/* Scroll rail with ref (hide native scrollbar) */}
                       <div ref={scrollRef} className="overflow-x-auto hide-scrollbar">
-                        <div className="flex space-x-6 pb-4">
-                          {renderProductCards(newArrivalProducts.products)}
-                        </div>
-
-                        {/* Left fade */}
-                        <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-10 md:block hidden">
-                          <div className="h-full w-full bg-gradient-to-r from-card/80 to-transparent dark:from-card/60"></div>
-                        </div>
-
-                        {/* Right fade */}
-                        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-10 md:block hidden">
-                          <div className="h-full w-full bg-gradient-to-l from-card/80 to-transparent dark:from-card/60"></div>
+                        <div className="flex gap-3 pb-2">
+                          {newArrivalProducts.products?.slice(0, 6).map(renderProductCard)}
                         </div>
                       </div>
                     </div>
@@ -239,13 +376,11 @@ export function BottomBar() {
                 </NavigationMenuContent>
               </NavigationMenuItem>
 
-
-              {/* === Simple Link to All Products === */}
+              {/* === Shop All === */}
               <NavigationMenuItem>
-                {/* Keep this as a simple link but ensure it uses the same trigger styling so spacing matches */}
                 <NavigationMenuLink asChild>
                   <NavigationLink className={navigationMenuTriggerStyle()} href="/products" pendingClassName="opacity-50">
-                    Shop
+                    Shop All
                   </NavigationLink>
                 </NavigationMenuLink>
               </NavigationMenuItem>

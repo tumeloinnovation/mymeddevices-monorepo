@@ -228,12 +228,14 @@ export const skeletonCrossfade = {
  * Default animation preset for most dashboard pages
  * Combines page entry with staggered children
  */
-export const defaultPageAnimation = {
-  ...pageEntry,
+export const defaultPageAnimation: Variants = {
+  hidden: { opacity: 0, y: 12 },
   visible: {
-    ...pageEntry.visible,
+    opacity: 1,
+    y: 0,
     transition: {
-      ...pageEntry.visible.transition,
+      duration: 0.3,
+      ease: [0.23, 1, 0.32, 1],
       staggerChildren: 0.04,
       delayChildren: 0.1,
     },

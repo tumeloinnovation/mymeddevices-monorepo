@@ -16,7 +16,7 @@ import { GitCompareArrows, Heart, ShoppingCart } from "lucide-react";
 import useCartStore from "@/lib/store/useCartStore";
 import { useWishlistStore } from "@/lib/store/useWishlistStore";
 import { useCompareStore } from "@/lib/store/useCompareStore";
-import { LoginModal } from "@mymeddevices/shared-ui";
+import { CustomerAuthModal } from "@mymeddevices/shared-ui";
 import { useAuthStore, getUserDisplayName, useAuthCookie } from "@mymeddevices/shared-core";
 import { User, Settings as SettingsIcon, CreditCard as CreditCardIcon, Bell as BellIcon, LogOut as LogOutIcon, Package as PackageIcon } from "lucide-react";
 import { useState } from "react";
@@ -335,7 +335,12 @@ export const MainBarIcons = () => {
           <span className="text-[10px] hidden lg:block mt-0.5">Login</span>
         </div>
       )}
-      <LoginModal open={isLoginOpen} onOpenChange={setIsLoginOpen} />
+      <CustomerAuthModal
+        open={isLoginOpen}
+        onOpenChange={setIsLoginOpen}
+        context="modal"
+        initialMode="login"
+      />
     </div>
   );
 };

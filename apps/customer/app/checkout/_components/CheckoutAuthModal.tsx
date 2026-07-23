@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @deprecated Use CustomerAuthModal from @mymeddevices/shared-ui instead.
+ * This component will be removed. CustomerAuthModal provides a unified teal/cyan theme.
+ */
+
 import { useEffect } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useCheckoutAuthStore } from '@/lib/store/useAuthStore';
