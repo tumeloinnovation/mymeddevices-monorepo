@@ -3,15 +3,11 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  ArrowLeft, 
-  Calendar, 
-  Mail, 
-  Phone, 
-  MapPin, 
-  CreditCard,
-  Truck, 
-  CheckCircle2, 
+import {
+  ArrowLeft,
+  Calendar,
+  Truck,
+  CheckCircle2,
   AlertCircle,
   Loader2,
   Package
@@ -31,7 +27,7 @@ export default function OrderDetailsPage() {
 
   const { data: order, loading, error, refetch } = useOrder(id);
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
-  const [updatingStatus, setUpdatingStatus] = useState<OrderStatus | ''>('');
+  const [pendingStatus, setPendingStatus] = useState<Record<string, OrderStatus>>({});
   
   // Tracking inputs
   const [carrier, setCarrier] = useState('G4S');
@@ -47,16 +43,29 @@ export default function OrderDetailsPage() {
     }).format(amount);
   };
 
-  const handleStatusChange = async (itemId: string, newStatus: OrderStatus) => {
+  // When status dropdown changes, just store the pending value
+  const handleStatusSelectChange = (itemId: string, newStatus: OrderStatus) => {
+    setPendingStatus(prev => ({ ...prev, [itemId]: newStatus }));
+  };
+
+  const handleStatusUpdate = async (itemId: string) => {
+    const newStatus = pendingStatus[itemId];
+    if (!newStatus || newStatus === (order?.items.find(i => i.id === itemId)?.status || order?.status)) {
+      setActionError('Please select a different status to update');
+      return;
+    }
+
     setUpdatingItemId(itemId);
     setActionError(null);
     try {
-      const success = await ordersApi.updateOrderStatus(id, itemId, newStatus);
-      if (success) {
-        await refetch();
-      } else {
-        setActionError('Failed to update status on server');
-      }
+      await ordersApi.updateOrderStatus(id, itemId, newStatus);
+      // Clear pending status after successful update
+      setPendingStatus(prev => {
+        const updated = { ...prev };
+        delete updated[itemId];
+        return updated;
+      });
+      await refetch();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Error updating item status');
     } finally {
@@ -148,9 +157,9 @@ export default function OrderDetailsPage() {
         </div>
       )}
 
-      <div className="grid gap-6 md:grid-cols-3">
-        {/* Left 2 Columns: Items & Actions */}
-        <div className="md:col-span-2 space-y-6">
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Left Column: Items & Actions */}
+        <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Order Items</CardTitle>
@@ -183,13 +192,13 @@ export default function OrderDetailsPage() {
                   <div className="bg-slate-50 dark:bg-slate-900/50 p-3 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                     <div>
                       <h5 className="text-xs font-semibold text-slate-700 dark:text-slate-300">Fulfill & Update Status</h5>
-                      <p className="text-[11px] text-slate-400">Update item status or add shipping tracking number</p>
+                      <p className="text-[11px] text-slate-400">Select new status and click Update to confirm changes</p>
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
                       <select
                         defaultValue={item.status || order.status}
-                        onChange={(e) => handleStatusChange(item.id, e.target.value as OrderStatus)}
+                        onChange={(e) => handleStatusSelectChange(item.id, e.target.value as OrderStatus)}
                         disabled={updatingItemId === item.id}
                         className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
                       >
@@ -201,9 +210,21 @@ export default function OrderDetailsPage() {
                         <option value="cancelled">Cancelled</option>
                       </select>
 
-                      {updatingItemId === item.id && (
-                        <Loader2 className="h-4 w-4 animate-spin text-emerald-600" />
-                      )}
+                      <Button
+                        size="sm"
+                        variant={pendingStatus[item.id] && pendingStatus[item.id] !== (item.status || order.status) ? "default" : "outline"}
+                        className="h-7 text-xs"
+                        disabled={updatingItemId === item.id || (!pendingStatus[item.id] || pendingStatus[item.id] === (item.status || order.status))}
+                        onClick={() => handleStatusUpdate(item.id)}
+                      >
+                        {updatingItemId === item.id ? (
+                          <>
+                            <Loader2 className="h-3 w-3 animate-spin mr-1" /> Updating...
+                          </>
+                        ) : (
+                          <>Update Status</>
+                        )}
+                      </Button>
                     </div>
                   </div>
 
@@ -297,69 +318,52 @@ export default function OrderDetailsPage() {
           </Card>
         </div>
 
-        {/* Right Column: Customer & Delivery Details */}
+        {/* Right Column: Order Summary */}
         <div className="space-y-6">
-          {/* Customer Profile */}
+          {/* Order Summary Card */}
           <Card>
             <CardHeader>
-              <CardTitle>Customer</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3.5">
-              <div>
-                <p className="text-sm font-semibold">{order.customer_name}</p>
-                <span className="text-xs text-slate-400">Buyer</span>
-              </div>
-              <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <Mail className="h-4 w-4 text-slate-400 shrink-0" />
-                <span className="truncate">{order.customer_email}</span>
-              </div>
-              {order.shipping_address?.phone && (
-                <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                  <Phone className="h-4 w-4 text-slate-400 shrink-0" />
-                  <span>{order.shipping_address.phone}</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Delivery Address */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Shipping Address</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs space-y-1 text-slate-600 dark:text-slate-300">
-              <p className="font-semibold text-slate-800 dark:text-slate-100">
-                {order.shipping_address?.first_name} {order.shipping_address?.last_name}
-              </p>
-              <p>{order.shipping_address?.line1}</p>
-              {order.shipping_address?.line2 && <p>{order.shipping_address.line2}</p>}
-              <p>
-                {order.shipping_address?.city}, {order.shipping_address?.state} {order.shipping_address?.postal_code}
-              </p>
-              <p className="text-[10px] font-semibold tracking-wider text-slate-400 uppercase mt-2 block">
-                {order.shipping_address?.country}
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Payment Card */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment & Billing</CardTitle>
+              <CardTitle>Order Summary</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Method</span>
-                <span className="font-medium flex items-center gap-1">
-                  <CreditCard className="h-3.5 w-3.5 text-slate-400" /> {order.payment_method || 'M-Pesa'}
-                </span>
+                <span className="text-slate-400">Order Number</span>
+                <span className="font-semibold">{order.order_number}</span>
               </div>
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Status</span>
-                <span className="font-semibold px-2 py-0.5 bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400 rounded">
-                  {order.payment_status || 'Paid'}
-                </span>
+                <span className="text-slate-400">Order Date</span>
+                <span className="font-medium">{orderDate}</span>
               </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">Order Status</span>
+                <OrderStatusBadge status={order.status} />
+              </div>
+              <div className="border-t border-slate-100 dark:border-slate-800 pt-3 mt-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Total Items</span>
+                  <span className="font-semibold">{order.item_count}</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-400">Your Earnings</span>
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(order.vendor_amount)}</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Actions Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button
+                variant="outline"
+                className="w-full justify-start text-xs h-9"
+                onClick={() => window.print()}
+              >
+                Print Packing Slip
+              </Button>
             </CardContent>
           </Card>
         </div>

@@ -12,20 +12,6 @@ import { OrganizationJsonLd } from '@/components/seo';
 
 import './globals.css';
 
-// Using system fonts as fallback to avoid build-time network issues
-// TODO: Re-enable Google Fonts when build environment has network access
-// const geistSans = Geist({
-//   variable: '--font-geist-sans',
-//   subsets: ['latin'],
-//   display: 'swap',
-// });
-//
-// const geistMono = Geist_Mono({
-//   variable: '--font-geist-mono',
-//   subsets: ['latin'],
-//   display: 'swap',
-// });
-
 export const metadata: Metadata = {
   metadataBase: new URL('https://mymeddevices.com'),
   title: {
@@ -101,7 +87,7 @@ export default function RootLayout({
       <head>
         <OrganizationJsonLd />
       </head>
-      <body className={`antialiased flex flex-col min-h-screen`}>
+      <body className={`antialiased flex flex-col min-h-screen font-sans`}>
         {/* Pre-hydration theme setter: apply saved theme or system preference to avoid flash */}
         <script
           dangerouslySetInnerHTML={{

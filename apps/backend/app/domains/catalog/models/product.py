@@ -170,7 +170,7 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
         lazy="selectin"
     )
 
-    @hybrid_property
+    @property
     def category_name(self) -> Optional[str]:
         """Get the category name from the relationship"""
         return self.category.name if self.category else None

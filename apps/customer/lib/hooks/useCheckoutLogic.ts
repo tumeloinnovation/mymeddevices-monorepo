@@ -374,7 +374,8 @@ export function useCheckoutLogic() {
                 country: delivery.country || 'Kenya',
                 phone: formattedPhone,
                 latitude: delivery.lat,
-                longitude: delivery.lon
+                longitude: delivery.lon,
+                payment_method: paymentMethod,
             };
 
             // Get guest token for non-authenticated users

@@ -209,7 +209,7 @@ const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
       label: "Store",
       items: [
         { label: "My Products", href: "/dashboard/products", icon: PackageIcon },
-        { label: "Orders", href: "/dashboard/orders", icon: ShoppingCartIcon },
+        { label: "Customer Orders", href: "/vendor/orders", icon: ShoppingCartIcon },
         { label: "Inventory", href: "/dashboard/inventory", icon: StoreIcon },
         { label: "Pricing", href: "/dashboard/pricing", icon: TagIcon },
         { label: "Customers", href: "/dashboard/customers", icon: UsersIcon },

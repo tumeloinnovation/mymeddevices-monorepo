@@ -34,10 +34,40 @@ class OutboxRelay:
     async def _dispatch(self, event: OutboxEvent):
         # Temporary in-process dispatcher until Celery is wired
         if event.event_type == "OrderCreated":
-            # logic to load user and send email
-            # This is a placeholder for actual email dispatch logic
             logger.info(f"Dispatching OrderCreated event for {event.aggregate_id}")
-            pass
+            import uuid
+            from sqlalchemy.orm import selectinload
+            from app.domains.shopping.services.order_service import OrderService
+            from app.domains.vendor.models.vendor_profile import VendorProfile
+            
+            try:
+                order_service = OrderService(self.db)
+                order = await order_service.get_order(uuid.UUID(event.aggregate_id))
+                if order:
+                    vendor_items_map = {}
+                    for item in order.items:
+                        if item.vendor_id not in vendor_items_map:
+                            vendor_items_map[item.vendor_id] = []
+                        vendor_items_map[item.vendor_id].append(item)
+
+                    for vendor_id, items in vendor_items_map.items():
+                        from app.domains.auth.models.user import User
+                        stmt = select(VendorProfile, User.email).join(User, VendorProfile.user_id == User.id).where(VendorProfile.id == vendor_id)
+                        res = await self.db.execute(stmt)
+                        row = res.first()
+                        if row:
+                            vendor_profile, user_email = row[0], row[1]
+                            vendor_email = vendor_profile.business_email or user_email
+                            if vendor_email:
+                                vendor_total = sum(float(item.subtotal) for item in items)
+                                await self.email_service.send_vendor_new_order(
+                                    vendor_email=vendor_email,
+                                    vendor_name=vendor_profile.store_name,
+                                    order_number=str(order.order_number or order.id),
+                                    order_total=vendor_total
+                                )
+            except Exception as e:
+                logger.error(f"Error handling OrderCreated event: {e}")
         elif event.event_type == "OrderPaid":
             logger.info(f"Dispatching OrderPaid event for {event.aggregate_id}")
             pass

@@ -4,5 +4,6 @@ from .product import Product
 from .product_image import ProductImage
 from .product_variant import ProductVariant
 from .tag import Tag, product_tags
+from .stock_log import StockLog, StockChangeReason
 
-__all__ = ["Brand", "Category", "Product", "ProductImage", "ProductVariant", "Tag", "product_tags"]
+__all__ = ["Brand", "Category", "Product", "ProductImage", "ProductVariant", "Tag", "product_tags", "StockLog", "StockChangeReason"]

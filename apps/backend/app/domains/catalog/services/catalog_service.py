@@ -905,7 +905,7 @@ class CatalogService:
 
     async def create_pending_brand(self, name: str) -> Brand:
         """
-        Create a brand with minimal details (name only) as 'pending' and inactive.
+        Create a brand with minimal details (name only) as auto-approved and active.
         Used for quick brand creation during product creation.
         Checks for duplicate brand names (case-insensitive).
         """
@@ -935,12 +935,12 @@ class CatalogService:
             slug = f"{base_slug}-{counter}"
             counter += 1
 
-        # Create brand with pending status and inactive
+        # Create brand - auto-approved for vendors
         brand = Brand(
             name=name,
             slug=slug,
-            approval_status="pending",
-            is_active=False,
+            approval_status="approved",
+            is_active=True,
             sort_order=0
         )
 

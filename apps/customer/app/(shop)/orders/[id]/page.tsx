@@ -113,9 +113,11 @@ export default function PublicOrderDetailPage() {
         0
     ) || 0;
 
-    // Calculate shipping as the remainder after subtracting subtotal and known fees
-    // This is an approximation since backend doesn't provide fee breakdown
-    const calculatedShipping = Math.max(0, order.total_amount - subtotal - PACKAGING_FEE - SERVICES_FEE);
+    const shippingFee = Number(
+        (order as any).shipping_amount ??
+        (order.shipping_address as any)?.shipping_amount ??
+        Math.max(0, order.total_amount - subtotal - PACKAGING_FEE - SERVICES_FEE)
+    );
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-5xl">
@@ -287,8 +289,8 @@ export default function PublicOrderDetailPage() {
                                 value={subtotal}
                             />
                             <SummaryRow
-                                label="Shipping"
-                                value={calculatedShipping}
+                                label="Shipping Fee"
+                                value={shippingFee}
                             />
                             <SummaryRow
                                 label="Packaging Fee"
@@ -304,14 +306,14 @@ export default function PublicOrderDetailPage() {
                                 value={order.total_amount}
                                 highlight
                             />
-                            {order.status === 'paid' || order.status === 'processing' || order.status === 'shipped' || order.status === 'delivered' ? (
-                                <div className="pt-2">
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
-                                        <Info className="h-3 w-3 shrink-0" />
-                                        <span>Paid via M-Pesa</span>
-                                    </div>
+                            <div className="pt-2">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+                                    <Info className="h-3 w-3 shrink-0" />
+                                    <span>
+                                        Payment Method: {(order as any).payment_method_title || (order.shipping_address as any)?.payment_method_title || ((order as any).payment_method === 'mpesa' || (order.shipping_address as any)?.payment_method === 'mpesa' ? 'M-Pesa Express' : 'Cash on Delivery')}
+                                    </span>
                                 </div>
-                            ) : null}
+                            </div>
                         </CardContent>
                     </Card>
 

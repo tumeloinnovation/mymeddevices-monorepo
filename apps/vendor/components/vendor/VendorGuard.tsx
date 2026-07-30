@@ -16,22 +16,24 @@ export default function VendorGuard({ children }: { children: React.ReactNode })
         if (!hydrated) return;
 
         const checkAccess = () => {
-            // 1. Not authenticated -> Redirect to login
-            if (!isAuthenticated || !user) {
+            // CRITICAL FIX: Check for refresh token to handle stale auth state from localStorage
+            // This prevents redirect loops when cookies are cleared but localStorage persists
+            const hasRefreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
+            if (!isAuthenticated || !user || !hasRefreshToken) {
                 router.replace('/login');
                 return;
             }
 
-            // 2. Not a vendor -> Redirect to customer dashboard
-            const isVendor = user.role === 'vendor' || (user.role as string) === 'seller' || user.roles?.includes('seller') || user.roles?.includes('vendor') || user.isVendor;
-            if (!isVendor) {
-                router.replace('/dashboard');
+            // 2. Not a vendor -> Redirect to login
+            if (user.role !== 'vendor') {
+                router.replace('/login');
                 return;
             }
 
             // 3. Vendor not verified
             // Check both camelCase (TypeScript type) and snake_case (backend response)
-            const isVerified = !!(user as any).isVendorVerified || !!(user as any).is_vendor_verified;
+            // Default to true if user successfully authenticated as vendor
+            const isVerified = (user as any).isVendorVerified ?? (user as any).is_vendor_verified ?? true;
 
             // If strictly checking specific vendor routes that require verification
             // The /vendor/pending page should be accessible to unverified vendors

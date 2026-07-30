@@ -674,7 +674,9 @@ export const useAuthStore = create<AuthState>()(
         const user = get().user;
         if (user && user.role !== mode && mode !== 'customer') {
           const expected = mode === 'admin' ? 'admin' : 'vendor';
-          if (user.role !== expected && !(mode === 'admin' && user.role === 'worker')) {
+          const isMatch = user.role === expected ||
+                          (mode === 'admin' && user.role === 'worker');
+          if (!isMatch) {
             get().clearAuth();
             throw new Error(`Access denied. ${expected} account required.`);
           }
@@ -840,6 +842,7 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== 'undefined') {
           try {
             const stored = localStorage.getItem('auth-storage');
+            const refreshToken = localStorage.getItem('refresh_token');
             console.log('📦 [AuthStore] Raw localStorage data:', stored ? `${stored.substring(0, 100)}...` : 'null');
             if (stored) {
               const parsed = JSON.parse(stored);
@@ -848,6 +851,7 @@ export const useAuthStore = create<AuthState>()(
                 hasUser: !!parsed.state?.user,
                 userEmail: parsed.state?.user?.email,
                 isAuthenticated: parsed.state?.isAuthenticated,
+                hasRefreshToken: !!refreshToken,
               });
             }
           } catch (e) {
@@ -862,6 +866,17 @@ export const useAuthStore = create<AuthState>()(
           userEmail: state?.user?.email,
           isDemo: state?.isDemo,
         });
+
+        // CRITICAL FIX: Check if refresh token exists before considering user authenticated
+        // If isAuthenticated is true but no refresh token exists, clear auth to prevent redirect loops
+        if (typeof window !== 'undefined' && state?.isAuthenticated && !state.isDemo) {
+          const refreshToken = localStorage.getItem('refresh_token');
+          if (!refreshToken) {
+            console.warn('⚠️ [AuthStore] No refresh token found, clearing isAuthenticated to prevent redirect loop');
+            state.isAuthenticated = false;
+            state.user = null;
+          }
+        }
 
         // After hydration, set hydrated immediately to allow UI to render
         state?.setHydrated();

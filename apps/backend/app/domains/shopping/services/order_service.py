@@ -7,6 +7,7 @@ from sqlalchemy.orm import selectinload
 from app.core.logging import logger
 from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
 from app.domains.shopping.models.order import Order, OrderItem, OrderStatus, OrderTimelineEvent
+from app.domains.shopping.models.sub_order import SubOrder, SubOrderStatus
 from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.services.cart_calculation_service import CartCalculationService
 from app.domains.auth.models.user import User
@@ -96,11 +97,24 @@ class CheckoutService:
             if drivers:
                 assigned_driver_id = drivers[0].id
 
-        # Update shipping address with calculated logistics metadata
+        # Update shipping address with calculated logistics metadata & fees breakdown
         updated_shipping_address = dict(shipping_address) if shipping_address else {}
         updated_shipping_address["logistics_type"] = totals.get("logistics_type", "courier")
         updated_shipping_address["calculated_distance_km"] = totals.get("calculated_distance_km", 0.0)
         updated_shipping_address["route_coordinates"] = totals.get("route_coordinates", [])
+        updated_shipping_address["shipping_amount"] = totals.get("shipping_amount", 0.0)
+        updated_shipping_address["packaging_fee"] = totals.get("packaging_fee", 100.0)
+        updated_shipping_address["services_fee"] = totals.get("services_fee", 50.0)
+        updated_shipping_address["discount_amount"] = totals.get("discount_amount", 0.0)
+        updated_shipping_address["subtotal"] = totals.get("subtotal", 0.0)
+        
+        # Payment method metadata
+        pm = updated_shipping_address.get("payment_method", "cod")
+        updated_shipping_address["payment_method"] = pm
+        updated_shipping_address["payment_method_title"] = (
+            "M-Pesa Express" if pm == "mpesa" else "Cash on Delivery"
+        )
+
         if assigned_driver_id:
             updated_shipping_address["assigned_driver_id"] = str(assigned_driver_id)
 
@@ -119,27 +133,56 @@ class CheckoutService:
         )
         self.db.add(order)
 
-        # 4. Create OrderItem records (snapshots of current price) and deduct stock
+        # 4. Group cart items by vendor for SubOrder creation
+        vendor_items_map = {}
         for item in cart.items:
             if not item.product or not item.product.vendor_id:
                 raise ValueError(f"Product or vendor information missing for item {item.product_id}")
 
-            # Deduct stock
-            item.product.stock_quantity -= item.quantity
-            if item.product.stock_quantity <= 0:
-                item.product.stock_quantity = 0
-                item.product.stock_status = "outofstock"
+            vendor_id = item.product.vendor_id
+            if vendor_id not in vendor_items_map:
+                vendor_items_map[vendor_id] = []
+            vendor_items_map[vendor_id].append(item)
 
-            order_item = OrderItem(
-                id=uuid.uuid4(),
-                order_id=order.id,
-                product_id=item.product_id,
-                vendor_id=item.product.vendor_id,
-                quantity=item.quantity,
-                unit_price=round(item.product.price), # Snapshot price
-                subtotal=round(item.product.price * item.quantity)
+        # 5. Create SubOrders and OrderItem records
+        sub_order_map = {}  # Maps vendor_id to SubOrder
+        for vendor_id, items in vendor_items_map.items():
+            # Calculate vendor subtotal
+            vendor_subtotal = sum(
+                round(item.product.price) * item.quantity
+                for item in items
             )
-            self.db.add(order_item)
+
+            # Create SubOrder
+            sub_order = SubOrder(
+                id=uuid.uuid4(),
+                parent_order_id=order.id,
+                vendor_id=vendor_id,
+                subtotal_amount=vendor_subtotal,
+                status=SubOrderStatus.PENDING
+            )
+            self.db.add(sub_order)
+            sub_order_map[vendor_id] = sub_order
+
+            # Create OrderItems for this vendor (deduct stock, snapshot price)
+            for item in items:
+                # Deduct stock
+                item.product.stock_quantity -= item.quantity
+                if item.product.stock_quantity <= 0:
+                    item.product.stock_quantity = 0
+                    item.product.stock_status = "outofstock"
+
+                order_item = OrderItem(
+                    id=uuid.uuid4(),
+                    order_id=order.id,
+                    sub_order_id=sub_order.id,
+                    product_id=item.product_id,
+                    vendor_id=item.product.vendor_id,
+                    quantity=item.quantity,
+                    unit_price=round(item.product.price),  # Snapshot price
+                    subtotal=round(item.product.price * item.quantity)
+                )
+                self.db.add(order_item)
 
         # 5. Deactivate cart
         cart.is_active = False
@@ -173,6 +216,31 @@ class CheckoutService:
         # Commit happens ONCE at the end now
         await self.db.commit()
         
+        # Send vendor email notifications
+        try:
+            from app.domains.vendor.models.vendor_profile import VendorProfile
+            from app.domains.shopping.services.email_notification_service import EmailNotificationService
+
+            email_service = EmailNotificationService()
+
+            for vendor_id, sub_order in sub_order_map.items():
+                stmt = select(VendorProfile, User.email).join(User, VendorProfile.user_id == User.id).where(VendorProfile.id == vendor_id)
+                res = await self.db.execute(stmt)
+                row = res.first()
+                if row:
+                    vendor_profile, user_email = row[0], row[1]
+                    vendor_email = vendor_profile.business_email or user_email
+                    if vendor_email:
+                        vendor_total = float(sub_order.subtotal_amount)
+                        await email_service.send_vendor_new_order(
+                            vendor_email=vendor_email,
+                            vendor_name=vendor_profile.store_name,
+                            order_number=str(order.order_number or order.id),
+                            order_total=vendor_total
+                        )
+        except Exception as err:
+            logger.error(f"Failed to send vendor order notification email: {err}")
+
         # Reload with items (and their products) and user for response
         stmt = select(Order).where(Order.id == order.id).options(
             selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),

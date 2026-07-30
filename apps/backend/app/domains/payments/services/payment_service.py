@@ -591,9 +591,55 @@ class PaymentService:
             if transaction.order_id:
                 try:
                     from app.domains.shopping.services.order_service import OrderService
+                    from app.domains.shared.events.publisher import publish_order_paid
+                    from app.domains.shared.events.events import OrderPaidEvent, SubOrderEvent, OrderItemEvent
+                    from app.domains.shopping.models import Order, SubOrder
+                    from sqlalchemy.orm import selectinload
+
                     order_service = OrderService(self.db)
                     await order_service.update_order_status(transaction.order_id, "paid")
                     logger.info(f"Order {transaction.order_id} updated to 'paid' via callback using OrderService")
+
+                    # Fetch order with sub_orders and items for event publishing
+                    order_stmt = select(Order).where(Order.id == transaction.order_id).options(
+                        selectinload(Order.sub_orders).selectinload(SubOrder.items)
+                    )
+                    order_result = await self.db.execute(order_stmt)
+                    order = order_result.scalar_one_or_none()
+
+                    # Publish OrderPaidEvent to RabbitMQ
+                    if order and order.sub_orders:
+                        try:
+                            event = OrderPaidEvent(
+                                order_id=order.id,
+                                customer_id=order.user_id,
+                                total_amount=float(order.total_amount),
+                                mpesa_receipt=transaction.mpesa_receipt,
+                                sub_orders=[
+                                    SubOrderEvent(
+                                        sub_order_id=so.id,
+                                        vendor_id=so.vendor_id,
+                                        subtotal_amount=float(so.subtotal_amount),
+                                        items=[
+                                            OrderItemEvent(
+                                                product_id=oi.product_id,
+                                                vendor_id=oi.vendor_id,
+                                                quantity=int(oi.quantity),
+                                                unit_price=float(oi.unit_price)
+                                            )
+                                            for oi in so.items
+                                        ]
+                                    )
+                                    for so in order.sub_orders
+                                ],
+                                created_at=datetime.utcnow()
+                            )
+                            await publish_order_paid(event)
+                            logger.info(f"Published OrderPaid event for order {transaction.order_id}")
+                        except Exception as event_error:
+                            logger.error(f"Failed to publish OrderPaid event: {event_error}")
+                            # Event will be retried via outbox pattern
+
                 except Exception as e:
                     logger.error(f"Failed to update order status to paid via OrderService: {e}")
                     order_stmt = update(Order).where(Order.id == transaction.order_id).values(status="paid")

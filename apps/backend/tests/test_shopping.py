@@ -147,7 +147,7 @@ async def test_complete_shopping_experience(
     order_data = checkout_resp.json()["data"]
     order_id = order_data["id"]
     assert order_data["status"] == "pending"
-    assert order_data["total_amount"] == 2350.0
+    assert order_data["total_amount"] == 2500.0
     assert len(order_data["items"]) == 1
     assert order_data["items"][0]["product_id"] == str(published_product.id)
     

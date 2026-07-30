@@ -55,7 +55,8 @@ function AuthFlow({
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  
+  const [loginJustCompleted, setLoginJustCompleted] = useState(false);
+
   // Register fields
   const [regFirstName, setRegFirstName] = useState('');
   const [regLastName, setRegLastName] = useState('');
@@ -88,12 +89,18 @@ function AuthFlow({
     }
   }, [searchParams]);
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated (but not if we just completed login or have an error)
   useEffect(() => {
-    if (isAuthenticated && mode !== 'otp' && mode !== 'forgot-password') {
-      router.replace(redirectPath);
+    // CRITICAL FIX: Check for refresh token to prevent redirect loop with stale auth state
+    const hasRefreshToken = typeof window !== 'undefined' && localStorage.getItem('refresh_token');
+    if (isAuthenticated && mode === 'login' && !loginJustCompleted && !error && !isLoading && hasRefreshToken) {
+      if (typeof window !== 'undefined') {
+        window.location.href = redirectPath;
+      } else {
+        router.push(redirectPath);
+      }
     }
-  }, [isAuthenticated, redirectPath, router, mode]);
+  }, [isAuthenticated, redirectPath, router, mode, loginJustCompleted, error, isLoading]);
 
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,11 +109,20 @@ function AuthFlow({
 
     try {
       await login({ email, password });
-      router.replace(redirectPath);
+      // Set flag to prevent useEffect from racing with our redirect
+      setLoginJustCompleted(true);
+      // Small delay to ensure state updates are processed
+      await new Promise(resolve => setTimeout(resolve, 100));
+      if (typeof window !== 'undefined') {
+        window.location.href = redirectPath;
+      } else {
+        router.push(redirectPath);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
       setError(message);
       toast.error(message);
+      setLoginJustCompleted(false);
     } finally {
       setIsLoading(false);
     }

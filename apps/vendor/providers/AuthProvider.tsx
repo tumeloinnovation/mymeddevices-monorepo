@@ -91,18 +91,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
-    if (store.user) {
-      const isVendor = store.user.role === 'vendor' || 
-                       (store.user.role as string) === 'seller' || 
-                       store.user.roles?.includes('seller') || 
-                       store.user.roles?.includes('vendor') || 
-                       !!store.user.isVendor;
-      if (!isVendor) {
-        store.clearAuth();
-        router.push('/login');
-      }
+    if (!store.hydrated || !store.user) return;
+
+    // Don't validate role if we're on auth pages - let the user login/register first
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    const isAuthPage = pathname === '/login' || pathname === '/register' || pathname.startsWith('/forgot-password') || pathname.startsWith('/reset-password');
+    if (isAuthPage) return;
+
+    // Only vendors can access this app
+    if (store.user.role !== 'vendor') {
+      store.clearAuth();
+      router.push('/login');
     }
-  }, [store.user, router]);
+  }, [store.user, store.hydrated, router]);
 
   const value: AuthContextType = {
     user: store.user,

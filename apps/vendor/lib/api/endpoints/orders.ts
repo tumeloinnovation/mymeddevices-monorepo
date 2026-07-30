@@ -18,8 +18,10 @@ export const ordersApi = {
   },
 
   updateOrderStatus: async (orderId: string, itemId: string, status: OrderStatus) => {
-    const response = await apiClient.patch(`/vendor/orders/${orderId}/items/${itemId}/status`, { status }) as any;
-    return response.success;
+    // apiClient already unwraps { success: true, data: ... } and returns just data
+    // The API throws an error on failure, so if we reach here, it succeeded
+    await apiClient.patch(`/vendor/orders/${orderId}/items/${itemId}/status`, { status });
+    return true;
   },
 
   addTrackingInfo: async (orderId: string, itemId: string, tracking: TrackingInfo) => {

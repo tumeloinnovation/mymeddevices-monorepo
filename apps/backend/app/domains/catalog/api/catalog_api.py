@@ -205,7 +205,7 @@ async def quick_create_brand(
 ):
     """
     Quick-create a brand with minimal details (name only).
-    Creates brand as 'pending' and inactive until approved by admin.
+    Creates brand as auto-approved and active for immediate use.
     Accessible to all authenticated users (vendors, admins).
     """
     service = CatalogService(db)

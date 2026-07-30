@@ -25,7 +25,6 @@ import {
   AlertCircle,
   Zap,
   ArrowRight,
-  ShieldCheck,
 } from "lucide-react";
 import { catalogService, CategoryTree, Brand, useAuthStore, VendorListItem } from "@mymeddevices/shared-core";
 import { motion, AnimatePresence } from "framer-motion";
@@ -61,7 +60,6 @@ const STEPS = [
   { id: "inventory", label: "Inventory & Physical", icon: Package, description: "Stock, SKU, weight" },
   { id: "gallery", label: "Product Gallery", icon: ImageIcon, description: "Manage images" },
   { id: "ai", label: "AI Assist", icon: Sparkles, description: "MedAI content & tags" },
-  { id: "compliance", label: "Compliance & Certs", icon: ShieldCheck, description: "Regulatory details" },
   { id: "review", label: "Review", icon: Eye, description: "Confirm & publish" },
 ];
 
@@ -107,10 +105,6 @@ export default function NewProductPage() {
     track_inventory: true,
     weight_kg: "",
     specifications: "{}",
-    certifications: "",
-    ppb_classification: "",
-    ce_marking_or_fda_clearance: "",
-    warranty_info: "",
     meta_title: "",
     meta_description: "",
     tags: [] as string[],
@@ -209,10 +203,6 @@ export default function NewProductPage() {
         track_inventory: formData.track_inventory,
         weight_kg: formData.weight_kg ? parseFloat(formData.weight_kg) : undefined,
         specifications: specificationsObj,
-        certifications: formData.certifications ? formData.certifications.split(", ").filter(Boolean) : undefined,
-        ppb_classification: formData.ppb_classification || undefined,
-        ce_marking_or_fda_clearance: formData.ce_marking_or_fda_clearance || undefined,
-        warranty_info: formData.warranty_info || undefined,
         meta_title: formData.meta_title || undefined,
         meta_description: formData.meta_description || undefined,
         tags: formData.tags.length > 0 ? formData.tags : undefined,
@@ -414,10 +404,6 @@ export default function NewProductPage() {
           "Dimensions": "95mm x 55mm x 20mm",
           "Regulatory": "FDA 510(k) Cleared, CE Marked, ISO 13485"
         }, null, 2),
-        certifications: "ISO 15197:2013, CE 0123, FDA Class II, ISO 13485",
-        ppb_classification: "Class C",
-        ce_marking_or_fda_clearance: "FDA 510(k) Cleared - K212345",
-        warranty_info: "2-year manufacturer warranty on device, 90-day warranty on accessories",
         meta_title: "ProGlucose Blood Glucose Monitor | MedTech Pro - MyMedDevices",
         meta_description: "Professional FDA-cleared blood glucose monitoring system with Bluetooth connectivity. 5-second results, EHR integration, ideal for healthcare facilities.",
         tags: ["blood glucose", "diabetes", "diagnostics", "bluetooth", "fda cleared", "hospital equipment", "point-of-care testing", "monitoring system"]
@@ -454,10 +440,6 @@ export default function NewProductPage() {
           "Packaging": "Individually sealed peel packs",
           "Quantity": "Box of 10"
         }, null, 2),
-        certifications: "CE 2460, ISO 13485, FDA Registered",
-        ppb_classification: "Class A",
-        ce_marking_or_fda_clearance: "CE Certified",
-        warranty_info: "Shelf life of 5 years from sterilization date",
         meta_title: "MediCut Disposable Surgical Scalpel #11 - MyMedDevices",
         meta_description: "Sterile disposable carbon steel surgical scalpel size #11. Ergonomic handle, individually wrapped. Box of 10.",
         tags: ["scalpel", "surgical", "disposable", "sterile", "carbon steel"]
@@ -487,10 +469,6 @@ export default function NewProductPage() {
         track_inventory: true,
         weight_kg: "2.10",
         specifications: "{invalid json here}",
-        certifications: "ISO 13485, CE 0123",
-        ppb_classification: "Class B",
-        ce_marking_or_fda_clearance: "FDA 510(k) Cleared",
-        warranty_info: "1-year warranty",
         meta_title: "Infusion Pump Deluxe - MyMedDevices",
         meta_description: "High-precision syringe infusion pump for clinical environments.",
         tags: ["infusion pump", "patient care", "syringe pump"]
@@ -520,10 +498,6 @@ export default function NewProductPage() {
         track_inventory: true,
         weight_kg: "0.05",
         specifications: "{}",
-        certifications: "",
-        ppb_classification: "",
-        ce_marking_or_fda_clearance: "",
-        warranty_info: "",
         meta_title: "",
         meta_description: "",
         tags: []
@@ -590,10 +564,6 @@ export default function NewProductPage() {
         track_inventory: formData.track_inventory,
         weight_kg: formData.weight_kg ? parseFloat(formData.weight_kg) : undefined,
         specifications,
-        certifications: formData.certifications ? formData.certifications.split(", ").filter(Boolean) : undefined,
-        ppb_classification: formData.ppb_classification || undefined,
-        ce_marking_or_fda_clearance: formData.ce_marking_or_fda_clearance || undefined,
-        warranty_info: formData.warranty_info || undefined,
         meta_title: formData.meta_title || undefined,
         meta_description: formData.meta_description || undefined,
         tags: formData.tags.length > 0 ? formData.tags : undefined,
@@ -1419,78 +1389,6 @@ export default function NewProductPage() {
               {currentStep === 5 && (
                 <div className="space-y-8">
                   <div>
-                    <h2 className="text-2xl font-bold tracking-tight">Compliance & Certifications</h2>
-                    <p className="text-muted-foreground mt-1">Regulatory details and hospital compliance data.</p>
-                  </div>
-
-                  {/* Regulatory & Compliance Card */}
-                  <Card className="border-border/50 shadow-xl shadow-foreground/5">
-                    <CardHeader>
-                      <CardTitle>Compliance & Certifications</CardTitle>
-                      <CardDescription>
-                        Specify medical classification and manufacturer certifications.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-6">
-                      <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-2 col-span-2 md:col-span-1">
-                          <Label htmlFor="ppb_classification" className="text-xs font-semibold uppercase tracking-wider">
-                            PPB Classification
-                          </Label>
-                          <Input
-                            id="ppb_classification"
-                            value={formData.ppb_classification}
-                            onChange={(e) => setFormData({ ...formData, ppb_classification: e.target.value })}
-                            placeholder="e.g. Class A, Class B"
-                            className="h-11"
-                          />
-                        </div>
-                        <div className="space-y-2 col-span-2 md:col-span-1">
-                          <Label htmlFor="ce_marking_or_fda_clearance" className="text-xs font-semibold uppercase tracking-wider">
-                            CE Marking / FDA Clearance
-                          </Label>
-                          <Input
-                            id="ce_marking_or_fda_clearance"
-                            value={formData.ce_marking_or_fda_clearance}
-                            onChange={(e) => setFormData({ ...formData, ce_marking_or_fda_clearance: e.target.value })}
-                            placeholder="e.g. CE certified, FDA 510(k) cleared"
-                            className="h-11"
-                          />
-                        </div>
-                        <div className="space-y-2 col-span-2">
-                          <Label htmlFor="certifications" className="text-xs font-semibold uppercase tracking-wider">
-                            Certifications
-                          </Label>
-                          <Input
-                            id="certifications"
-                            value={formData.certifications}
-                            onChange={(e) => setFormData({ ...formData, certifications: e.target.value })}
-                            placeholder="e.g. ISO 13485, CE 0123, FDA Class II (comma-separated)"
-                            className="h-11"
-                          />
-                        </div>
-                        <div className="space-y-2 col-span-2">
-                          <Label htmlFor="warranty_info" className="text-xs font-semibold uppercase tracking-wider">
-                            Warranty & Support Info
-                          </Label>
-                          <Textarea
-                            id="warranty_info"
-                            value={formData.warranty_info}
-                            onChange={(e) => setFormData({ ...formData, warranty_info: e.target.value })}
-                            rows={3}
-                            placeholder="Warranty terms and conditions..."
-                            className="resize-none"
-                          />
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              )}
-
-              {currentStep === 6 && (
-                <div className="space-y-8">
-                  <div>
                     <h2 className="text-2xl font-bold tracking-tight">Review & Publish</h2>
                     <p className="text-muted-foreground mt-1">Review your product before publishing.</p>
                   </div>
@@ -1661,57 +1559,6 @@ export default function NewProductPage() {
                             return <p className="text-sm text-destructive italic">Invalid JSON format</p>;
                           }
                         })()}
-                      </CardContent>
-                    </Card>
-
-                    {/* Compliance & Certification Card (full width) */}
-                    <Card className="border-border/50 shadow-xl shadow-foreground/5 col-span-2">
-                      <CardHeader>
-                        <CardTitle className="text-sm">Compliance & Certification</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                              PPB Classification
-                            </Label>
-                            <Badge variant="outline" className="font-medium">
-                              {formData.ppb_classification || <span className="italic">Not set</span>}
-                            </Badge>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                              CE/FDA Clearance
-                            </Label>
-                            <p className="text-sm font-medium">
-                              {formData.ce_marking_or_fda_clearance || <span className="italic">Not set</span>}
-                            </p>
-                          </div>
-                          <div className="space-y-1 md:col-span-2">
-                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                              Certifications
-                            </Label>
-                            <div className="flex flex-wrap gap-1.5">
-                              {formData.certifications ? (
-                                formData.certifications.split(", ").filter(Boolean).map((cert) => (
-                                  <Badge key={cert} className="bg-indigo-50 text-indigo-700 border-indigo-100 dark:bg-indigo-900/30 dark:text-indigo-300">
-                                    {cert}
-                                  </Badge>
-                                ))
-                              ) : (
-                                <span className="text-sm text-muted-foreground italic">None</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="space-y-1 col-span-2">
-                            <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                              Warranty Information
-                            </Label>
-                            <p className="text-sm text-muted-foreground">
-                              {formData.warranty_info || <span className="italic">Not set</span>}
-                            </p>
-                          </div>
-                        </div>
                       </CardContent>
                     </Card>
 

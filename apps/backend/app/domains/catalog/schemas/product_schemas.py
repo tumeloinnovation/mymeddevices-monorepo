@@ -72,11 +72,6 @@ class ProductCreate(BaseModel):
     brand: Optional[str] = Field(None, max_length=255)
     model_number: Optional[str] = Field(None, max_length=255)
     specifications: Optional[dict] = None
-    certifications: Optional[list] = None
-    kmpdb_registration_number: Optional[str] = Field(None, max_length=255)
-    ppb_classification: Optional[str] = Field(None, max_length=100)
-    ce_marking_or_fda_clearance: Optional[str] = Field(None, max_length=255)
-    warranty_info: Optional[str] = None
 
     # SEO
     permalink: Optional[str] = Field(None, max_length=500)
@@ -116,11 +111,6 @@ class ProductUpdate(BaseModel):
     brand: Optional[str] = Field(None, max_length=255)
     model_number: Optional[str] = Field(None, max_length=255)
     specifications: Optional[dict] = None
-    certifications: Optional[list] = None
-    kmpdb_registration_number: Optional[str] = Field(None, max_length=255)
-    ppb_classification: Optional[str] = Field(None, max_length=100)
-    ce_marking_or_fda_clearance: Optional[str] = Field(None, max_length=255)
-    warranty_info: Optional[str] = None
 
     # SEO
     meta_title: Optional[str] = Field(None, max_length=255)
@@ -180,11 +170,6 @@ class ProductResponse(BaseModel):
     brand: Optional[str] = None
     model_number: Optional[str] = None
     specifications: Optional[dict] = None
-    certifications: Optional[list] = None
-    kmpdb_registration_number: Optional[str] = None
-    ppb_classification: Optional[str] = None
-    ce_marking_or_fda_clearance: Optional[str] = None
-    warranty_info: Optional[str] = None
 
     # SEO
     permalink: Optional[str] = None
@@ -227,6 +212,7 @@ class StorefrontProductResponse(BaseModel):
     # Basic info
     name: str
     slug: str
+    sku: Optional[str] = None
     description: Optional[str] = None
     short_description: Optional[str] = None
 
@@ -252,11 +238,6 @@ class StorefrontProductResponse(BaseModel):
     brand: Optional[str] = None
     model_number: Optional[str] = None
     specifications: Optional[dict] = None
-    certifications: Optional[list] = None
-    kmpdb_registration_number: Optional[str] = None
-    ppb_classification: Optional[str] = None
-    ce_marking_or_fda_clearance: Optional[str] = None
-    warranty_info: Optional[str] = None
 
     # SEO
     meta_title: Optional[str] = None

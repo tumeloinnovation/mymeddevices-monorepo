@@ -143,7 +143,7 @@ export async function proxy(request: NextRequest) {
             return response;
         }
 
-        const isVendor = user.roles?.includes('seller') || user.roles?.includes('vendor') || user.isVendor === true;
+        const isVendor = user.role === 'vendor' || user.roles?.includes('vendor') || user.isVendor === true;
 
         // A. Already Logged In -> accessing Login/Register
         if (isAuthRoute) {

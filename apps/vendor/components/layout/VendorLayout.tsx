@@ -32,24 +32,9 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
     {
       label: 'Store Management',
       items: [
-        {
-          label: 'Catalog',
-          href: '/vendor/products',
-          icon: Package,
-          isCollapsible: true,
-          children: [
-            { label: 'Products', href: '/vendor/products', icon: Package },
-          ],
-        },
-        {
-          label: 'Sales',
-          href: '/vendor/orders',
-          icon: ShoppingCart,
-          isCollapsible: true,
-          children: [
-            { label: 'Orders', href: '/vendor/orders', icon: ShoppingCart },
-          ],
-        },
+        { label: 'Customer Orders', href: '/vendor/orders', icon: ShoppingCart },
+        { label: 'Products Catalog', href: '/vendor/products', icon: Package },
+        { label: 'Inventory', href: '/vendor/inventory', icon: Warehouse },
       ],
     },
     {

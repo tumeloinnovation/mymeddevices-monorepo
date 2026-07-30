@@ -88,6 +88,9 @@ class Settings(BaseSettings):
     # Redis (Rate Limiting)
     REDIS_URL: Optional[str] = "redis://localhost:6379/0"
 
+    # RabbitMQ (Event-Driven Architecture)
+    RABBITMQ_URL: Optional[str] = "amqp://guest:guest@localhost:5672/"
+
     # Request size limits (Default: 10MB)
     MAX_CONTENT_LENGTH: int = 10 * 1024 * 1024
 

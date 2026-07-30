@@ -26,13 +26,11 @@ import {
   XCircle,
   Package,
   ArrowRight,
-  ShieldCheck,
   Percent,
   DollarSign,
   Ruler,
   Scale,
   ListChecks,
-  ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Product, ProductStatus } from "@mymeddevices/shared-core";
@@ -169,11 +167,6 @@ const productSchema = z.object({
   dimensions_height: z.string().default(""),
   dimensions_unit: z.string().default("cm"),
   specifications: z.string().default(""),
-  certifications: z.string().default(""),
-  kmpdb_registration_number: z.string().default(""),
-  ppb_classification: z.string().default(""),
-  ce_marking_or_fda_clearance: z.string().default(""),
-  warranty_info: z.string().default(""),
   meta_title: z.string().default(""),
   meta_description: z.string().default(""),
   tags: z.string().default(""),
@@ -203,11 +196,6 @@ function productToFormValues(p: Product): ProductFormValues {
     dimensions_height: p.dimensions?.height?.toString() || "",
     dimensions_unit: p.dimensions?.unit || "cm",
     specifications: JSON.stringify(p.specifications || {}, null, 2),
-    certifications: (p.certifications || []).join(", "),
-    kmpdb_registration_number: p.kmpdb_registration_number || "",
-    ppb_classification: p.ppb_classification || "",
-    ce_marking_or_fda_clearance: p.ce_marking_or_fda_clearance || "",
-    warranty_info: p.warranty_info || "",
     meta_title: p.meta_title || "",
     meta_description: p.meta_description || "",
     tags: (p.tags || []).join(", "),
@@ -254,13 +242,6 @@ function formValuesToPayload(values: ProductFormValues): Partial<Product> {
       unit: values.dimensions_unit || "cm"
     } : undefined,
     specifications: specs,
-    certifications: values.certifications
-      ? values.certifications.split(",").map((s) => s.trim()).filter(Boolean)
-      : undefined,
-    kmpdb_registration_number: values.kmpdb_registration_number || undefined,
-    ppb_classification: (values.ppb_classification as any) || undefined,
-    ce_marking_or_fda_clearance: values.ce_marking_or_fda_clearance || undefined,
-    warranty_info: values.warranty_info || undefined,
     meta_title: values.meta_title || undefined,
     meta_description: values.meta_description || undefined,
     tags: values.tags
@@ -284,7 +265,6 @@ export default function ProductDetailPage() {
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [activeGalleryImageIndex, setActiveGalleryImageIndex] = useState(0);
-  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
   const [showSidebar, setShowSidebar] = useState(true);
 
   const { data: product, isLoading, error } = useProduct(productId);
@@ -1055,176 +1035,6 @@ export default function ProductDetailPage() {
                     </CardContent>
                   </Card>
 
-                  {/* Right Compliance details */}
-                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-1 lg:col-span-5">
-                    <CardHeader className="bg-violet-500/5 border-b p-4 md:p-5">
-                      <CardTitle className="text-sm font-bold flex items-center gap-2 text-violet-600">
-                        <ShieldCheck className="h-4 w-4" />
-                        Compliance &amp; Clearance
-                      </CardTitle>
-                      <CardDescription className="text-xs text-muted-foreground">
-                        Regulatory details and physical device metrics.
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="p-4 md:p-6 space-y-4 md:space-y-6">
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <Field
-                          label="PPB Classification"
-                          editing={isEditing}
-                          view={
-                            <Badge variant="secondary" className="rounded-lg text-xs font-semibold bg-muted">
-                              {product.ppb_classification || "Unclassified"}
-                            </Badge>
-                          }
-                        >
-                          <Select
-                            value={form.watch("ppb_classification") || ""}
-                            onValueChange={(v) => form.setValue("ppb_classification", v)}
-                          >
-                            <SelectTrigger className="h-10 text-xs focus-visible:ring-primary">
-                              <SelectValue placeholder="Select Class" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Class A" className="text-xs">Class A (Low Risk)</SelectItem>
-                              <SelectItem value="Class B" className="text-xs">Class B (Low-Med Risk)</SelectItem>
-                              <SelectItem value="Class C" className="text-xs">Class C (Med-High Risk)</SelectItem>
-                              <SelectItem value="Class D" className="text-xs">Class D (High Risk)</SelectItem>
-                              <SelectItem value="Unclassified" className="text-xs">Unclassified</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </Field>
-
-                        <Field
-                          label="CE/FDA Clearance Ref"
-                          editing={isEditing}
-                          view={<TextView>{product.ce_marking_or_fda_clearance}</TextView>}
-                        >
-                          <Input
-                            {...form.register("ce_marking_or_fda_clearance")}
-                            className="h-10 text-sm focus-visible:ring-primary"
-                          />
-                        </Field>
-                      </div>
-
-                      <Separator />
-
-                      <div className="grid grid-cols-2 gap-4">
-                        <Field
-                          label="KMPDB Registration ID"
-                          editing={isEditing}
-                          view={<TextView>{product.kmpdb_registration_number}</TextView>}
-                        >
-                          <Input
-                            {...form.register("kmpdb_registration_number")}
-                            className="h-10 text-sm focus-visible:ring-primary"
-                          />
-                        </Field>
-                      </div>
-
-                      <Separator />
-
-                      {/* Advanced Settings Toggle */}
-                      <div className="flex items-center justify-between py-2">
-                        <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">
-                          Advanced Settings
-                        </Label>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
-                          className="h-8 px-3 text-xs"
-                        >
-                          <ChevronDown
-                            className={cn(
-                              "h-4 w-4 transition-transform duration-200",
-                              showAdvancedSettings && "rotate-180"
-                            )}
-                          />
-                          {showAdvancedSettings ? "Hide" : "Show"}
-                        </Button>
-                      </div>
-
-                      {showAdvancedSettings && (
-                        <>
-                          <Separator />
-
-                          <div className="grid grid-cols-2 gap-4">
-                            <Field
-                              label="Device Weight (kg)"
-                              editing={isEditing}
-                              view={<TextView>{product.weight_kg ? `${product.weight_kg} kg` : "—"}</TextView>}
-                            >
-                              <Input
-                                type="number"
-                                step="0.01"
-                                {...form.register("weight_kg")}
-                                className="h-10 text-sm focus-visible:ring-primary"
-                              />
-                            </Field>
-                          </div>
-
-                          <Separator />
-
-                          {/* Physical Dimensions */}
-                          <div className="space-y-3">
-                            <Label className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">Dimensions (L × W × H)</Label>
-                            {!isEditing ? (
-                              <DimensionsView dimensions={product.dimensions} />
-                            ) : (
-                              <div className="flex gap-2 items-center">
-                                <Input
-                                  placeholder="L"
-                                  {...form.register("dimensions_length")}
-                                  className="h-9 text-xs focus-visible:ring-primary flex-1"
-                                />
-                                <span className="text-xs text-muted-foreground">×</span>
-                                <Input
-                                  placeholder="W"
-                                  {...form.register("dimensions_width")}
-                                  className="h-9 text-xs focus-visible:ring-primary flex-1"
-                                />
-                                <span className="text-xs text-muted-foreground">×</span>
-                                <Input
-                                  placeholder="H"
-                                  {...form.register("dimensions_height")}
-                                  className="h-9 text-xs focus-visible:ring-primary flex-1"
-                                />
-                                <Select
-                                  value={form.watch("dimensions_unit") || "cm"}
-                                  onValueChange={(v) => form.setValue("dimensions_unit", v)}
-                                >
-                                  <SelectTrigger className="h-9 text-xs focus-visible:ring-primary w-20">
-                                    <SelectValue placeholder="cm" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="cm" className="text-xs">cm</SelectItem>
-                                    <SelectItem value="mm" className="text-xs">mm</SelectItem>
-                                    <SelectItem value="m" className="text-xs">m</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            )}
-                          </div>
-
-                          <Separator />
-
-                          <Field
-                            label="Warranty terms"
-                            editing={isEditing}
-                            view={<DescriptionView text={product.warranty_info} placeholder="Warranty specifications not provided." />}
-                          >
-                            <Textarea
-                              {...form.register("warranty_info")}
-                              rows={2}
-                              className="text-sm resize-none focus-visible:ring-primary"
-                            />
-                          </Field>
-                        </>
-                      )}
-                    </CardContent>
-                  </Card>
                 </div>
               </TabsContent>
 

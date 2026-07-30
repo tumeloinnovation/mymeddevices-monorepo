@@ -174,70 +174,43 @@ export default function OrderDetailPage() {
                     </Card>
 
                     {/* Addresses */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        {/* Billing Address */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                    <FileText className="h-4 w-4" />
-                                    Billing Address
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="text-sm space-y-1">
-                                <p className="font-medium text-foreground">
-                                    {(order.billing_address as any).first_name} {(order.billing_address as any).last_name}
-                                </p>
-                                {(order.billing_address as any).company && (
-                                    <p className="text-muted-foreground">{(order.billing_address as any).company}</p>
-                                )}
-                                <p className="text-muted-foreground">
-                                    {(order.billing_address as any).address_line1 || (order.billing_address as any).address_1}
-                                </p>
-                                {((order.billing_address as any).address_line2 || (order.billing_address as any).address_2) && (
-                                    <p className="text-muted-foreground">
-                                        {(order.billing_address as any).address_line2 || (order.billing_address as any).address_2}
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-base">
+                                <MapPin className="h-4 w-4" />
+                                Delivery Address
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="text-sm space-y-1">
+                            {order.shipping_address ? (
+                                <>
+                                    <p className="font-medium text-foreground">
+                                        {(order.shipping_address as any).first_name || ''} {(order.shipping_address as any).last_name || ''}
                                     </p>
-                                )}
-                                <p className="text-muted-foreground">
-                                    {(order.billing_address as any).city}, {(order.billing_address as any).state} {(order.billing_address as any).postal_code || (order.billing_address as any).postcode}
-                                </p>
-                                <p className="text-muted-foreground">{(order.billing_address as any).country}</p>
-                                <Separator className="my-2" />
-                                <p className="text-muted-foreground">{(order.billing_address as any).email}</p>
-                                <p className="text-muted-foreground">{(order.billing_address as any).phone}</p>
-                            </CardContent>
-                        </Card>
-
-                        {/* Shipping Address */}
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                    <MapPin className="h-4 w-4" />
-                                    Shipping Address
-                                </CardTitle>
-                            </CardHeader>
-                            <CardContent className="text-sm space-y-1">
-                                <p className="font-medium text-foreground">
-                                    {(order.shipping_address as any).first_name} {(order.shipping_address as any).last_name}
-                                </p>
-                                {(order.shipping_address as any).company && (
-                                    <p className="text-muted-foreground">{(order.shipping_address as any).company}</p>
-                                )}
-                                <p className="text-muted-foreground">
-                                    {(order.shipping_address as any).address_line1 || (order.shipping_address as any).address_1}
-                                </p>
-                                {((order.shipping_address as any).address_line2 || (order.shipping_address as any).address_2) && (
+                                    {(order.shipping_address as any).company && (
+                                        <p className="text-muted-foreground">{(order.shipping_address as any).company}</p>
+                                    )}
                                     <p className="text-muted-foreground">
-                                        {(order.shipping_address as any).address_line2 || (order.shipping_address as any).address_2}
+                                        {(order.shipping_address as any).address_line1 || (order.shipping_address as any).address_1 || (order.shipping_address as any).address}
                                     </p>
-                                )}
-                                <p className="text-muted-foreground">
-                                    {(order.shipping_address as any).city}, {(order.shipping_address as any).state} {(order.shipping_address as any).postal_code || (order.shipping_address as any).postcode}
-                                </p>
-                                <p className="text-muted-foreground">{(order.shipping_address as any).country}</p>
-                            </CardContent>
-                        </Card>
-                    </div>
+                                    {((order.shipping_address as any).address_line2 || (order.shipping_address as any).address_2) && (
+                                        <p className="text-muted-foreground">
+                                            {(order.shipping_address as any).address_line2 || (order.shipping_address as any).address_2}
+                                        </p>
+                                    )}
+                                    <p className="text-muted-foreground">
+                                        {(order.shipping_address as any).city || 'Nairobi'}, {(order.shipping_address as any).state || 'Nairobi'} {(order.shipping_address as any).postal_code || (order.shipping_address as any).postcode || ''}
+                                    </p>
+                                    <p className="text-muted-foreground">{(order.shipping_address as any).country || 'Kenya'}</p>
+                                    {(order.shipping_address as any).phone && (
+                                        <p className="text-muted-foreground mt-2">Phone: {(order.shipping_address as any).phone}</p>
+                                    )}
+                                </>
+                            ) : (
+                                <p className="text-muted-foreground">Standard Delivery</p>
+                            )}
+                        </CardContent>
+                    </Card>
                 </div>
 
                 {/* Order Summary Sidebar */}
@@ -253,46 +226,54 @@ export default function OrderDetailPage() {
                                 <span>
                                     Ksh{' '}
                                     {formatCurrency(
+                                        (order as any).subtotal ||
                                         order.items.reduce(
-                                            (sum, item) => sum + parseFloat(item.total_price),
+                                            (sum, item) => sum + parseFloat(item.total_price || String((item as any).subtotal || 0)),
                                             0
                                         )
                                     )}
                                 </span>
                             </div>
-                            {parseFloat((order as any).discount_total || '0') > 0 && (
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">Discount</span>
-                                    <span className="text-green-600">
-                                        -Ksh {formatCurrency(parseFloat((order as any).discount_total))}
-                                    </span>
-                                </div>
-                            )}
                             <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Shipping</span>
+                                <span className="text-muted-foreground">Shipping Fee</span>
                                 <span>
-                                    {parseFloat((order as any).shipping_total || '0') > 0
-                                        ? `Ksh ${formatCurrency(parseFloat((order as any).shipping_total))}`
-                                        : 'Free'}
+                                    Ksh{' '}
+                                    {formatCurrency(
+                                        Number((order as any).shipping_amount ?? (order as any).shipping_address?.shipping_amount ?? 0)
+                                    )}
                                 </span>
                             </div>
-                            {(order as any).fee_lines?.map((fee: { id: number; name: string; total: string }) => (
-                                <div key={fee.id} className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">{fee.name}</span>
-                                    <span>Ksh {formatCurrency(parseFloat(fee.total))}</span>
-                                </div>
-                            ))}
-                            {parseFloat((order as any).total_tax || '0') > 0 && (
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">Tax</span>
-                                    <span>Ksh {formatCurrency(parseFloat((order as any).total_tax))}</span>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Packaging Fee</span>
+                                <span>
+                                    Ksh{' '}
+                                    {formatCurrency(
+                                        Number((order as any).packaging_fee ?? (order as any).shipping_address?.packaging_fee ?? 100)
+                                    )}
+                                </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">Services Fee</span>
+                                <span>
+                                    Ksh{' '}
+                                    {formatCurrency(
+                                        Number((order as any).services_fee ?? (order as any).shipping_address?.services_fee ?? 50)
+                                    )}
+                                </span>
+                            </div>
+                            {Number((order as any).discount_amount || (order as any).shipping_address?.discount_amount || 0) > 0 && (
+                                <div className="flex justify-between text-sm text-green-600 font-medium">
+                                    <span>Discount</span>
+                                    <span>
+                                        -Ksh {formatCurrency(Number((order as any).discount_amount || (order as any).shipping_address?.discount_amount))}
+                                    </span>
                                 </div>
                             )}
                             <Separator />
                             <div className="flex justify-between font-semibold text-foreground text-base">
                                 <span>Total</span>
                                 <span>
-                                    Ksh {formatCurrency(parseFloat(order.total_amount))}
+                                    Ksh {formatCurrency(parseFloat(String(order.total_amount)))}
                                 </span>
                             </div>
                         </CardContent>
@@ -310,7 +291,9 @@ export default function OrderDetailPage() {
                             <div className="flex items-center justify-between">
                                 <span className="text-muted-foreground">Method</span>
                                 <span className="font-medium text-foreground">
-                                    {(order as any).payment_method_title || 'N/A'}
+                                    {(order as any).payment_method_title ||
+                                     (order as any).shipping_address?.payment_method_title ||
+                                     ((order as any).payment_method === 'mpesa' || (order as any).shipping_address?.payment_method === 'mpesa' ? 'M-Pesa Express' : 'Cash on Delivery')}
                                 </span>
                             </div>
                             {(order as any).date_paid && (

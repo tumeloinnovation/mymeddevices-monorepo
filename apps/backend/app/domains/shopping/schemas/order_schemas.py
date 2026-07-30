@@ -68,6 +68,12 @@ class ShippingAddress(BaseModel):
     calculated_distance_km: Optional[float] = None
     logistics_type: Optional[str] = None
     assigned_driver_id: Optional[str] = None
+    payment_method: Optional[str] = None
+    payment_method_title: Optional[str] = None
+    shipping_amount: Optional[float] = None
+    packaging_fee: Optional[float] = None
+    services_fee: Optional[float] = None
+    discount_amount: Optional[float] = None
 
     class Config:
         from_attributes = True
@@ -75,11 +81,18 @@ class ShippingAddress(BaseModel):
 class OrderBase(BaseModel):
     status: str = "pending"
     total_amount: int
+    shipping_amount: Optional[int] = 0
+    packaging_fee: Optional[int] = 100
+    services_fee: Optional[int] = 50
+    discount_amount: Optional[int] = 0
+    subtotal: Optional[int] = 0
+    payment_method: Optional[str] = "cod"
+    payment_method_title: Optional[str] = "Cash on Delivery"
     currency: str = "KES"
     shipping_address: Optional[ShippingAddress] = None
     notes: Optional[str] = None
 
-    @field_validator("total_amount", mode="before")
+    @field_validator("total_amount", "shipping_amount", "packaging_fee", "services_fee", "discount_amount", "subtotal", mode="before")
     @classmethod
     def round_total_amount(cls, v: Union[int, float, str, None]) -> Optional[int]:
         if v is not None:

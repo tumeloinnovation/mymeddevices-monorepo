@@ -93,13 +93,6 @@ const productSchema = z.object({
   tags: z.array(z.string()).optional(),
   meta_title: z.string().optional(),
   meta_description: z.string().optional(),
-
-  // Compliance
-  kmpdb_registration_number: z.string().optional(),
-  ppb_classification: z.enum(['Class A', 'Class B', 'Class C', 'Class D', 'Unclassified']).optional(),
-  ce_marking_or_fda_clearance: z.string().optional(),
-  warranty_info: z.string().optional(),
-  certifications: z.array(z.string()).optional(),
 });
 
 function calculatePlatformMarkup(basePrice: number) {
@@ -127,7 +120,6 @@ const STEPS = [
   { id: "inventory", label: "Inventory & Physical", icon: Package, description: "Stock, SKU, weight" },
   { id: "gallery", label: "Product Gallery", icon: ImageIcon, description: "Manage images" },
   { id: "ai", label: "AI Assist", icon: Sparkles, description: "MedAI content & tags" },
-  { id: "compliance", label: "Compliance & Certs", icon: ShieldCheck, description: "Regulatory details" },
   { id: "review", label: "Review", icon: Eye, description: "Confirm & publish" },
 ];
 
@@ -138,9 +130,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isPreviewing, setIsPreviewing] = useState(false);
-  const [aiPreview, setAiPreview] = useState<any>(null);
-  const [showPreviewDialog, setShowPreviewDialog] = useState(false);
   const [draftProductId, setDraftProductId] = useState<string | null>(productId || null);
 
   // Gallery state
@@ -236,11 +225,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
       tags: [],
       meta_title: "",
       meta_description: "",
-      kmpdb_registration_number: "",
-      ppb_classification: "Unclassified",
-      ce_marking_or_fda_clearance: "",
-      warranty_info: "",
-      certifications: [],
     },
     mode: "onChange",
   });
@@ -252,12 +236,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
     if (productId && product) {
       setDraftProductId(productId);
       const prod = product as any;
-      
-      let ppbClass: any = "Unclassified";
-      if (prod.ppb_classification === "Class A") ppbClass = "Class A";
-      else if (prod.ppb_classification === "Class B") ppbClass = "Class B";
-      else if (prod.ppb_classification === "Class C") ppbClass = "Class C";
-      else if (prod.ppb_classification === "Class D") ppbClass = "Class D";
 
       methods.reset({
         name: prod.name || "",
@@ -278,11 +256,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
         tags: prod.tags || [],
         meta_title: prod.meta_title || "",
         meta_description: prod.meta_description || "",
-        kmpdb_registration_number: prod.kmpdb_registration_number || "",
-        ppb_classification: ppbClass,
-        ce_marking_or_fda_clearance: prod.ce_marking_or_fda_clearance || "",
-        warranty_info: prod.warranty_info || "",
-        certifications: prod.certifications || [],
       });
 
       if (prod.images && prod.images.length > 0) {
@@ -371,29 +344,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
     setValue("tags", tags.filter((t: string) => t !== tagToRemove), { shouldValidate: true, shouldDirty: true });
   };
 
-  // Certifications helpers
-  const certifications = watch("certifications") || [];
-  const [certInput, setCertInput] = useState("");
-
-  const handleAddCert = () => {
-    const cleanCert = certInput.trim();
-    if (cleanCert && !certifications.includes(cleanCert)) {
-      setValue("certifications", [...certifications, cleanCert], { shouldValidate: true, shouldDirty: true });
-    }
-    setCertInput("");
-  };
-
-  const handleCertKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      handleAddCert();
-    }
-  };
-
-  const handleRemoveCert = (certToRemove: string) => {
-    setValue("certifications", certifications.filter((c: string) => c !== certToRemove), { shouldValidate: true, shouldDirty: true });
-  };
-
   // AI Content Generation for individual fields
   const generateSingleField = async (fieldName: string) => {
     const name = watch("name");
@@ -449,53 +399,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
     } finally {
       setIsGenerating(false);
     }
-  };
-
-  // Pre-creation AI Preview
-  const previewAIContent = async () => {
-    const name = watch("name");
-    const brand = watch("brand");
-    const categoryId = watch("category_id");
-
-    if (!name || !brand) {
-      toast.error("Please enter product name and brand first.");
-      return;
-    }
-
-    setIsPreviewing(true);
-    try {
-      const category = flatCategories.find((c) => c.id === categoryId);
-      const categoryName = category?.name || "Medical Device";
-
-      const suggestions = await catalogService.generateDescriptions({
-        product_name: name,
-        brand: brand,
-        category: categoryName
-      });
-
-      setAiPreview(suggestions.suggestions);
-      setShowPreviewDialog(true);
-      toast.success("AI preview generated successfully!");
-    } catch (error: any) {
-      toast.error("AI preview failed: " + (error.message || "Unknown error"));
-    } finally {
-      setIsPreviewing(false);
-    }
-  };
-
-  // Apply preview content to form
-  const applyPreviewToForm = () => {
-    if (!aiPreview) return;
-
-    if (aiPreview.description) setValue("description", aiPreview.description);
-    if (aiPreview.short_description) setValue("short_description", aiPreview.short_description);
-    if (aiPreview.meta_title) setValue("meta_title", aiPreview.meta_title);
-    if (aiPreview.meta_description) setValue("meta_description", aiPreview.meta_description);
-
-    toast.success("Preview content applied to form!");
-    setShowPreviewDialog(false);
-    // Jump to AI Assist step to see the applied content
-    setCurrentStep(4);
   };
 
   // AI Content Generation (all fields at once)
@@ -775,8 +678,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
                         onCreateBrand={handleCreateBrand}
                         createBrandLoading={createBrandLoading}
                         createBrandError={createBrandError || undefined}
-                        onPreviewAI={previewAIContent}
-                        isPreviewing={isPreviewing}
                       />
                     )}
                     {currentStep === 1 && <StepPricing />}
@@ -809,17 +710,7 @@ export function ProductWizard({ productId }: { productId?: string }) {
                         onRemoveTag={handleRemoveTag}
                       />
                     )}
-                    {currentStep === 5 && (
-                      <StepCompliance
-                        certifications={certifications}
-                        certInput={certInput}
-                        setCertInput={setCertInput}
-                        onAddCert={handleAddCert}
-                        onCertKeyDown={handleCertKeyDown}
-                        onRemoveCert={handleRemoveCert}
-                      />
-                    )}
-                    {currentStep === 6 && <StepReview data={watch()} />}
+                    {currentStep === 5 && <StepReview data={watch()} />}
                   </motion.div>
                 </AnimatePresence>
 
@@ -865,79 +756,6 @@ export function ProductWizard({ productId }: { productId?: string }) {
           </div>
         </div>
       </div>
-
-      {/* AI Preview Dialog */}
-      <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
-        <DialogContent className="sm:max-w-[600px] max-w-[calc(100%-2rem)] rounded-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center">
-                <Sparkles className="h-5 w-5" />
-              </div>
-              <div>
-                <DialogTitle className="text-lg font-bold">AI Content Preview</DialogTitle>
-                <DialogDescription className="text-xs pt-0">
-                  Review the AI-generated content before applying it to your product.
-                </DialogDescription>
-              </div>
-            </div>
-          </DialogHeader>
-
-          {aiPreview && (
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase tracking-wider">Short Description</Label>
-                <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                  {aiPreview.short_description || "No short description generated"}
-                </p>
-              </div>
-
-              <Separator />
-
-              <div className="space-y-2">
-                <Label className="text-xs font-semibold uppercase tracking-wider">Full Description</Label>
-                <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg whitespace-pre-line max-h-[200px] overflow-y-auto">
-                  {aiPreview.description || "No description generated"}
-                </p>
-              </div>
-
-              <Separator />
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold uppercase tracking-wider">Meta Title</Label>
-                  <p className="text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 p-3 rounded-lg">
-                    {aiPreview.meta_title || "Not generated"}
-                  </p>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-semibold uppercase tracking-wider">Meta Description</Label>
-                  <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg line-clamp-3">
-                    {aiPreview.meta_description || "Not generated"}
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter className="gap-2 flex-col sm:flex-row">
-            <Button
-              variant="outline"
-              onClick={() => setShowPreviewDialog(false)}
-              className="font-bold text-xs uppercase tracking-widest flex-1 sm:flex-auto"
-            >
-              Discard
-            </Button>
-            <Button
-              onClick={applyPreviewToForm}
-              className="rounded-xl px-6 font-bold text-xs uppercase tracking-wider flex-1 sm:flex-auto bg-primary hover:bg-primary/95"
-            >
-              <CheckCircle2 className="mr-2 h-4 w-4" />
-              Apply to Form
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
@@ -951,8 +769,6 @@ function StepGeneral({
   onCreateBrand,
   createBrandLoading,
   createBrandError,
-  onPreviewAI,
-  isPreviewing,
 }: {
   flatCategories: any[];
   brands: { id: string; name: string; approval_status?: string }[];
@@ -960,8 +776,6 @@ function StepGeneral({
   onCreateBrand?: (name: string) => Promise<string>;
   createBrandLoading?: boolean;
   createBrandError?: string;
-  onPreviewAI?: () => void;
-  isPreviewing?: boolean;
 }) {
   const { register, setValue, watch } = useFormContext();
   const name = watch("name");
@@ -1065,43 +879,6 @@ function StepGeneral({
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* AI Preview Card */}
-      <Card className="border-border/50 shadow-xl shadow-foreground/5 bg-gradient-to-br from-amber-500/[0.02] to-primary/[0.02] relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-2 opacity-5 pointer-events-none">
-          <Zap className="h-16 w-16 text-primary" />
-        </div>
-        <CardContent className="flex items-center justify-between py-4 gap-4">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl flex items-center justify-center shadow-sm bg-white border">
-              <Sparkles className="h-4 w-4 text-amber-500" />
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold">AI Content Preview</h3>
-              <p className="text-[10px] text-muted-foreground">Preview AI-generated descriptions before creating</p>
-            </div>
-          </div>
-          <Button
-            type="button"
-            onClick={onPreviewAI}
-            disabled={isPreviewing}
-            variant="outline"
-            className="rounded-lg h-9 px-4 text-xs font-semibold gap-2 border-amber-200 text-amber-700 hover:bg-amber-50"
-          >
-            {isPreviewing ? (
-              <>
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                Previewing...
-              </>
-            ) : (
-              <>
-                <Eye className="h-3.5 w-3.5" />
-                Preview AI Content
-              </>
-            )}
-          </Button>
         </CardContent>
       </Card>
     </div>
@@ -1664,129 +1441,6 @@ function StepAIAssist({
   );
 }
 
-function StepCompliance({
-  certifications,
-  certInput,
-  setCertInput,
-  onAddCert,
-  onCertKeyDown,
-  onRemoveCert,
-}: {
-  certifications: string[];
-  certInput: string;
-  setCertInput: (value: string) => void;
-  onAddCert: () => void;
-  onCertKeyDown: (e: React.KeyboardEvent<HTMLInputElement>) => void;
-  onRemoveCert: (cert: string) => void;
-}) {
-  const { register, setValue, watch } = useFormContext();
-
-  return (
-    <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold tracking-tight">Compliance & Certifications</h2>
-        <p className="text-muted-foreground mt-1">Regulatory details and hospital compliance data.</p>
-      </div>
-
-      <Card className="border-border/50 shadow-xl shadow-foreground/5">
-        <CardHeader>
-          <CardTitle>Compliance & Certifications</CardTitle>
-          <CardDescription>Specify medical classification and manufacturer certifications.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-2 gap-6">
-            <div className="space-y-2 col-span-2 md:col-span-1">
-              <Label htmlFor="kmpdb_registration_number" className="text-xs font-semibold uppercase tracking-wider">
-                KMPDB Registration Number
-              </Label>
-              <Input
-                id="kmpdb_registration_number"
-                {...register("kmpdb_registration_number")}
-                placeholder="e.g. KMPDB/REG/2024/1234"
-                className="h-11"
-              />
-            </div>
-            <div className="space-y-2 col-span-2 md:col-span-1">
-              <Label htmlFor="ppb_classification" className="text-xs font-semibold uppercase tracking-wider">
-                PPB Classification
-              </Label>
-              <Select
-                value={watch("ppb_classification")}
-                onValueChange={(value) => setValue("ppb_classification", value as any)}
-              >
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="Select classification" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Class A">Class A (Low Risk)</SelectItem>
-                  <SelectItem value="Class B">Class B (Low-Moderate)</SelectItem>
-                  <SelectItem value="Class C">Class C (Moderate-High)</SelectItem>
-                  <SelectItem value="Class D">Class D (High Risk)</SelectItem>
-                  <SelectItem value="Unclassified">Unclassified</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2 col-span-2">
-              <Label htmlFor="certifications" className="text-xs font-semibold uppercase tracking-wider">
-                Certifications
-              </Label>
-              <div className="flex flex-wrap gap-2 p-3 min-h-[56px] rounded-xl border bg-white items-center">
-                {certifications.map((cert) => (
-                  <div
-                    key={cert}
-                    className="flex items-center gap-1 bg-indigo-50 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold border border-indigo-100"
-                  >
-                    <span>{cert}</span>
-                    <button
-                      type="button"
-                      onClick={() => onRemoveCert(cert)}
-                      className="text-indigo-700 hover:text-red-500 rounded-full transition-colors"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
-                <input
-                  type="text"
-                  value={certInput}
-                  onChange={(e) => setCertInput(e.target.value)}
-                  onKeyDown={onCertKeyDown}
-                  onBlur={onAddCert}
-                  placeholder={certifications.length === 0 ? "e.g. ISO 13485, CE 0123 (Press Enter to add)" : "Add more certifications..."}
-                  className="flex-grow min-w-[120px] bg-transparent outline-none text-xs px-1 text-foreground"
-                />
-              </div>
-            </div>
-            <div className="space-y-2 col-span-2 md:col-span-1">
-              <Label htmlFor="ce_marking_or_fda_clearance" className="text-xs font-semibold uppercase tracking-wider">
-                CE Marking / FDA Clearance
-              </Label>
-              <Input
-                id="ce_marking_or_fda_clearance"
-                {...register("ce_marking_or_fda_clearance")}
-                placeholder="e.g. CE certified, FDA 510(k) cleared"
-                className="h-11"
-              />
-            </div>
-            <div className="space-y-2 col-span-2">
-              <Label htmlFor="warranty_info" className="text-xs font-semibold uppercase tracking-wider">
-                Warranty & Support Info
-              </Label>
-              <Textarea
-                id="warranty_info"
-                {...register("warranty_info")}
-                rows={3}
-                placeholder="Warranty terms and conditions..."
-                className="resize-none"
-              />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
 function StepReview({ data }: { data: any }) {
   const specs = (() => {
     if (!data.specifications) return {};
@@ -1946,65 +1600,6 @@ function StepReview({ data }: { data: any }) {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Compliance & Certification Card (full width) */}
-        <Card className="border-border/50 shadow-xl shadow-foreground/5 col-span-2">
-          <CardHeader>
-            <CardTitle className="text-sm">Compliance & Certification</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  KMPDB Registration
-                </Label>
-                <p className="text-sm font-medium">
-                  {data.kmpdb_registration_number || <span className="italic">Not set</span>}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  PPB Classification
-                </Label>
-                <Badge variant="outline" className="font-medium">
-                  {data.ppb_classification || <span className="italic">Not set</span>}
-                </Badge>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  CE/FDA Clearance
-                </Label>
-                <p className="text-sm font-medium">
-                  {data.ce_marking_or_fda_clearance || <span className="italic">Not set</span>}
-                </p>
-              </div>
-              <div className="space-y-1 md:col-span-2">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Certifications
-                </Label>
-                <div className="flex flex-wrap gap-1.5">
-                  {data.certifications && data.certifications.length > 0 ? (
-                    data.certifications.map((cert: string) => (
-                      <Badge key={cert} className="bg-indigo-50 text-indigo-700 border-indigo-100">
-                        {cert}
-                      </Badge>
-                    ))
-                  ) : (
-                    <span className="text-sm text-muted-foreground italic">None</span>
-                  )}
-                </div>
-              </div>
-              <div className="space-y-1 col-span-2">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                  Warranty Information
-                </Label>
-                <p className="text-sm text-muted-foreground">
-                  {data.warranty_info || <span className="italic">Not set</span>}
-                </p>
-              </div>
-            </div>
           </CardContent>
         </Card>
 

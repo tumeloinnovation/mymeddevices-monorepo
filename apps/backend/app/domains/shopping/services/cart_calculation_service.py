@@ -124,14 +124,20 @@ class CartCalculationService:
         shipping_details = await self.calculate_shipping_details(cart, shipping_address)
         shipping_amount = shipping_details["amount"]
 
+        # Packaging & Service fees (applied during checkout when shipping address is provided)
+        packaging_fee = 100.0 if shipping_address else 0.0
+        services_fee = 50.0 if shipping_address else 0.0
+
         # Calculate total
-        total = discounted_subtotal + tax_amount + shipping_amount
+        total = discounted_subtotal + tax_amount + shipping_amount + packaging_fee + services_fee
 
         return {
             "subtotal": round(subtotal),
             "discount_amount": round(discount_amount),
             "tax_amount": round(tax_amount),
             "shipping_amount": round(shipping_amount),
+            "packaging_fee": round(packaging_fee),
+            "services_fee": round(services_fee),
             "total": round(total),
             "currency": "KES",
             "item_count": len(items),
