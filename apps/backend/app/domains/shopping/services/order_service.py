@@ -6,25 +6,16 @@ from sqlalchemy.orm import selectinload
 
 from app.core.logging import logger
 from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
-from app.domains.shopping.models.order import Order, OrderItem, OrderStatus, OrderTimelineEvent
+from app.domains.shopping.models.order import Order, OrderItem, OrderStatus, OrderTimelineEvent, OrderItemFulfillmentStatus
 from app.domains.shopping.models.sub_order import SubOrder, SubOrderStatus
 from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.services.cart_calculation_service import CartCalculationService
+from app.domains.shopping.services.order_state_machine import (
+    OrderStateMachine,
+    InvalidStateTransitionError
+)
 from app.domains.auth.models.user import User
 from app.domains.catalog.models.product import Product
-
-class InvalidStateTransitionError(ValueError):
-    pass
-
-VALID_ORDER_TRANSITIONS = {
-    OrderStatus.PENDING: [OrderStatus.PAID, OrderStatus.CANCELLED],
-    OrderStatus.PAID: [OrderStatus.PROCESSING, OrderStatus.REFUNDED],
-    OrderStatus.PROCESSING: [OrderStatus.SHIPPED, OrderStatus.REFUNDED],
-    OrderStatus.SHIPPED: [OrderStatus.DELIVERED, OrderStatus.REFUNDED],
-    OrderStatus.DELIVERED: [OrderStatus.REFUNDED],
-    OrderStatus.CANCELLED: [],
-    OrderStatus.REFUNDED: []
-}
 
 class CheckoutService:
     def __init__(self, db: AsyncSession):
@@ -337,29 +328,35 @@ class OrderService:
 
         return orders, total
 
-    async def update_order_status(self, order_id: uuid.UUID, new_status: str) -> Order:
-        # Get current order state to check for transitions
+    async def update_order_status(
+        self,
+        order_id: uuid.UUID,
+        new_status: str,
+        auto_rollup: bool = False
+    ) -> Order:
+        """Update order status with state machine validation."""
         order = await self.get_order(order_id)
         if not order:
             raise ValueError("Order not found")
-        
-        old_status = OrderStatus(order.status)
-        new_status_enum = OrderStatus(new_status)
 
-        if new_status_enum not in VALID_ORDER_TRANSITIONS[old_status]:
-            raise InvalidStateTransitionError(f"Cannot transition order from {old_status.value} to {new_status_enum.value}")
+        old_status = order.status.value if hasattr(order.status, 'value') else str(order.status)
 
-        stmt = update(Order).where(Order.id == order_id).values(status=new_status_enum.value)
+        # Validate transition using state machine
+        if not OrderStateMachine.validate_order_transition(old_status, new_status):
+            raise InvalidStateTransitionError(old_status, new_status, "Order")
+
+        # Update status in database
+        stmt = update(Order).where(Order.id == order_id).values(status=new_status)
         await self.db.execute(stmt)
 
-        # Write outbox event for the transition
-        if old_status != new_status_enum:
+        # Create timeline and outbox events for the transition
+        if old_status != new_status:
             event = OutboxEvent(
                 id=uuid.uuid4(),
                 aggregate_type="Order",
                 aggregate_id=str(order.id),
-                event_type=f"Order{new_status_enum.value.capitalize()}",
-                payload={"order_id": str(order.id), "status": new_status_enum.value},
+                event_type=f"Order{new_status.capitalize()}",
+                payload={"order_id": str(order.id), "status": new_status},
                 status=OutboxStatus.PENDING
             )
             self.db.add(event)
@@ -367,10 +364,249 @@ class OrderService:
             timeline_event = OrderTimelineEvent(
                 id=uuid.uuid4(),
                 order_id=order_id,
-                status=new_status_enum.value,
-                message=f"Order status updated to {new_status_enum.value}"
+                status=new_status,
+                message=f"Order status updated to {new_status}"
             )
             self.db.add(timeline_event)
 
         await self.db.commit()
         return await self.get_order(order_id)
+
+    async def update_order_item_status(
+        self,
+        item_id: uuid.UUID,
+        new_status: str,
+        vendor_id: uuid.UUID,
+        auto_rollup: bool = True
+    ) -> OrderItem:
+        """Update order item status with validation and automatic rollup."""
+        from sqlalchemy import select
+
+        # Get the item
+        stmt = select(OrderItem).where(OrderItem.id == item_id)
+        result = await self.db.execute(stmt)
+        item = result.scalar_one_or_none()
+
+        if not item:
+            raise ValueError("Order item not found")
+
+        # Validate vendor ownership
+        if item.vendor_id != vendor_id:
+            raise ValueError("Item does not belong to this vendor")
+
+        # Validate transition using state machine
+        old_status = item.fulfillment_status
+        if not OrderStateMachine.validate_order_item_transition(old_status, new_status):
+            raise InvalidStateTransitionError(old_status, new_status, "OrderItem")
+
+        # Update item status
+        item.fulfillment_status = new_status
+
+        # Create timeline event
+        timeline_event = OrderTimelineEvent(
+            id=uuid.uuid4(),
+            order_id=item.order_id,
+            status=new_status,
+            message=f"Order item status updated to {new_status}"
+        )
+        self.db.add(timeline_event)
+
+        # Automatic rollup to parent entities
+        if auto_rollup:
+            await self._rollup_status_from_item(item)
+
+        await self.db.commit()
+
+        # Refresh and return
+        await self.db.refresh(item)
+        return item
+
+    async def update_sub_order_status(
+        self,
+        sub_order_id: uuid.UUID,
+        new_status: str,
+        vendor_id: uuid.UUID
+    ) -> SubOrder:
+        """Update sub-order status with validation."""
+        from sqlalchemy import select
+
+        # Get the sub-order
+        stmt = select(SubOrder).where(SubOrder.id == sub_order_id)
+        result = await self.db.execute(stmt)
+        sub_order = result.scalar_one_or_none()
+
+        if not sub_order:
+            raise ValueError("SubOrder not found")
+
+        # Validate vendor ownership
+        if sub_order.vendor_id != vendor_id:
+            raise ValueError("SubOrder does not belong to this vendor")
+
+        # Validate transition using state machine
+        old_status = sub_order.status.value if hasattr(sub_order.status, 'value') else str(sub_order.status)
+        if not OrderStateMachine.validate_sub_order_transition(old_status, new_status):
+            raise InvalidStateTransitionError(old_status, new_status, "SubOrder")
+
+        # Update status
+        sub_order.status = SubOrderStatus(new_status)
+
+        # Create timeline event
+        timeline_event = OrderTimelineEvent(
+            id=uuid.uuid4(),
+            order_id=sub_order.parent_order_id,
+            status=new_status,
+            message=f"SubOrder status updated to {new_status}"
+        )
+        self.db.add(timeline_event)
+
+        # Rollup to parent order
+        await self._rollup_status_from_sub_order(sub_order)
+
+        await self.db.commit()
+        return sub_order
+
+    async def _rollup_status_from_item(self, item: OrderItem):
+        """Roll up status changes from item to sub-order and order."""
+        # Update SubOrder
+        if item.sub_order_id:
+            await self._update_sub_order_from_item(item)
+
+        # Update Order
+        await self._update_order_from_items(item.order_id)
+
+    async def _update_sub_order_from_item(self, item: OrderItem):
+        """Update SubOrder status based on its items."""
+        from sqlalchemy import select
+
+        if not item.sub_order_id:
+            return
+
+        # Get all items in the sub-order
+        stmt = select(OrderItem).where(OrderItem.sub_order_id == item.sub_order_id)
+        result = await self.db.execute(stmt)
+        items = result.scalars().all()
+
+        # Calculate new status
+        item_statuses = [i.fulfillment_status for i in items]
+        new_status = OrderStateMachine.calculate_sub_order_status(item_statuses)
+
+        if new_status:
+            # Get current sub-order status
+            sub_order_stmt = select(SubOrder.status).where(SubOrder.id == item.sub_order_id)
+            sub_order_result = await self.db.execute(sub_order_stmt)
+            current_status = sub_order_result.scalar_one_or_none()
+
+            if current_status and new_status != current_status:
+                # Update sub-order
+                update_stmt = update(SubOrder).where(
+                    SubOrder.id == item.sub_order_id
+                ).values(status=new_status)
+                await self.db.execute(update_stmt)
+
+                # Create timeline event
+                timeline = OrderTimelineEvent(
+                    id=uuid.uuid4(),
+                    order_id=item.order_id,
+                    status=new_status,
+                    message=f"SubOrder status automatically rolled up to {new_status}"
+                )
+                self.db.add(timeline)
+
+    async def _update_order_from_items(self, order_id: uuid.UUID):
+        """Update Order status based on all items."""
+        from sqlalchemy import select
+
+        # Get all items in the order
+        stmt = select(OrderItem).where(OrderItem.order_id == order_id)
+        result = await self.db.execute(stmt)
+        items = result.scalars().all()
+
+        if not items:
+            return
+
+        # Calculate new status
+        item_statuses = [i.fulfillment_status for i in items]
+        new_status = OrderStateMachine.calculate_order_status(item_statuses)
+
+        if new_status:
+            # Get current order status
+            order_stmt = select(Order.status).where(Order.id == order_id)
+            order_result = await self.db.execute(order_stmt)
+            current_status = order_result.scalar_one_or_none()
+
+            if current_status and new_status != current_status.value:
+                # Update order
+                update_stmt = update(Order).where(Order.id == order_id).values(status=new_status)
+                await self.db.execute(update_stmt)
+
+                # Create timeline and outbox events
+                timeline = OrderTimelineEvent(
+                    id=uuid.uuid4(),
+                    order_id=order_id,
+                    status=new_status,
+                    message=f"Order status automatically rolled up to {new_status}"
+                )
+                self.db.add(timeline)
+
+                outbox = OutboxEvent(
+                    id=uuid.uuid4(),
+                    aggregate_type="Order",
+                    aggregate_id=str(order_id),
+                    event_type=f"Order{new_status.capitalize()}",
+                    payload={"order_id": str(order_id), "status": new_status, "auto_rolled_up": True},
+                    status=OutboxStatus.PENDING
+                )
+                self.db.add(outbox)
+
+    async def _rollup_status_from_sub_order(self, sub_order: SubOrder):
+        """Roll up status changes from sub-order to parent order."""
+        from sqlalchemy import select
+
+        # Get all sub-orders for the parent order
+        stmt = select(SubOrder).where(SubOrder.parent_order_id == sub_order.parent_order_id)
+        result = await self.db.execute(stmt)
+        sub_orders = result.scalars().all()
+
+        if not sub_orders:
+            return
+
+        # Get all items from all sub-orders
+        sub_order_ids = [so.id for so in sub_orders]
+        item_stmt = select(OrderItem).where(OrderItem.sub_order_id.in_(sub_order_ids))
+        item_result = await self.db.execute(item_stmt)
+        items = item_result.scalars().all()
+
+        # Calculate new order status from all items
+        item_statuses = [i.fulfillment_status for i in items]
+        new_status = OrderStateMachine.calculate_order_status(item_statuses)
+
+        if new_status:
+            # Get current order status
+            order_stmt = select(Order.status).where(Order.id == sub_order.parent_order_id)
+            order_result = await self.db.execute(order_stmt)
+            current_status = order_result.scalar_one_or_none()
+
+            if current_status and new_status != current_status.value:
+                # Update order
+                update_stmt = update(Order).where(Order.id == sub_order.parent_order_id).values(status=new_status)
+                await self.db.execute(update_stmt)
+
+                # Create timeline event
+                timeline = OrderTimelineEvent(
+                    id=uuid.uuid4(),
+                    order_id=sub_order.parent_order_id,
+                    status=new_status,
+                    message=f"Order status automatically rolled up to {new_status}"
+                )
+                self.db.add(timeline)
+
+                # Create outbox event
+                outbox = OutboxEvent(
+                    id=uuid.uuid4(),
+                    aggregate_type="Order",
+                    aggregate_id=str(sub_order.parent_order_id),
+                    event_type=f"Order{new_status.capitalize()}",
+                    payload={"order_id": str(sub_order.parent_order_id), "status": new_status, "auto_rolled_up": True},
+                    status=OutboxStatus.PENDING
+                )
+                self.db.add(outbox)

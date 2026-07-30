@@ -101,16 +101,25 @@ export interface Category {
   subCategories?: Category[];
 }
 
+// Canonical order statuses (must match backend)
 export type OrderStatus =
   | 'pending'
+  | 'paid'
   | 'processing'
-  | 'on-hold'
-  | 'completed'
   | 'shipped'
   | 'delivered'
   | 'cancelled'
-  | 'refunded'
-  | 'failed';
+  | 'refunded';
+
+// Item-level fulfillment statuses (vendor-facing)
+export type OrderItemStatus =
+  | 'pending'
+  | 'processing'
+  | 'packed'
+  | 'shipped'
+  | 'delivered'
+  | 'cancelled'
+  | 'refunded';
 
 export interface Order {
   id: number;

@@ -194,6 +194,9 @@ async def request_refund(
     db: AsyncSession = Depends(get_db)
 ):
     """Request a refund for an order."""
+    import uuid as uuid_lib
+    from app.domains.shopping.models.order import OrderTimelineEvent
+
     service = OrderService(db)
     order = await service.get_order(order_id_or_number)
 
@@ -201,21 +204,27 @@ async def request_refund(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     # Check if order can be refunded
-    if order.status not in ["delivered", "shipped"]:
+    if order.status not in [OrderStatus.DELIVERED.value, OrderStatus.SHIPPED.value]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot request refund for order with status '{order.status}'"
         )
 
-    # Create refund request (simplified - should create a refund record)
-    # For now, just update the order status
-    order.status = "refund_requested"
+    # Create timeline event for refund request
+    refund_id = uuid_lib.uuid4()
+    timeline_event = OrderTimelineEvent(
+        id=uuid_lib.uuid4(),
+        order_id=order.id,
+        status=order.status.value if hasattr(order.status, 'value') else str(order.status),
+        message=f"Refund requested by customer: {reason if reason else 'No reason provided'}"
+    )
+    db.add(timeline_event)
     await db.commit()
-    await db.refresh(order)
 
     return success_response({
-        "refund_id": str(uuid.uuid4()),
+        "refund_id": str(refund_id),
         "order_id": str(order.id),
         "status": "pending",
+        "message": "Refund request received. Admin will review and process.",
         "amount": str(order.total_amount) if hasattr(order, 'total_amount') else "0",
     })

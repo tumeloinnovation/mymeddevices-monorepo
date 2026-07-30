@@ -27,16 +27,18 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 const statusConfig: Record<string, { label: string; className: string }> = {
+    // Canonical order statuses (aligned with backend)
     pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-700' },
     paid: { label: 'Paid', className: 'bg-blue-100 text-blue-700' },
     processing: { label: 'Processing', className: 'bg-blue-100 text-blue-700' },
     shipped: { label: 'Shipped', className: 'bg-purple-100 text-purple-700' },
     delivered: { label: 'Delivered', className: 'bg-green-100 text-green-700' },
-    completed: { label: 'Completed', className: 'bg-green-100 text-green-700' },
     cancelled: { label: 'Cancelled', className: 'bg-red-100 text-red-700' },
     refunded: { label: 'Refunded', className: 'bg-purple-100 text-purple-700' },
-    failed: { label: 'Failed', className: 'bg-red-100 text-red-700' },
-    'on-hold': { label: 'On Hold', className: 'bg-orange-100 text-orange-700' },
+    // Legacy status mappings (for backward compatibility - should be rare)
+    completed: { label: 'Delivered', className: 'bg-green-100 text-green-700' }, // Maps to delivered
+    failed: { label: 'Cancelled', className: 'bg-red-100 text-red-700' }, // Maps to cancelled
+    'on-hold': { label: 'Pending', className: 'bg-yellow-100 text-yellow-700' }, // Maps to pending
 };
 
 export default function PublicOrderDetailPage() {
@@ -271,6 +273,23 @@ export default function PublicOrderDetailPage() {
                             </div>
                         </CardContent>
                     </Card>
+
+                    {/* Order Notes */}
+                    {order.notes && (
+                        <Card>
+                            <CardHeader>
+                                <CardTitle className="flex items-center gap-2 text-base">
+                                    <FileText className="h-4 w-4" />
+                                    Order Notes
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <p className="text-sm text-foreground bg-muted/50 rounded-md p-3">
+                                    {order.notes}
+                                </p>
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
 
                 {/* Order Summary with Address below */}

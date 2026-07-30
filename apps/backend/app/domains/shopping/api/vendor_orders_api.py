@@ -28,6 +28,7 @@ from app.domains.shopping.schemas.order_schemas import (
     OrderTimelineEventResponse
 )
 from app.domains.shopping.services.order_service import OrderService
+from app.domains.shopping.services.order_state_machine import InvalidStateTransitionError
 from app.domains.shopping.models.order import OrderItem, OrderTimelineEvent
 from app.domains.shopping.models.payment import Payment
 
@@ -253,9 +254,10 @@ async def vendor_update_item_status(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Update fulfillment status for a specific order item.
+    Update fulfillment status for a specific order item with validation.
 
     Vendors can only update the status of their own items.
+    Status transitions are validated and parent order/sub-order statuses are automatically rolled up.
     """
     # Get vendor profile for this user
     stmt = select(VendorProfile).where(VendorProfile.user_id == current_user.id)
@@ -268,41 +270,31 @@ async def vendor_update_item_status(
             detail="Vendor profile not found"
         )
 
-    # Get the order to confirm and log transition
-    service = OrderService(db)
-    order = await service.get_order(order_id)
-    if not order:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found"
+    try:
+        # Use service with validation and auto-rollup
+        service = OrderService(db)
+        await service.update_order_item_status(
+            item_id=item_id,
+            new_status=data.status,
+            vendor_id=vendor_profile.id,
+            auto_rollup=True
         )
 
-    # Find the specific order item in order.items
-    order_item = next((item for item in order.items if item.id == item_id and item.vendor_id == vendor_profile.id), None)
-    if not order_item:
+        # Get updated order
+        order = await service.get_order(order_id)
+        response_dto = await build_vendor_order_detail_response(order, vendor_profile.id, db)
+        return success_response(response_dto)
+
+    except InvalidStateTransitionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status transition: {str(e)}"
+        )
+    except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order item not found or does not belong to this vendor"
+            detail=str(e)
         )
-
-    # Update the status
-    order_item.fulfillment_status = data.status
-    
-    # Write timeline event
-    timeline_event = OrderTimelineEvent(
-        id=uuid.uuid4(),
-        order_id=order_id,
-        status=order.status.value if hasattr(order.status, "value") else str(order.status),
-        message=f"Fulfillment status of '{order_item.product.name}' updated to {data.status}",
-        created_by=current_user.id
-    )
-    db.add(timeline_event)
-    
-    await db.commit()
-    order = await service.get_order(order_id)
-
-    response_dto = await build_vendor_order_detail_response(order, vendor_profile.id, db)
-    return success_response(response_dto)
 
 
 @router.post("/{order_id}/items/{item_id}/tracking", response_model=ApiSuccessResponse[VendorOrderDetailResponse])
