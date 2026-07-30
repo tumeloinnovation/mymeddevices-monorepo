@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.core.logging import logger
 from app.core.middleware import RequestLoggingMiddleware, ContentLengthLimitMiddleware
+from app.core.security_headers import SecurityHeadersMiddleware, APIProtectionMiddleware, NoCacheMiddleware
 from app.core.config import settings
 from app.core.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -136,6 +137,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add security headers middleware (runs before logging, so headers are logged)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(APIProtectionMiddleware)
+app.add_middleware(NoCacheMiddleware)
 
 # Add logging middleware
 app.add_middleware(RequestLoggingMiddleware)

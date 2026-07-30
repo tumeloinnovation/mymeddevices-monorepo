@@ -123,25 +123,46 @@ async def register_vendor(vendor_in: VendorUserCreate, db: AsyncSession = Depend
         )
 
 @router.post("/login", response_model=ApiSuccessResponse[LoginResponse], dependencies=[Depends(RateLimiterDependency("login"))])
-async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(login_data: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)):
     auth_service = AuthService(db)
-    result = await auth_service.authenticate(login_data)
-    
+
+    # Extract request context for security logging
+    from app.core.security_logging import extract_request_context
+    request_id, ip_address, user_agent = extract_request_context(request)
+
+    result = await auth_service.authenticate(
+        login_data,
+        request_id=request_id,
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+
     if isinstance(result, AuthFailure):
         if result.reason == "vendor_pending_approval":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Your vendor account is pending admin approval. You will receive an email once approved."
             )
+        elif result.reason == "account_locked":
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Account temporarily locked due to multiple failed login attempts. Please try again later or contact support."
+            )
         else:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password",
             )
-        
+
     user = result.user
-    refresh_token = result.refresh_token
-    token_obj = await auth_service.create_tokens(user, refresh_token)
+    token_obj = await auth_service.create_tokens(
+        user,
+        device_id=result.device_id,
+        remember_me=result.remember_me,
+        request_id=request_id,
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
     response_data = LoginResponse(
         **token_obj.model_dump(),
         message=f"Welcome back, {user.first_name or user.email}!"
@@ -151,13 +172,17 @@ async def login(login_data: LoginRequest, db: AsyncSession = Depends(get_db)):
 @router.post("/login/otp", response_model=ApiSuccessResponse[Token], dependencies=[Depends(RateLimiterDependency("login"))])
 async def login_otp(login_data: OTPLoginRequest, db: AsyncSession = Depends(get_db)):
     auth_service = AuthService(db)
-    user, refresh_token = await auth_service.authenticate_otp(login_data)
+    user = await auth_service.authenticate_otp(login_data)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or verification code",
         )
-    return success_response(await auth_service.create_tokens(user, refresh_token))
+    return success_response(await auth_service.create_tokens(
+        user,
+        device_id=login_data.device_id,
+        remember_me=False
+    ))
 
 
 @router.post("/guest", response_model=ApiSuccessResponse[Token], dependencies=[Depends(RateLimiterDependency("guest_login"))])
@@ -169,18 +194,26 @@ async def guest_login(guest_data: GuestLoginRequest, db: AsyncSession = Depends(
     They receive temporary credentials and limited access.
     """
     auth_service = AuthService(db)
-    user, refresh_token = await auth_service.guest_login(guest_data)
+    user = await auth_service.guest_login(guest_data)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Device already registered to a regular user. Please log in with your credentials.",
         )
-    return success_response(await auth_service.create_tokens(user, refresh_token))
+    return success_response(await auth_service.create_tokens(
+        user,
+        device_id=guest_data.device_id,
+        remember_me=False
+    ))
 
 @router.post("/refresh", response_model=ApiSuccessResponse[Token])
-async def refresh(refresh_data: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    """Refresh access token using refresh token"""
+async def refresh(refresh_data: RefreshRequest, request: Request, db: AsyncSession = Depends(get_db)):
+    """Refresh access token using refresh token with token rotation"""
     auth_service = AuthService(db)
+
+    # Extract request context for security logging
+    from app.core.security_logging import extract_request_context, log_token_refreshed, log_token_revoked
+    request_id, ip_address, user_agent = extract_request_context(request)
 
     # Verify refresh token exists and is not revoked
     result = await db.execute(
@@ -207,10 +240,39 @@ async def refresh(refresh_data: RefreshRequest, db: AsyncSession = Depends(get_d
             detail="Refresh token has expired",
         )
 
-    # Create new tokens
-    tokens = await auth_service.create_tokens(user, refresh_data.refresh_token)
+    # Revoke old refresh token (token rotation)
+    refresh_token_obj.revoked = True
+    await db.commit()
 
-    logger.info(f"Token refreshed for user: {user.email}")
+    # Log token revocation (old token)
+    log_token_revoked(
+        user_id=str(user.id),
+        email=user.email,
+        reason="rotation",
+        ip_address=ip_address,
+        request_id=request_id
+    )
+
+    # Create new tokens with a new refresh token
+    tokens = await auth_service.create_tokens(
+        user,
+        device_id=refresh_token_obj.device_id,
+        remember_me=False,
+        request_id=request_id,
+        ip_address=ip_address,
+        user_agent=user_agent
+    )
+
+    # Log token refresh
+    log_token_refreshed(
+        user_id=str(user.id),
+        email=user.email,
+        ip_address=ip_address,
+        user_agent=user_agent,
+        request_id=request_id
+    )
+
+    logger.info(f"Token refreshed with rotation for user: {user.email}")
     return success_response(tokens)
 
 @router.post("/logout", response_model=ApiSuccessResponse[dict[str, str]])
