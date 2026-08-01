@@ -1,0 +1,82 @@
+<mjml>
+  <mj-head>
+    <mj-include path="../components/head.mjml" />
+  </mj-head>
+  <mj-body background-color="#f4f6f8">
+    <mj-include path="../components/header.mjml" />
+
+    <mj-section padding="36px 32px 12px" background-color="#ffffff">
+      <mj-column>
+        <mj-text mj-class="h1">New Order Received</mj-text>
+        <mj-text font-size="18px" color="#053D7A" font-weight="600" padding-top="10px">
+          Order #{{ order_number }}
+        </mj-text>
+        <mj-text padding-top="8px">
+          You have received a new order with <strong>{{ item_count }}</strong> item(s) for a total of <strong>Ksh {{ order_total }}</strong>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    {% if items %}
+    <mj-section padding="20px 32px 20px" background-color="#ffffff">
+      <mj-column>
+        <mj-text font-size="16px" font-weight="700" color="#053D7A" padding="0 0 12px">
+          Order Items
+        </mj-text>
+        <mj-text font-size="14px" padding="0 0 16px">
+          <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border-collapse: collapse;">
+            <thead>
+              <tr style="border-bottom: 2px solid #e5e7eb;">
+                <th style="text-align: left; padding: 8px 0; color: #6b7280; font-size: 12px;">Product</th>
+                <th style="text-align: center; padding: 8px 0; color: #6b7280; font-size: 12px;">Qty</th>
+                <th style="text-align: right; padding: 8px 0; color: #6b7280; font-size: 12px;">Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for item in items %}
+              <tr style="border-bottom: 1px solid #f3f4f6;">
+                <td style="padding: 12px 0;">
+                  <span style="font-weight: 600; color: #1f2937;">{{ item.name }}</span>
+                </td>
+                <td style="text-align: center; padding: 12px 0; color: #6b7280;">{{ item.quantity }}</td>
+                <td style="text-align: right; padding: 12px 0; color: #6b7280;">Ksh {{ item.unit_price }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+    {% endif %}
+
+    {% if customer_name or customer_phone %}
+    <mj-section padding="0 32px 20px" background-color="#ffffff">
+      <mj-column background-color="#f8fafc" border-radius="8px" padding="20px">
+        <mj-text font-size="14px" font-weight="700" color="#053D7A" padding="0 0 8px">
+          Customer Information
+        </mj-text>
+        {% if customer_name %}
+        <mj-text font-size="14px" padding="0 0 4px">
+          <strong>Name:</strong> {{ customer_name }}
+        </mj-text>
+        {% endif %}
+        {% if customer_phone %}
+        <mj-text font-size="14px" padding="0">
+          <strong>Phone:</strong> {{ customer_phone }}
+        </mj-text>
+        {% endif %}
+      </mj-column>
+    </mj-section>
+    {% endif %}
+
+    <mj-section padding="0 32px 24px" background-color="#ffffff">
+      <mj-column>
+        <mj-button href="{{ dashboard_url }}" align="left" background-color="#053D7A" color="#ffffff">
+          View Order in Vendor Dashboard
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-include path="../components/footer.mjml" />
+  </mj-body>
+</mjml>

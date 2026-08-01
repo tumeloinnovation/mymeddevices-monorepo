@@ -1,5 +1,6 @@
 import { toast } from 'sonner';
 import { getAccessToken, setAccessToken, clearAccessToken } from '../../auth/token';
+import { logger } from '../logger';
 
 // For browser/client-side requests, use relative path to leverage Next.js rewrites
 // For server-side requests (SSR), use the full backend URL
@@ -97,7 +98,7 @@ class CSRFTokenManager {
         return this.token;
       }
     } catch (error) {
-      console.warn('Failed to fetch CSRF token:', error);
+      logger.warn('Failed to fetch CSRF token:', error);
     } finally {
       this.fetching = false;
     }
@@ -174,10 +175,11 @@ class TokenManager {
         return null;
       }
     } catch (error) {
-      console.error('Failed to refresh token:', error);
+      logger.error('Failed to refresh token:', error);
       return null;
     }
   }
+
 
   clearRefreshToken(): void {
     localStorage.removeItem('refresh_token');
@@ -363,7 +365,7 @@ export const apiClient = {
           }
 
           if (isAuthOrOtp) {
-            console.log(`[AUTH LOG] Request details:`, {
+            logger.log(`[AUTH LOG] Request details:`, {
               endpoint: options.endpoint,
               payload: sanitize(options.body || options.data || options.params || null),
               status: response.status,
@@ -375,13 +377,14 @@ export const apiClient = {
           return data;
         } catch (error: any) {
           if (isAuthOrOtp) {
-            console.log(`[AUTH LOG] Request failed:`, {
+            logger.log(`[AUTH LOG] Request failed:`, {
               endpoint: options.endpoint,
               payload: sanitize(options.body || options.data || options.params || null),
               status: error.status || 'unknown',
               response: sanitize(error.message || error),
             });
           }
+
           if (attempts === maxAttempts - 1) {
             throw error;
           }
@@ -576,8 +579,9 @@ export const apiClient = {
         }
       }
     } catch (e) {
-      console.warn('Failed to parse token expiry for cookie:', e);
+      logger.warn('Failed to parse token expiry for cookie:', e);
     }
+
 
     document.cookie = `auth_token=${accessToken}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
   },

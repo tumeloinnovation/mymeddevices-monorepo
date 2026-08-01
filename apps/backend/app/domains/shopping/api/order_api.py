@@ -50,7 +50,7 @@ async def get_public_order_details(
     return success_response(order)
 
 
-@router.get("", response_model=ApiSuccessResponse[OrderListResponse])
+@router.get("")
 async def list_my_orders(
     current_user: Annotated[User, Depends(get_current_user)],
     page: int = Query(1, ge=1),
@@ -64,7 +64,8 @@ async def list_my_orders(
         offset=(page - 1) * page_size,
         limit=page_size
     )
-    return success_response({"orders": orders, "total": total})
+    # Return in format expected by frontend: items instead of orders
+    return success_response({"items": orders, "total": total, "page": page, "limit": page_size})
 
 @router.get("/{order_id_or_number}", response_model=ApiSuccessResponse[OrderResponse])
 async def get_order_details(

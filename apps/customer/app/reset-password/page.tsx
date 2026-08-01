@@ -19,7 +19,7 @@ function ResetPasswordForm() {
     const router = useRouter();
 
     // Get URL params (from email link or forgot-password redirect)
-    const urlToken = searchParams.get('token');
+    const urlToken = searchParams.get('token') || searchParams.get('code');
     const urlEmail = searchParams.get('user_id') || searchParams.get('email');
     const urlStep = searchParams.get('step');
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, field_serializer
 from typing import List, Optional, Any, Union
 from datetime import datetime
 import uuid
@@ -9,6 +9,14 @@ class ProductMinResponse(BaseModel):
     sku: Optional[str] = None
     name: str
     image_url: Optional[str] = None
+
+    @field_serializer('image_url')
+    @classmethod
+    def serialize_image_url(cls, value: Any, _info: Any) -> Optional[str]:
+        """Ensure image_url is properly serialized from Product model's @property."""
+        if value is None:
+            return None
+        return str(value) if value else None
 
     class Config:
         from_attributes = True
@@ -91,6 +99,7 @@ class OrderBase(BaseModel):
     currency: str = "KES"
     shipping_address: Optional[ShippingAddress] = None
     notes: Optional[str] = None
+    internal_notes: Optional[str] = None
 
     @field_validator("total_amount", "shipping_amount", "packaging_fee", "services_fee", "discount_amount", "subtotal", mode="before")
     @classmethod
@@ -112,11 +121,24 @@ class OrderCreate(BaseModel):
 class OrderStatusUpdate(BaseModel):
     status: str
 
+class OrderInternalNotesUpdate(BaseModel):
+    internal_notes: str
+
 class UserMinResponse(BaseModel):
     id: uuid.UUID
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     email: str
+
+    class Config:
+        from_attributes = True
+
+class OrderTimelineEventResponse(BaseModel):
+    id: uuid.UUID
+    status: str
+    message: str
+    created_at: datetime
+    created_by: Optional[uuid.UUID] = None
 
     class Config:
         from_attributes = True
@@ -130,6 +152,7 @@ class OrderResponse(OrderBase):
     updated_at: Optional[datetime]
     items: List[OrderItemResponse]
     user: Optional[UserMinResponse] = None
+    timeline_events: Optional[List[OrderTimelineEventResponse]] = None
 
     class Config:
         from_attributes = True
@@ -137,16 +160,6 @@ class OrderResponse(OrderBase):
 class OrderListResponse(BaseModel):
     orders: List[OrderResponse]
     total: int
-
-class OrderTimelineEventResponse(BaseModel):
-    id: uuid.UUID
-    status: str
-    message: str
-    created_at: datetime
-    created_by: Optional[uuid.UUID] = None
-
-    class Config:
-        from_attributes = True
 
 class VendorOrderItemResponse(BaseModel):
     id: uuid.UUID
@@ -183,6 +196,7 @@ class VendorOrderResponse(BaseModel):
     vendor_amount: int
     item_count: int
     created_at: datetime
+    customer_notes: Optional[str] = None
     items: List[VendorOrderItemResponse] = []
 
     class Config:

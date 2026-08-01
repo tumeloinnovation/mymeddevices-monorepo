@@ -94,7 +94,7 @@ ORDER_ROLLUP_RULES: List[RollupRule] = [
     # Processing: at least 50% of items in processing
     RollupRule(
         parent_status=OrderStatus.PROCESSING.value,
-        required_child_statuses={OrderItemFulfillmentStatus.PROCESSING.value},
+        required_child_statuses={OrderItemFulfillmentStatus.PROCESSING.value, OrderItemFulfillmentStatus.PACKED.value},
         min_percentage=0.5
     ),
     # Shipped: at least 50% of items shipped
@@ -124,10 +124,10 @@ ORDER_ROLLUP_RULES: List[RollupRule] = [
 ]
 
 SUB_ORDER_ROLLUP_RULES: List[RollupRule] = [
-    # Processing: at least 50% of items in processing
+    # Processing: at least 50% of items in processing/packed
     RollupRule(
         parent_status=SubOrderStatus.PROCESSING.value,
-        required_child_statuses={OrderItemFulfillmentStatus.PROCESSING.value},
+        required_child_statuses={OrderItemFulfillmentStatus.PROCESSING.value, OrderItemFulfillmentStatus.PACKED.value},
         min_percentage=0.5
     ),
     # Shipped: at least 50% of items shipped
@@ -215,15 +215,14 @@ class OrderStateMachine:
         return to_enum in SUB_ORDER_TRANSITIONS.get(from_enum, [])
 
     @staticmethod
-    def calculate_order_status(item_statuses: List[str]) -> Optional[str]:
+    def calculate_order_status(item_statuses: List[str], strict_lifecycle: bool = True) -> Optional[str]:
         """
         Calculate Order status from OrderItem statuses.
 
-        Applies rollup rules in priority order to determine the appropriate
-        parent status based on child item statuses.
-
         Args:
             item_statuses: List of current order item statuses
+            strict_lifecycle: If True (default), enforces strict lifecycle rules (100% item completion
+                              required for 'shipped' and 'delivered', any processing item marks 'processing').
 
         Returns:
             Calculated order status, or None if no rule matches
@@ -231,14 +230,33 @@ class OrderStateMachine:
         if not item_statuses:
             return None
 
+        if strict_lifecycle:
+            active_statuses = [s for s in item_statuses if s != OrderItemFulfillmentStatus.CANCELLED.value]
+            if not active_statuses:
+                return OrderStatus.CANCELLED.value
+
+            if all(s == OrderItemFulfillmentStatus.REFUNDED.value for s in active_statuses):
+                return OrderStatus.REFUNDED.value
+
+            if all(s == OrderItemFulfillmentStatus.DELIVERED.value for s in active_statuses):
+                return OrderStatus.DELIVERED.value
+
+            # Parent order is shipped ONLY when ALL active items are shipped or delivered
+            if all(s in (OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value) for s in active_statuses):
+                return OrderStatus.SHIPPED.value
+
+            # Parent order is processing if AT LEAST ONE active item is in processing, packed, shipped, or delivered
+            if any(s in (OrderItemFulfillmentStatus.PROCESSING.value, OrderItemFulfillmentStatus.PACKED.value, OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value) for s in active_statuses):
+                return OrderStatus.PROCESSING.value
+
+            return None
+
+        # Threshold-based evaluation
         total_items = len(item_statuses)
         status_counts: Dict[str, int] = {}
-
-        # Count occurrences of each status
         for status in item_statuses:
             status_counts[status] = status_counts.get(status, 0) + 1
 
-        # Check rollup rules in priority order
         for rule in ORDER_ROLLUP_RULES:
             matching_count = sum(
                 status_counts.get(s, 0)
@@ -247,16 +265,16 @@ class OrderStateMachine:
             if matching_count / total_items >= rule.min_percentage:
                 return rule.parent_status
 
-        # Default: no change
         return None
 
     @staticmethod
-    def calculate_sub_order_status(item_statuses: List[str]) -> Optional[str]:
+    def calculate_sub_order_status(item_statuses: List[str], strict_lifecycle: bool = True) -> Optional[str]:
         """
         Calculate SubOrder status from OrderItem statuses.
 
         Args:
             item_statuses: List of current order item statuses
+            strict_lifecycle: If True (default), enforces strict lifecycle rules.
 
         Returns:
             Calculated sub-order status, or None if no rule matches
@@ -264,14 +282,33 @@ class OrderStateMachine:
         if not item_statuses:
             return None
 
+        if strict_lifecycle:
+            active_statuses = [s for s in item_statuses if s != OrderItemFulfillmentStatus.CANCELLED.value]
+            if not active_statuses:
+                return SubOrderStatus.CANCELLED.value
+
+            if all(s == OrderItemFulfillmentStatus.REFUNDED.value for s in active_statuses):
+                return SubOrderStatus.REFUNDED.value
+
+            if all(s == OrderItemFulfillmentStatus.DELIVERED.value for s in active_statuses):
+                return SubOrderStatus.DELIVERED.value
+
+            # Sub-order is shipped ONLY when ALL active items are shipped or delivered
+            if all(s in (OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value) for s in active_statuses):
+                return SubOrderStatus.SHIPPED.value
+
+            # Sub-order is processing if AT LEAST ONE active item is in processing, packed, shipped, or delivered
+            if any(s in (OrderItemFulfillmentStatus.PROCESSING.value, OrderItemFulfillmentStatus.PACKED.value, OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value) for s in active_statuses):
+                return SubOrderStatus.PROCESSING.value
+
+            return SubOrderStatus.PENDING.value
+
+        # Threshold-based evaluation
         total_items = len(item_statuses)
         status_counts: Dict[str, int] = {}
-
-        # Count occurrences of each status
         for status in item_statuses:
             status_counts[status] = status_counts.get(status, 0) + 1
 
-        # Check rollup rules in priority order
         for rule in SUB_ORDER_ROLLUP_RULES:
             matching_count = sum(
                 status_counts.get(s, 0)
@@ -280,7 +317,6 @@ class OrderStateMachine:
             if matching_count / total_items >= rule.min_percentage:
                 return rule.parent_status
 
-        # Default: no change
         return None
 
     @staticmethod

@@ -29,6 +29,7 @@ class Order(Base, IDMixin, AuditMixin):
     currency: Mapped[str] = mapped_column(String(3), default="KES", nullable=False)
     shipping_address: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    internal_notes: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True, index=True)
 
     # Relationships

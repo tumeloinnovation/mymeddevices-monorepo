@@ -10,7 +10,8 @@ import {
   CheckCircle2,
   AlertCircle,
   Loader2,
-  Package
+  Package,
+  FileText
 } from 'lucide-react';
 import { useOrder } from '@/lib/api/hooks/useOrders';
 import { ordersApi } from '@/lib/api/endpoints/orders';
@@ -350,6 +351,23 @@ export default function OrderDetailsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Customer Notes Card */}
+          {order.customer_notes && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2 text-sm">
+                  <FileText className="h-4 w-4 text-emerald-600" />
+                  Customer Instructions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-slate-600 dark:text-slate-300 whitespace-pre-wrap bg-slate-50 dark:bg-slate-900 p-2.5 rounded border border-slate-100 dark:border-slate-800">
+                  {order.customer_notes}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Actions Card */}
           <Card>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { useAuthStore } from '@/lib/store/useAuthStore';
+import { useAuthStore, logger } from '@mymeddevices/shared-core';
 import { Loader2 } from 'lucide-react';
 
 export default function VendorGuard({ children }: { children: React.ReactNode }) {
@@ -20,12 +20,14 @@ export default function VendorGuard({ children }: { children: React.ReactNode })
             // This prevents redirect loops when cookies are cleared but localStorage persists
             const hasRefreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
             if (!isAuthenticated || !user || !hasRefreshToken) {
+                logger.log('🛡️ [VendorGuard] Access denied: unauthenticated, redirecting to /login');
                 router.replace('/login');
                 return;
             }
 
             // 2. Not a vendor -> Redirect to login
             if (user.role !== 'vendor') {
+                logger.log('🛡️ [VendorGuard] Access denied: role is not vendor, redirecting to /login', { role: user.role });
                 router.replace('/login');
                 return;
             }

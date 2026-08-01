@@ -109,6 +109,7 @@ export interface VendorOrder {
   vendor_amount: number;
   item_count: number;
   created_at: string;
+  customer_notes?: string;
   due_date?: string;
 }
 

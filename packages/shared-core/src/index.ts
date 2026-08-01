@@ -19,3 +19,5 @@ export { useCheckoutAuthStore } from './lib/store/useAuthStore';
 export { useCartStore, CART_STORAGE_KEY } from './lib/store/useCartStore';
 export type { Cart, CartItem } from './lib/services/cart-service';
 export type { Cart as ShoppingCart } from './services/shopping-service';
+export * from './lib/logger';
+

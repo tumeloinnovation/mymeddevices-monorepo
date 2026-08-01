@@ -517,9 +517,9 @@ class PaymentService:
 
                 # Update Order status if linked
                 if transaction.order_id:
-                    order_stmt = update(Order).where(Order.id == transaction.order_id).values(status="failed")
+                    order_stmt = update(Order).where(Order.id == transaction.order_id).values(status="cancelled")
                     await self.db.execute(order_stmt)
-                    logger.info(f"Order {transaction.order_id} updated to 'failed' via status check")
+                    logger.info(f"Order {transaction.order_id} updated to 'cancelled' via status check")
 
             await self.db.commit()
 

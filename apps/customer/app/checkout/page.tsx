@@ -11,6 +11,7 @@ import { PACKAGING_FEE, SERVICES_FEE } from '@/lib/config/fees';
 import CustomerSection from './_components/CustomerSection';
 import DeliverySection from './_components/DeliverySection';
 import ReviewSection from './_components/ReviewSection';
+import NotesSection from './_components/NotesSection';
 import Section from './_components/Section';
 import SummaryPanel from './_components/SummaryPanel';
 import MobileBottomSummary from './_components/MobileBottomSummary';
@@ -53,6 +54,8 @@ export default function HybridCheckout() {
     handleRemoveCoupon,
     isApplyingCoupon,
     appliedCoupon,
+    orderNotes,
+    setOrderNotes,
   } = useCheckoutLogic();
 
 
@@ -240,6 +243,17 @@ export default function HybridCheckout() {
               }}
             />
           </Section>
+
+          <Separator className="my-6" />
+
+          {/* --- Order Notes Section --- */}
+          <div className="py-4">
+            <NotesSection
+              notes={orderNotes}
+              setNotes={setOrderNotes}
+              disabled={isPending || isProcessingMpesa}
+            />
+          </div>
 
           <Separator className="my-6" />
 

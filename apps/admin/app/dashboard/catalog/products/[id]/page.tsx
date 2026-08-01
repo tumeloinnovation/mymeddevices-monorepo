@@ -170,6 +170,7 @@ const productSchema = z.object({
   meta_title: z.string().default(""),
   meta_description: z.string().default(""),
   tags: z.string().default(""),
+  certifications: z.string().default(""),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -199,6 +200,7 @@ function productToFormValues(p: Product): ProductFormValues {
     meta_title: p.meta_title || "",
     meta_description: p.meta_description || "",
     tags: (p.tags || []).join(", "),
+    certifications: (p.certifications || []).join(", "),
   };
 }
 

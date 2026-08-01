@@ -14,6 +14,11 @@ import {
   CreditCard,
   FileText,
   Loader2,
+  Calendar,
+  Edit3,
+  Save,
+  RefreshCw,
+  Store,
 } from "lucide-react";
 import {
   shoppingService,
@@ -31,6 +36,7 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -76,12 +82,17 @@ export default function OrderDetailPage() {
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [internalNotes, setInternalNotes] = useState("");
+  const [isEditingNotes, setIsEditingNotes] = useState(false);
+  const [savingNotes, setSavingNotes] = useState(false);
 
   const fetchOrder = async () => {
     setLoading(true);
     try {
       const response = await shoppingService.getOrderDetails(id as string);
-      setOrder((response as any)?.data ?? response);
+      const orderData = (response as any)?.data ?? response;
+      setOrder(orderData);
+      setInternalNotes(orderData?.internal_notes || "");
     } catch (error) {
       console.error("Failed to load order:", error);
       toast.error("Failed to load order details");
@@ -131,6 +142,20 @@ export default function OrderDetailPage() {
       toast.error(error.response?.data?.detail || "Failed to ship order");
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const handleSaveInternalNotes = async () => {
+    setSavingNotes(true);
+    try {
+      await shoppingService.updateOrderInternalNotes(id as string, internalNotes);
+      toast.success("Internal notes updated");
+      setIsEditingNotes(false);
+      fetchOrder();
+    } catch (error: any) {
+      toast.error(error.response?.data?.detail || "Failed to update notes");
+    } finally {
+      setSavingNotes(false);
     }
   };
 
@@ -212,22 +237,37 @@ export default function OrderDetailPage() {
                   {order.items.map((item: any) => (
                     <div key={item.id} className="flex items-center justify-between py-2">
                       <div className="flex items-center gap-4">
-                        <div className="h-12 w-12 rounded bg-muted flex items-center justify-center">
-                          <Package className="h-6 w-6 text-muted-foreground" />
+                        <div className="h-12 w-12 rounded bg-muted flex items-center justify-center overflow-hidden">
+                          {item.product?.image_url || item.product?.images?.[0]?.url ? (
+                            <img
+                              src={item.product?.image_url || item.product?.images?.[0]?.url}
+                              alt={item.product_name || item.product?.name || "Product"}
+                              className="h-full w-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLImageElement).onerror = null;
+                                (e.currentTarget as HTMLImageElement).src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4'/%3E%3C/svg%3E";
+                              }}
+                            />
+                          ) : (
+                            <Package className="h-6 w-6 text-muted-foreground" />
+                          )}
                         </div>
                         <div>
-                          <p className="font-medium">Product ID: {item.product_id.split("-")[0]}...</p>
+                          <p className="font-medium">{item.product_name || item.product?.name || "Product"}</p>
                           <p className="text-sm text-muted-foreground">
-                            Vendor ID: {item.vendor_id.split("-")[0]}...
+                            SKU: {item.product?.sku || "N/A"}
                           </p>
                           <p className="text-sm text-muted-foreground">
-                            Qty: {item.quantity} × {order.currency} {item.unit_price.toLocaleString()}
+                            Vendor: {item.vendor_name || <span className="text-xs">ID: {item.vendor_id?.split("-")[0]}...</span>}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            Qty: {item.quantity} × {order.currency} {(typeof item.unit_price === "number" ? item.unit_price : Number(item.unit_price)).toLocaleString()}
                           </p>
                         </div>
                       </div>
                       <div className="text-right">
                         <p className="font-semibold">
-                          {order.currency} {item.subtotal.toLocaleString()}
+                          {order.currency} {(typeof item.subtotal === "number" ? item.subtotal : Number(item.subtotal)).toLocaleString()}
                         </p>
                       </div>
                     </div>
@@ -247,13 +287,123 @@ export default function OrderDetailPage() {
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <FileText className="h-5 w-5" />
-                  Order Notes
+                  Customer Notes
                 </CardTitle>
+                <CardDescription>Notes provided by the customer at checkout</CardDescription>
               </CardHeader>
               <CardContent>
                 <p className={order.notes ? "" : "text-muted-foreground italic"}>
                   {order.notes || "No notes provided for this order."}
                 </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Edit3 className="h-5 w-5" />
+                  Internal Notes
+                </CardTitle>
+                <CardDescription>Admin-only notes for internal communication</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {isEditingNotes ? (
+                  <div className="space-y-3">
+                    <Textarea
+                      value={internalNotes}
+                      onChange={(e) => setInternalNotes(e.target.value)}
+                      className="w-full min-h-[100px]"
+                      placeholder="Add internal notes (visible only to admins)..."
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        onClick={handleSaveInternalNotes}
+                        disabled={savingNotes}
+                      >
+                        {savingNotes ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="mr-2 h-4 w-4" />
+                            Save Notes
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setIsEditingNotes(false);
+                          setInternalNotes(order?.internal_notes || "");
+                        }}
+                        disabled={savingNotes}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className={internalNotes ? "" : "text-muted-foreground italic"}>
+                      {internalNotes || "No internal notes. Click to add notes."}
+                    </p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setIsEditingNotes(true)}
+                    >
+                      <Edit3 className="mr-2 h-4 w-4" />
+                      {internalNotes ? "Edit Notes" : "Add Notes"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Order Timeline */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Order Timeline
+                </CardTitle>
+                <CardDescription>Status changes and order activity log</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {order.timeline_events && order.timeline_events.length > 0 ? (
+                  <div className="space-y-4">
+                    {order.timeline_events.map((event: any, idx: number) => (
+                      <div key={idx} className="flex items-start gap-3">
+                        <div className={`mt-1 h-2 w-2 rounded-full ${
+                          event.status === 'delivered' || event.status === 'completed' ? 'bg-green-500' :
+                          event.status === 'cancelled' ? 'bg-red-500' :
+                          event.status === 'shipped' ? 'bg-purple-500' :
+                          event.status === 'paid' ? 'bg-blue-500' :
+                          'bg-muted'
+                        }`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium">{event.message || event.status}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(event.created_at).toLocaleString('en-US', {
+                              month: 'short',
+                              day: 'numeric',
+                              year: 'numeric',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                            {event.created_by && ` • By: ${event.created_by}`}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground italic text-sm">No timeline events available for this order.</p>
+                )}
               </CardContent>
             </Card>
 
@@ -269,27 +419,50 @@ export default function OrderDetailPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <AdminMap 
+                  {/* Route Summary */}
+                  <div className="flex items-center justify-between text-sm bg-muted/50 rounded-md px-3 py-2">
+                    <span className="text-muted-foreground">Total Stops</span>
+                    <span className="font-semibold">{order.shipping_address.route_coordinates.length} stops</span>
+                  </div>
+
+                  <AdminMap
                     markers={(() => {
                       const coords = order.shipping_address.route_coordinates;
                       const markers = [];
+
+                      // Create a map of unique vendors in this order
+                      const vendorMap = new Map();
+                      order.items?.forEach((item: any) => {
+                        if (item.vendor_id && item.vendor_name) {
+                          vendorMap.set(String(item.vendor_id), item.vendor_name);
+                        }
+                      });
+
+                      // Company Office (Start)
                       markers.push({
                         lat: coords[0][0],
                         lng: coords[0][1],
                         label: "Company Office (Start)"
                       });
+
+                      // Vendor pickups with names
                       for (let i = 1; i < coords.length - 1; i++) {
+                        const vendorId = order.shipping_address.vendor_pickups?.[i - 1]?.vendor_id;
+                        const vendorName = vendorId && vendorMap.get(String(vendorId));
+
                         markers.push({
                           lat: coords[i][0],
                           lng: coords[i][1],
-                          label: `Vendor Pickup #${i}`
+                          label: vendorName ? `${vendorName}` : `Vendor Pickup #${i}`
                         });
                       }
+
+                      // Customer destination
                       if (coords.length > 1) {
                         markers.push({
                           lat: coords[coords.length - 1][0],
                           lng: coords[coords.length - 1][1],
-                          label: `Customer: ${order.shipping_address.full_name || 'Delivery Destination'}`
+                          label: `Customer: ${order.shipping_address.full_name || order.shipping_address.first_name || 'Delivery Destination'}`
                         });
                       }
                       return markers;
@@ -297,6 +470,23 @@ export default function OrderDetailPage() {
                     routeCoordinates={order.shipping_address.route_coordinates}
                     height="350px"
                   />
+
+                  {/* Copy Coordinates Button */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
+                    onClick={() => {
+                      const coords = order.shipping_address.route_coordinates;
+                      const coordsText = coords.map((c: number[]) => `${c[0]},${c[1]}`).join('|');
+                      navigator.clipboard.writeText(coordsText);
+                      toast.success('Route coordinates copied to clipboard');
+                    }}
+                  >
+                    <Store className="mr-2 h-4 w-4" />
+                    Copy Route Coordinates
+                  </Button>
+
                   {order.shipping_address.calculated_distance_km && (
                     <div className="flex justify-between items-center text-sm font-semibold border-t pt-3">
                       <span className="text-muted-foreground">Calculated Route Distance</span>

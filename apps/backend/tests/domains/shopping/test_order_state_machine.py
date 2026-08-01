@@ -135,14 +135,14 @@ class TestOrderStateMachine:
     def test_order_rollup_50_percent_shipped(self):
         """Test order status when 50% of items are shipped."""
         statuses = ['shipped', 'shipped', 'pending', 'pending']
-        result = OrderStateMachine.calculate_order_status(statuses)
-        assert result == 'shipped'  # 50% threshold met
+        assert OrderStateMachine.calculate_order_status(statuses, strict_lifecycle=False) == 'shipped'
+        assert OrderStateMachine.calculate_order_status(statuses, strict_lifecycle=True) == 'processing'
 
     def test_order_rollup_50_percent_processing(self):
         """Test order status when 50% of items are processing."""
         statuses = ['processing', 'processing', 'pending', 'pending']
-        result = OrderStateMachine.calculate_order_status(statuses)
-        assert result == 'processing'  # 50% threshold met
+        assert OrderStateMachine.calculate_order_status(statuses, strict_lifecycle=False) == 'processing'
+        assert OrderStateMachine.calculate_order_status(statuses, strict_lifecycle=True) == 'processing'
 
     def test_order_rollup_all_cancelled(self):
         """Test order status when all items are cancelled."""
@@ -170,9 +170,8 @@ class TestOrderStateMachine:
     def test_order_rollup_mixed_statuses(self):
         """Test order status with mixed statuses."""
         statuses = ['delivered', 'shipped', 'pending']
-        result = OrderStateMachine.calculate_order_status(statuses)
-        # Should return None since no rule matches the mixed state
-        assert result is None
+        assert OrderStateMachine.calculate_order_status(statuses, strict_lifecycle=False) is None
+        assert OrderStateMachine.calculate_order_status(statuses, strict_lifecycle=True) == 'processing'
 
     # ==================== SubOrder Rollup Tests ====================
 
@@ -184,16 +183,15 @@ class TestOrderStateMachine:
 
     def test_sub_order_rollup_50_percent_shipped(self):
         """Test sub-order status when 50% of items are shipped (no processing)."""
-        # Use pending instead of processing so shipped rule matches first
         statuses = ['shipped', 'shipped', 'pending', 'pending']
-        result = OrderStateMachine.calculate_sub_order_status(statuses)
-        assert result == 'shipped'
+        assert OrderStateMachine.calculate_sub_order_status(statuses, strict_lifecycle=False) == 'shipped'
+        assert OrderStateMachine.calculate_sub_order_status(statuses, strict_lifecycle=True) == 'processing'
 
     def test_sub_order_rollup_50_percent_processing(self):
         """Test sub-order status when 50% of items are processing."""
         statuses = ['processing', 'processing', 'pending', 'pending']
-        result = OrderStateMachine.calculate_sub_order_status(statuses)
-        assert result == 'processing'
+        assert OrderStateMachine.calculate_sub_order_status(statuses, strict_lifecycle=False) == 'processing'
+        assert OrderStateMachine.calculate_sub_order_status(statuses, strict_lifecycle=True) == 'processing'
 
     def test_sub_order_rollup_all_cancelled(self):
         """Test sub-order status when all items are cancelled."""

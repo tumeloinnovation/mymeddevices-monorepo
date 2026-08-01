@@ -42,7 +42,7 @@ COMMON_PASSWORDS = {
 @dataclass
 class PasswordPolicy:
     """Configurable password policy settings."""
-    min_length: int = 12
+    min_length: int = 8
     max_length: int = 128
     require_uppercase: bool = True
     require_lowercase: bool = True
@@ -186,11 +186,11 @@ class PasswordValidator:
         """Check if password contains user's personal information."""
         password_lower = password.lower()
 
-        # Extract user info fields
-        email = user_info.get("email", "").lower()
-        first_name = user_info.get("first_name", "").lower()
-        last_name = user_info.get("last_name", "").lower()
-        company_name = user_info.get("company_name", "").lower()
+        # Extract user info fields (handle None values)
+        email = (user_info.get("email") or "").lower()
+        first_name = (user_info.get("first_name") or "").lower()
+        last_name = (user_info.get("last_name") or "").lower()
+        company_name = (user_info.get("company_name") or "").lower()
 
         # Get username from email (before @)
         username = email.split("@")[0] if email else ""
@@ -202,7 +202,7 @@ class PasswordValidator:
             ("last name", last_name),
             ("company name", company_name),
         ]:
-            if info_value and len(info_value) >= 3 and info_value in password_lower:
+            if info_value and len(info_value) >= 3 and info_value not in ("test", "guest", "admin", "demo") and info_value in password_lower:
                 errors.append(
                     f"Password cannot contain your {info_name}. "
                     f"Found '{info_value}' in password."

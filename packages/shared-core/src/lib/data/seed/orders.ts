@@ -4,7 +4,7 @@ export const SEED_ORDERS: Order[] = [
   {
     id: 1001,
     number: 'ORD-2024-1001',
-    status: 'completed',
+    status: 'delivered',
     currency: 'KES',
     date_created: '2024-05-15T10:30:00Z',
     date_modified: '2024-05-15T14:20:00Z',

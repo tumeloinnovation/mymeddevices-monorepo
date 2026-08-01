@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  compiler: {
+    removeConsole: true,
+  },
   transpilePackages: ['react-map-gl', '@mymeddevices/shared-core', '@mymeddevices/shared-ui', '@mymeddevices/shared-admin'],
   async rewrites() {
     const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';

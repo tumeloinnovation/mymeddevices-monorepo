@@ -1,0 +1,66 @@
+{
+  "slug": "auth-system-security-audit-remediation-plan",
+  "inputHash": "b6956f0588c99aa9",
+  "generatedAt": "2026-07-30T17:05:27.531Z",
+  "source": "claude-cli",
+  "recipe": {
+    "start_with_plan_mode": true,
+    "subagents": [
+      {
+        "type": "Explore",
+        "count": 1,
+        "for": "Very thorough search to locate all auth-related files including middleware, routes, controllers, session stores, and rate limiters across the codebase"
+      },
+      {
+        "type": "general-purpose",
+        "count": 2,
+        "for": "Trace each user role's complete authentication journey independently and analyze permission check logic"
+      },
+      {
+        "type": "Plan",
+        "count": 1,
+        "for": "Design remediation strategy addressing architectural trade-offs before implementing fixes"
+      }
+    ],
+    "skills": [
+      {
+        "name": "/security-review",
+        "when": "After discovery phase completes to audit authentication paths, session handling, and authorization checks"
+      },
+      {
+        "name": "/review",
+        "when": "Before merging any remediation changes to ensure quality standards are met"
+      }
+    ],
+    "hooks_to_consider": [
+      {
+        "type": "PreToolUse",
+        "for": "Guard against accidental edits to critical auth middleware during initial discovery phase"
+      },
+      {
+        "type": "SessionEnd",
+        "for": "Automatically save findings and progress to prevent loss of security audit results between sessions"
+      },
+      {
+        "type": "PostToolUse",
+        "for": "Auto-format and log all security-sensitive file modifications for audit trail"
+      }
+    ],
+    "expected_turns": 24,
+    "estimated_cost_usd": 4.8,
+    "execution_order": [
+      "1. Start in Plan Mode and use Explore subagent (very thorough) to map all auth-related files",
+      "2. Create task list with TaskCreate for tracking audit phases",
+      "3. Use general-purpose subagent to trace each role's auth journey and document flows",
+      "4. Run /security-review skill on identified authentication paths and session handling",
+      "5. Analyze findings and rank issues by severity (critical > logic > improvements)",
+      "6. Use Plan subagent to design remediation strategy with architectural considerations",
+      "7. Enter implementation phase with structured fixes prioritized by severity",
+      "8. Apply fixes with PostToolUse logging for audit trail",
+      "9. Run /review before merging any remediation changes",
+      "10. Verify fixes with testing and document migration strategy"
+    ],
+    "rationale": "This plan requires systematic discovery before remediation can begin. Plan Mode provides structure for the multi-phase approach, Explore subagent handles the file discovery efficiently, and /security-review ensures comprehensive coverage of security vulnerabilities. Task tracking is essential given the complex, multi-step nature of security fixes across multiple auth flows."
+  },
+  "rawOutput": "{\"start_with_plan_mode\":true,\"subagents\":[{\"type\":\"Explore\",\"count\":1,\"for\":\"Very thorough search to locate all auth-related files including middleware, routes, controllers, session stores, and rate limiters across the codebase\"},{\"type\":\"general-purpose\",\"count\":2,\"for\":\"Trace each user role's complete authentication journey independently and analyze permission check logic\"},{\"type\":\"Plan\",\"count\":1,\"for\":\"Design remediation strategy addressing architectural trade-offs before implementing fixes\"}],\"skills\":[{\"name\":\"/security-review\",\"when\":\"After discovery phase completes to audit authentication paths, session handling, and authorization checks\"},{\"name\":\"/review\",\"when\":\"Before merging any remediation changes to ensure quality standards are met\"}],\"hooks_to_consider\":[{\"type\":\"PreToolUse\",\"for\":\"Guard against accidental edits to critical auth middleware during initial discovery phase\"},{\"type\":\"SessionEnd\",\"for\":\"Automatically save findings and progress to prevent loss of security audit results between sessions\"},{\"type\":\"PostToolUse\",\"for\":\"Auto-format and log all security-sensitive file modifications for audit trail\"}],\"expected_turns\":24,\"estimated_cost_usd\":4.80,\"execution_order\":[\"1. Start in Plan Mode and use Explore subagent (very thorough) to map all auth-related files\",\"2. Create task list with TaskCreate for tracking audit phases\",\"3. Use general-purpose subagent to trace each role's auth journey and document flows\",\"4. Run /security-review skill on identified authentication paths and session handling\",\"5. Analyze findings and rank issues by severity (critical > logic > improvements)\",\"6. Use Plan subagent to design remediation strategy with architectural considerations\",\"7. Enter implementation phase with structured fixes prioritized by severity\",\"8. Apply fixes with PostToolUse logging for audit trail\",\"9. Run /review before merging any remediation changes\",\"10. Verify fixes with testing and document migration strategy\"],\"rationale\":\"This plan requires systematic discovery before remediation can begin. Plan Mode provides structure for the multi-phase approach, Explore subagent handles the file discovery efficiently, and /security-review ensures comprehensive coverage of security vulnerabilities. Task tracking is essential given the complex, multi-step nature of security fixes across multiple auth flows.\"}\n"
+}

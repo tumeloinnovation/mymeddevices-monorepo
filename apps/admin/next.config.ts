@@ -7,6 +7,9 @@ const withBundleAnalyzer = bundleAnalyzer({
 });
 
 const nextConfig: NextConfig = {
+  compiler: {
+    removeConsole: true,
+  },
   compress: true,
   productionBrowserSourceMaps: false,
   images: {

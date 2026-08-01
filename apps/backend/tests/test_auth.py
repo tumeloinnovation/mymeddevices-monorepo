@@ -1051,7 +1051,7 @@ async def test_forgot_password_and_reset_flow(client: AsyncClient, db):
     reset_data = {
         "email": "forgotpass@example.com",
         "code": otp.code,
-        "new_password": "NewSecurePass123!"
+        "new_password": "NewSecureCode2026!"
     }
     response = await client.post("/api/v1/auth/reset-password", json=reset_data)
     assert response.status_code == 200
@@ -1062,7 +1062,7 @@ async def test_forgot_password_and_reset_flow(client: AsyncClient, db):
     # 5. Login with new password
     login_data = {
         "email": "forgotpass@example.com",
-        "password": "NewSecurePass123!",
+        "password": "NewSecureCode2026!",
         "device_id": "device_resetpass",
         "device_name": "Test Browser"
     }

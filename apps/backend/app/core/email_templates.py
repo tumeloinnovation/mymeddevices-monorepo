@@ -68,6 +68,29 @@ def vendor_approved_html(company_name: str, dashboard_url: Optional[str] = None)
     )
 
 
+def vendor_order_items_html(
+    order_number: str,
+    order_total: str,
+    item_count: int,
+    items: List[Dict[str, Any]],
+    customer_name: Optional[str] = None,
+    customer_phone: Optional[str] = None,
+    dashboard_url: Optional[str] = None,
+) -> str:
+    return render_email_template(
+        "vendor_order_items.html",
+        {
+            "order_number": order_number,
+            "order_total": order_total,
+            "item_count": item_count,
+            "items": items,
+            "customer_name": customer_name,
+            "customer_phone": customer_phone,
+            "dashboard_url": dashboard_url or f"{settings.SITE_URL}/vendor/orders",
+        },
+    )
+
+
 def new_device_login_html(
     user_name: str,
     device: str,

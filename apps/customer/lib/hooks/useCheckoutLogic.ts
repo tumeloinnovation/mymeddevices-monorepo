@@ -62,6 +62,7 @@ export function useCheckoutLogic() {
     const [isAddingNotes, setIsAddingNotes] = useState(false);
     const [showSummaryModal, setShowSummaryModal] = useState(false);
     const [isPending, setIsPending] = useState(false);
+    const [orderNotes, setOrderNotes] = useState('');
 
     // Coupon state
     const [couponCode, setCouponCode] = useState('');
@@ -385,7 +386,7 @@ export function useCheckoutLogic() {
                 cart,
                 shippingAddress,
                 shippingAddress, // billing same as shipping
-                undefined, // notes
+                orderNotes || undefined, // notes from customer input
                 guestToken || undefined
             );
 
@@ -474,5 +475,7 @@ export function useCheckoutLogic() {
         setCouponCode,
         isApplyingCoupon,
         appliedCoupon,
+        orderNotes,
+        setOrderNotes,
     };
 }

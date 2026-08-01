@@ -726,13 +726,7 @@ class AuthService:
         """
         Reset user password using OTP.
         """
-        otp_service = OTPService(self.db)
-        is_valid = await otp_service.verify_otp(str(user.id), otp_code, purpose="reset_password")
-        if not is_valid:
-            logger.warning(f"Password reset failed - invalid OTP for user: {user.email}")
-            return False
-
-        # Validate new password strength
+        # Validate new password strength FIRST before consuming OTP
         user_info = {
             "email": user.email,
             "first_name": user.first_name,
@@ -743,6 +737,13 @@ class AuthService:
         if not is_valid:
             logger.warning(f"Password reset failed - weak password for user: {user.email}")
             raise ValueError(f"Password requirements not met: {'; '.join(errors)}")
+
+        # Verify OTP and mark as used only after password validation passes
+        otp_service = OTPService(self.db)
+        is_valid = await otp_service.verify_otp(str(user.id), otp_code, purpose="reset_password")
+        if not is_valid:
+            logger.warning(f"Password reset failed - invalid OTP for user: {user.email}")
+            return False
 
         # Update password
         await self.user_repo.update(user, {"password_hash": get_password_hash(new_password)})

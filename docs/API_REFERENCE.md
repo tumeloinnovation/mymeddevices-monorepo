@@ -115,7 +115,7 @@ All backend API endpoints are exposed under the base path **`/api/v1`**.
 | `DELETE`| `/api/v1/shopping/cart/items/{id}` | Public/Bearer | Remove item from cart |
 | `POST` | `/api/v1/shopping/cart/merge` | Bearer | Merge guest cart items into customer cart |
 | `POST` | `/api/v1/shopping/coupons/apply` | Public/Bearer | Validate and apply promotional coupon |
-| `POST` | `/api/v1/shopping/checkout` | Bearer | Initialize checkout validation |
+| `POST` | `/api/v1/shopping/checkout` | Bearer | Initialize checkout validation with customer notes |
 | `POST` | `/api/v1/shopping/orders` | Bearer | Place new order |
 | `GET` | `/api/v1/shopping/orders` | Bearer | List order history for customer |
 | `GET` | `/api/v1/shopping/orders/{id}` | Bearer | Detailed order overview with items & timeline |
@@ -127,14 +127,20 @@ All backend API endpoints are exposed under the base path **`/api/v1`**.
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
-| `POST` | `/api/v1/payments/stk-push` | Bearer | Trigger M-Pesa Daraja STK Push prompt to phone |
-| `POST` | `/api/v1/payments/callback` | Public | Webhook endpoint for M-Pesa payment notifications |
-| `GET` | `/api/v1/payments/status/{id}` | Bearer | Check M-Pesa transaction execution status |
-| `GET` | `/api/v1/payment-methods` | Public | List active platform payment methods |
+| `POST` | `/api/v1/payments/stkpush/initiate` | Bearer | Initiate M-Pesa Daraja STK Push prompt to phone |
+| `POST` | `/api/v1/payments/stkpush/status` | Bearer | Check M-Pesa STK push execution status by checkout request ID |
+| `POST` | `/api/v1/payments/callbacks/mpesa` | Public | Webhook endpoint for M-Pesa payment result notifications |
+| `GET` | `/api/v1/payments/methods` | Public | List active platform payment methods |
+| `GET` | `/api/v1/payments/methods/default` | Public | Get system default payment method |
+| `GET` | `/api/v1/payments/transactions` | Bearer | List payment transactions with status filtering |
+| `GET` | `/api/v1/payments/transactions/{id}` | Bearer | Get detailed transaction overview |
+| `POST` | `/api/v1/payments/refunds` | Admin/Worker | Create new refund request |
+| `GET` | `/api/v1/payments/refunds` | Admin/Worker | List refund requests |
+| `POST` | `/api/v1/payments/refunds/{id}/approve` | Admin | Approve and execute payment refund |
 
 ---
 
-## 7. Vendor Dashboard (`/api/v1/vendor`)
+## 7. Vendor Dashboard & Orders (`/api/v1/vendor`)
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
@@ -143,11 +149,13 @@ All backend API endpoints are exposed under the base path **`/api/v1`**.
 | `GET` | `/api/v1/vendor/analytics` | Vendor | Get store sales metrics and performance reports |
 | `GET` | `/api/v1/vendor/earnings` | Vendor | View payout ledgers and commission breakdown |
 | `GET` | `/api/v1/vendor/orders` | Vendor | List orders containing vendor's products |
-| `PATCH`| `/api/v1/vendor/orders/items/{item_id}/fulfillment` | Vendor | Update order item fulfillment status (`packed`, `shipped`) |
+| `GET` | `/api/v1/vendor/orders/{order_id}` | Vendor | Get detailed vendor order with items, timeline, and customer notes |
+| `PATCH`| `/api/v1/vendor/orders/{order_id}/items/{item_id}/status` | Vendor | Update order item fulfillment status (`processing`, `packed`, `shipped`, `delivered`, `cancelled`) with state machine validation & auto rollup |
+| `POST` | `/api/v1/vendor/orders/{order_id}/items/{item_id}/tracking` | Vendor | Add or update shipping carrier and tracking number for an order item |
 
 ---
 
-## 8. Admin Portal (`/api/v1/admin`)
+## 8. Admin Portal & Global Orders (`/api/v1/admin`)
 
 | Method | Endpoint | Auth | Description |
 |---|---|---|---|
@@ -159,7 +167,10 @@ All backend API endpoints are exposed under the base path **`/api/v1`**.
 | `PATCH`| `/api/v1/admin/customers/{id}/status` | Admin | Activate or suspend customer account |
 | `GET` | `/api/v1/admin/vendors/overview` | Admin | List pending and active vendor applications |
 | `PATCH`| `/api/v1/admin/vendors/{id}/approve` | Admin | Approve or reject vendor application |
-| `GET` | `/api/v1/admin/orders` | Admin | Global platform order overview |
+| `GET` | `/api/v1/admin/shopping/orders` | Admin | Global platform order overview |
+| `GET` | `/api/v1/admin/shopping/orders/{order_id}` | Admin | Get full order details, items, timeline, customer & internal notes |
+| `PATCH`| `/api/v1/admin/shopping/orders/{order_id}/status` | Admin | Update order status with state machine transition validation |
+| `PATCH`| `/api/v1/admin/shopping/orders/{order_id}/internal-notes` | Admin | Update admin-only internal communication notes for an order |
 
 ---
 

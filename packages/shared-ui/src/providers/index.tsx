@@ -3,8 +3,10 @@
 import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { QueryClient, QueryClientProvider as QCProvider } from '@tanstack/react-query';
 import { ThemeProvider } from "../components/theme-provider";
-import { PropsWithChildren, useState } from "react";
-import { ShopFiltersProvider } from "@mymeddevices/shared-core";
+import { PropsWithChildren, useState, useEffect } from "react";
+import { ShopFiltersProvider, silenceConsole } from "@mymeddevices/shared-core";
+
+silenceConsole();
 
 // Create a singleton QueryClient instance for the app
 let browserQueryClient: QueryClient | undefined = undefined;
@@ -46,6 +48,10 @@ function getQueryClient() {
 
 export default function Providers({ children }: PropsWithChildren) {
   const [queryClient] = useState(() => getQueryClient());
+
+  useEffect(() => {
+    silenceConsole();
+  }, []);
 
   return (
     <QCProvider client={queryClient}>

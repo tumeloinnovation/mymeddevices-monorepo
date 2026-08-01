@@ -315,7 +315,8 @@ class OrderService:
 
         stmt = select(Order).options(
             selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),
-            selectinload(Order.user)
+            selectinload(Order.user),
+            selectinload(Order.timeline_events)
         )
 
         for condition in conditions:

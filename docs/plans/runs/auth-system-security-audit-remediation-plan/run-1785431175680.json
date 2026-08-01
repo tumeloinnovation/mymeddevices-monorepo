@@ -1,0 +1,103 @@
+{
+  "id": "run-1785431175680",
+  "slug": "auth-system-security-audit-remediation-plan",
+  "planTitle": "Auth System Security Audit & Remediation Plan",
+  "mode": "dry-run",
+  "status": "passed",
+  "createdAt": "2026-07-30T17:06:15.680Z",
+  "updatedAt": "2026-07-30T17:06:27.027Z",
+  "stages": [
+    {
+      "id": "architect",
+      "role": "Architect",
+      "title": "Map the code & shape the approach",
+      "status": "passed",
+      "log": [
+        "Reading the approved plan…",
+        "Exploring the repo for the files it touches…",
+        "Drafting an implementation brief."
+      ],
+      "startedAt": "2026-07-30T17:06:15.688Z",
+      "summary": "Approach confirmed — plan is coherent and the touched files exist.",
+      "endedAt": "2026-07-30T17:06:18.365Z"
+    },
+    {
+      "id": "gate",
+      "role": "Approval Gate",
+      "title": "Verify the plan is approved",
+      "status": "passed",
+      "log": [
+        "Checking approval status…"
+      ],
+      "startedAt": "2026-07-30T17:06:18.367Z",
+      "summary": "Gate open — plan is approved. (Dry-run: no gate enforcement.)",
+      "endedAt": "2026-07-30T17:06:19.163Z"
+    },
+    {
+      "id": "builder",
+      "role": "Builder",
+      "title": "Branch & implement the change",
+      "status": "passed",
+      "log": [
+        "Creating branch adeptly/<slug>…",
+        "Applying the plan's create/modify/delete steps…",
+        "Writing code with the smallest sensible diff."
+      ],
+      "startedAt": "2026-07-30T17:06:19.165Z",
+      "summary": "Implemented the plan on a fresh branch (simulated).",
+      "endedAt": "2026-07-30T17:06:21.153Z"
+    },
+    {
+      "id": "medic",
+      "role": "Medic",
+      "title": "Build, test & self-heal",
+      "status": "passed",
+      "log": [
+        "Running build / type-check / tests…",
+        "All green on first pass."
+      ],
+      "startedAt": "2026-07-30T17:06:21.154Z",
+      "summary": "Build & tests pass (simulated).",
+      "endedAt": "2026-07-30T17:06:22.402Z"
+    },
+    {
+      "id": "qa",
+      "role": "Reviewer",
+      "title": "Review the diff",
+      "status": "passed",
+      "log": [
+        "Diffing against base…",
+        "Checking for regressions and dead code."
+      ],
+      "startedAt": "2026-07-30T17:06:22.403Z",
+      "summary": "No blocking issues found (simulated).",
+      "endedAt": "2026-07-30T17:06:23.921Z"
+    },
+    {
+      "id": "security",
+      "role": "Security",
+      "title": "Security review",
+      "status": "passed",
+      "log": [
+        "Scanning the diff for injection, secrets, authz gaps…"
+      ],
+      "startedAt": "2026-07-30T17:06:23.922Z",
+      "summary": "No security concerns in the diff (simulated).",
+      "endedAt": "2026-07-30T17:06:24.750Z"
+    },
+    {
+      "id": "pr",
+      "role": "Pilot",
+      "title": "Open the pull request",
+      "status": "passed",
+      "log": [
+        "Committing…",
+        "Pushing branch…",
+        "Opening PR against base."
+      ],
+      "startedAt": "2026-07-30T17:06:24.751Z",
+      "summary": "PR opened (simulated) — review and merge when ready.",
+      "endedAt": "2026-07-30T17:06:27.024Z"
+    }
+  ]
+}

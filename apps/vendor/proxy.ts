@@ -147,19 +147,20 @@ export async function proxy(request: NextRequest) {
 
         // A. Already Logged In -> accessing Login/Register
         if (isAuthRoute) {
-            // Redirect to appropriate dashboard
-            return NextResponse.redirect(new URL(isVendor ? '/vendor/dashboard' : '/dashboard', request.url));
+            if (isVendor) {
+                return NextResponse.redirect(new URL('/vendor/dashboard', request.url));
+            }
+            // If logged in as non-vendor, let them remain on login page or re-authenticate as vendor
+            return NextResponse.next();
         }
 
-        // B. Vendor accessing Customer areas
-        if (isCustomerRoute && isVendor) {
-            return NextResponse.redirect(new URL('/vendor/dashboard', request.url));
-        }
-
-        // C. Customer accessing Vendor areas
+        // B. Non-vendor user trying to access Vendor routes -> redirect to login
         if (isVendorRoute && !isVendor) {
-            return NextResponse.redirect(new URL('/dashboard', request.url));
+            const loginUrl = new URL('/login', request.url);
+            loginUrl.searchParams.set('error', 'vendor_role_required');
+            return NextResponse.redirect(loginUrl);
         }
+
     }
 
     return NextResponse.next();

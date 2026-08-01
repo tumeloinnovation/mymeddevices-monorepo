@@ -284,7 +284,7 @@ export default function NewProductPage() {
       const newBrand = await catalogService.createQuickBrand({ name });
       // Add the new brand to the local brands list
       setBrands(prev => [...prev, newBrand]);
-      toast.success(`Brand "${name}" created and pending approval`);
+      toast.success(`Brand "${name}" created and approved`);
       return newBrand.id;
     } catch (error: any) {
       const errorMessage = error?.response?.data?.detail || error?.message || "Failed to create brand";

@@ -903,7 +903,7 @@ class CatalogService:
         await self.db.commit()
         logger.info(f"Brand deleted: {brand_id}")
 
-    async def create_pending_brand(self, name: str) -> Brand:
+    async def create_quick_brand(self, name: str) -> Brand:
         """
         Create a brand with minimal details (name only) as auto-approved and active.
         Used for quick brand creation during product creation.
@@ -948,7 +948,7 @@ class CatalogService:
         await self.db.commit()
         await self.db.refresh(brand)
 
-        logger.info(f"Pending brand created: {brand.id} - {brand.name} (pending approval)")
+        logger.info(f"Quick brand created and auto-approved: {brand.id} - {brand.name}")
         return brand
 
     async def approve_brand(self, brand_id: str) -> Brand:

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 import uuid
 from app.core.database import get_db
 from app.core.responses import success_response, ApiSuccessResponse
@@ -225,6 +225,34 @@ async def refresh(refresh_data: RefreshRequest, request: Request, db: AsyncSessi
     token_user = result.first()
 
     if not token_user:
+        # Grace period check: If token was revoked within last 15 seconds (due to client race condition during rotation)
+        from datetime import datetime, timezone, timedelta
+        revoked_result = await db.execute(
+            select(RefreshToken, User).join(User, RefreshToken.user_id == User.id).where(
+                RefreshToken.token == refresh_data.refresh_token,
+                RefreshToken.revoked == True
+            )
+        )
+        revoked_token_user = revoked_result.first()
+        now = datetime.now(timezone.utc)
+        if revoked_token_user:
+            rev_obj, user = revoked_token_user
+            if rev_obj.updated_at and (now - rev_obj.updated_at) < timedelta(seconds=15) and rev_obj.expires_at > now:
+                logger.info(f"Refresh token grace period hit for user {user.email}")
+                tokens = await auth_service.create_tokens(
+                    user,
+                    device_id=rev_obj.device_id,
+                    remember_me=False
+                )
+                log_token_refreshed(
+                    user_id=str(user.id),
+                    email=user.email,
+                    ip_address=ip_address,
+                    user_agent=user_agent,
+                    request_id=request_id
+                )
+                return success_response(tokens)
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired refresh token",
@@ -453,8 +481,9 @@ async def forgot_password(
     Sends a 6-digit OTP code to the user's email if it exists.
     """
     from app.domains.auth.services.otp_service import OTPService
-    # Find user by email
-    result = await db.execute(select(User).where(User.email == request.email))
+    # Find user by email (case-insensitive & trimmed)
+    email_clean = request.email.strip().lower()
+    result = await db.execute(select(User).where(func.lower(User.email) == email_clean))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -484,8 +513,9 @@ async def reset_password(
     """
     Complete password reset with OTP code and new password.
     """
-    # Find user by email
-    result = await db.execute(select(User).where(User.email == request.email))
+    # Find user by email (case-insensitive & trimmed)
+    email_clean = request.email.strip().lower()
+    result = await db.execute(select(User).where(func.lower(User.email) == email_clean))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -495,7 +525,13 @@ async def reset_password(
         )
 
     auth_service = AuthService(db)
-    success = await auth_service.reset_password(user, request.code, request.new_password)
+    try:
+        success = await auth_service.reset_password(user, request.code, request.new_password)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
 
     if not success:
         raise HTTPException(

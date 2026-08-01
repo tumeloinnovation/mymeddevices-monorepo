@@ -7,7 +7,7 @@ from app.core.database import get_db
 from app.core.responses import success_response, ApiSuccessResponse
 from app.core.dependencies import require_role
 from app.domains.auth.models.user import User
-from app.domains.shopping.schemas.order_schemas import OrderResponse, OrderStatusUpdate, OrderListResponse
+from app.domains.shopping.schemas.order_schemas import OrderResponse, OrderStatusUpdate, OrderListResponse, OrderInternalNotesUpdate
 from app.domains.shopping.services.order_service import OrderService
 
 router = APIRouter(prefix="/admin/shopping/orders", tags=["Admin Order Management"])
@@ -31,6 +31,8 @@ async def admin_list_orders(
     )
     return success_response({"orders": orders, "total": total})
 
+from app.domains.shopping.services.order_state_machine import InvalidStateTransitionError
+
 @router.patch("/{order_id}/status", response_model=ApiSuccessResponse[OrderResponse])
 async def admin_update_order_status(
     order_id: uuid.UUID,
@@ -38,11 +40,48 @@ async def admin_update_order_status(
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
     db: AsyncSession = Depends(get_db)
 ):
-    """Admin updates order status (e.g., from pending to paid)."""
-    service = OrderService(db)
-    order = await service.update_order_status(order_id, data.status)
+    """Admin updates order status (e.g., from pending to paid) with state machine validation."""
+    try:
+        service = OrderService(db)
+        order = await service.update_order_status(order_id, data.status)
+        if not order:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        return success_response(order)
+    except InvalidStateTransitionError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid status transition: {str(e)}"
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+
+@router.patch("/{order_id}/internal-notes", response_model=ApiSuccessResponse[OrderResponse])
+async def admin_update_internal_notes(
+    order_id: uuid.UUID,
+    data: OrderInternalNotesUpdate,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin updates internal notes for an order (admin-only communication)."""
+    from sqlalchemy import update, select
+    from app.domains.shopping.models.order import Order
+
+    # Get the order
+    stmt = select(Order).where(Order.id == order_id)
+    result = await db.execute(stmt)
+    order = result.scalar_one_or_none()
+
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    # Update internal notes
+    order.internal_notes = data.internal_notes
+    await db.commit()
+    await db.refresh(order)
+
     return success_response(order)
 
 @router.get("/vendor", response_model=ApiSuccessResponse[OrderListResponse])

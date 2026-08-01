@@ -57,8 +57,8 @@ export function useVendorDashboardStats(vendorId = DEMO_VENDOR_ID) {
   const orders = useVendorOrders(vendorId);
 
   return useMemo(() => {
-    // Revenue from completed orders
-    const completedOrders = orders.filter((o: Order) => o.status === 'completed');
+    // Revenue from completed/delivered orders
+    const completedOrders = orders.filter((o: Order) => o.status === 'delivered' || (o.status as string) === 'completed');
     const revenue = completedOrders.reduce(
       (acc: number, o: Order) => acc + parseFloat(o.total),
       0
@@ -125,7 +125,7 @@ export function useVendorDashboardStats(vendorId = DEMO_VENDOR_ID) {
         orders: {
           total: orders.length,
           pending: orders.filter(o => o.status === 'pending').length,
-          completed: orders.filter(o => o.status === 'completed').length,
+          completed: orders.filter(o => o.status === 'delivered' || (o.status as string) === 'completed').length,
           cancelled: orders.filter(o => o.status === 'cancelled').length,
         },
         products: {

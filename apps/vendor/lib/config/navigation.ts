@@ -9,7 +9,6 @@ import {
   HelpCircle,
   Bell,
   Store,
-  Truck,
   Warehouse,
   Banknote,
   Image,
@@ -49,7 +48,6 @@ export const vendorNavSections: NavSection[] = [
     section: "Orders",
     items: [
       { href: "/vendor/orders", icon: ShoppingCart, label: "Orders" },
-      { href: "/vendor/fulfillment", icon: Truck, label: "Fulfillment" },
     ]
   },
   {

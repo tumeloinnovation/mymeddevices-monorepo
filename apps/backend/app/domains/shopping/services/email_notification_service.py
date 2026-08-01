@@ -1,6 +1,6 @@
 import os
 import uuid
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from app.core.mail import send_email
 from app.core.logging import logger
 from app.core.config import settings
@@ -69,9 +69,48 @@ class EmailNotificationService:
         )
         subject = f"New Order - #{order_number}"
         body = f"Hi {vendor_name}, you have received a new order #{order_number} for Ksh {order_total:,.2f}."
-        
+
         await send_email(vendor_email, subject, body, html_content)
         logger.info(f"Vendor notification email sent to {vendor_email}")
+
+    async def send_vendor_order_with_items(
+        self,
+        vendor_email: str,
+        vendor_name: str,
+        order_number: str,
+        order_total: float,
+        items: List[Dict[str, Any]],
+        item_count: int,
+        total_quantity: int,
+        customer_name: Optional[str] = None,
+        customer_phone: Optional[str] = None,
+        order_id: Optional[str] = None,
+    ):
+        """Send vendor notification with order items details."""
+        # Format items for template
+        formatted_items = []
+        for item in items:
+            formatted_items.append({
+                "name": item.get("name", "Product"),
+                "quantity": item.get("quantity", 1),
+                "unit_price": f"{item.get('unit_price', 0):,.0f}"
+            })
+
+        dashboard_target = order_id or order_number
+        html_content = email_templates.vendor_order_items_html(
+            order_number=order_number,
+            order_total=f"{order_total:,.2f}",
+            item_count=item_count,
+            items=formatted_items,
+            customer_name=customer_name,
+            customer_phone=customer_phone,
+            dashboard_url=f"{self.site_url}/vendor/orders/{dashboard_target}",
+        )
+        subject = f"New Order Received - #{order_number}"
+        body = f"Hi {vendor_name}, you have received a new order #{order_number} for Ksh {order_total:,.2f} with {item_count} item(s)."
+
+        await send_email(vendor_email, subject, body, html_content)
+        logger.info(f"Vendor order with items email sent to {vendor_email}")
 
     async def send_account_welcome(self, user_email: str, user_name: str, account_id: str):
         html_content = email_templates.account_welcome_html(

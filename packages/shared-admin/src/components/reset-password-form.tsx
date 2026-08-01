@@ -15,7 +15,12 @@ import { useRouter, useSearchParams } from "next/navigation"
 export type DashboardTheme = "admin" | "vendor"
 
 const resetPasswordSchema = z.object({
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: z.string()
+    .min(8, "Password must be at least 8 characters")
+    .regex(/[A-Z]/, "Password must contain at least one uppercase letter")
+    .regex(/[a-z]/, "Password must contain at least one lowercase letter")
+    .regex(/\d/, "Password must contain at least one digit")
+    .regex(/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?`~]/, "Password must contain at least one special character"),
   confirmPassword: z.string().min(8, "Password must be at least 8 characters"),
 }).refine((data) => data.password === data.confirmPassword, {
   message: "Passwords don't match",
@@ -53,8 +58,8 @@ export function ResetPasswordForm({ theme = "admin" }: ResetPasswordFormProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   
-  const email = searchParams.get("email")
-  const code = searchParams.get("code")
+  const email = searchParams.get("email") || searchParams.get("user_id")
+  const code = searchParams.get("code") || searchParams.get("token")
 
   const colors = THEME_COLORS[theme]
   const {

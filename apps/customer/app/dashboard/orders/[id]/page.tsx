@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatCurrency } from '@/lib/utils/utils';
 import { useCustomerOrder, useOrderTracking } from '@/hooks/useDashboard';
 import ShipmentTracking from '@/app/dashboard/_components/ShipmentTracking';
@@ -17,6 +18,7 @@ import {
     Calendar,
     Truck,
     FileText,
+    Info,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -262,8 +264,18 @@ export default function OrderDetailPage() {
                                     )}
                                 </span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Packaging Fee</span>
+                            <div className="flex justify-between text-sm items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                    <span className="text-muted-foreground">Packaging Fee</span>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Fee for secure packaging materials and handling</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
                                 <span>
                                     Ksh{' '}
                                     {formatCurrency(
@@ -271,8 +283,18 @@ export default function OrderDetailPage() {
                                     )}
                                 </span>
                             </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Services Fee</span>
+                            <div className="flex justify-between text-sm items-center gap-2">
+                                <div className="flex items-center gap-1">
+                                    <span className="text-muted-foreground">Services Fee</span>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                            <p>Platform service fee for order processing</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
                                 <span>
                                     Ksh{' '}
                                     {formatCurrency(

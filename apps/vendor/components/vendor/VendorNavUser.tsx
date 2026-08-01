@@ -87,7 +87,8 @@ export function VendorNavUser() {
                             <DropdownMenuSeparator />
                             <DropdownMenuGroup>
                                 <DropdownMenuItem asChild>
-                                    <Link href="/vendor/settings" className="flex items-center w-full cursor-pointer">
+                                    <Link href="/vendor/settings/profile" className="flex items-center w-full cursor-pointer">
+
                                         <User className="mr-2 h-4 w-4" />
                                         <span>Settings</span>
                                     </Link>

@@ -210,7 +210,7 @@ async def quick_create_brand(
     """
     service = CatalogService(db)
     try:
-        brand = await service.create_pending_brand(name=data.name)
+        brand = await service.create_quick_brand(name=data.name)
         return brand
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

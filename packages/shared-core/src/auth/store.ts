@@ -3,6 +3,8 @@ import { persist } from 'zustand/middleware';
 import { apiClient } from '../lib/services/api-client';
 import { toast } from 'sonner';
 import { setAccessToken as setToken, clearAccessToken as clearToken } from './token';
+import { logger } from '../lib/logger';
+
 import type {
   AuthUser,
   LoginCredentials,
@@ -38,6 +40,8 @@ const DEMO_CUSTOMER: CustomerUser = {
   avatar_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&auto=format',
   wooCustomerId: 1,
 };
+
+let inFlightRefreshPromise: Promise<boolean> | null = null;
 
 const DEMO_VENDOR: VendorUser = {
   id: 101,
@@ -214,7 +218,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       login: async (credentials, mode = 'customer') => {
-        console.log('🔐 [AuthStore] Login started:', { email: credentials.email, mode });
+        logger.log('🔐 [AuthStore] Login started:', { email: credentials.email, mode });
         set({ isLoading: true, error: null });
         try {
           const device_id = credentials.device_id || getOrCreateDeviceId();
@@ -235,7 +239,7 @@ export const useAuthStore = create<AuthState>()(
             toast.success(responseData.message);
           }
 
-          console.log('✅ [AuthStore] Login API response received:', {
+          logger.log('✅ [AuthStore] Login API response received:', {
             user: responseData.user?.email,
             hasAccessToken: !!responseData.access_token,
             hasRefreshToken: !!responseData.refresh_token,
@@ -248,7 +252,7 @@ export const useAuthStore = create<AuthState>()(
           if (typeof window !== 'undefined') {
             if (responseData.refresh_token) {
               localStorage.setItem('refresh_token', responseData.refresh_token);
-              console.log('💾 [AuthStore] Refresh token saved to localStorage');
+              logger.log('💾 [AuthStore] Refresh token saved to localStorage');
             }
             setToken(responseData.access_token);
             apiClient.syncAuthCookie(responseData.access_token);
@@ -265,12 +269,13 @@ export const useAuthStore = create<AuthState>()(
             lastValidated: Date.now(),
           });
 
-          console.log('✅ [AuthStore] Login successful, auth state updated:', {
+          logger.log('✅ [AuthStore] Login successful, auth state updated:', {
             isAuthenticated: true,
             user: normalizedUser,
             userEmail: normalizedUser?.email,
             userKeys: normalizedUser ? Object.keys(normalizedUser) : [],
           });
+
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
           throw error;
@@ -597,61 +602,72 @@ export const useAuthStore = create<AuthState>()(
         if (get().isDemo) {
           return true;
         }
-        try {
-          const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
-          if (!refreshToken) {
-            // Don't clear auth - user might still be authenticated with a valid access token
-            // Let API requests handle 401s which will trigger proper logout
-            return false;
-          }
 
-          // Use fetch directly for token refresh to avoid logging out users on temporary network failure.
-          // For client-side, leverage rewrites. For server-side (SSR), use full URL.
-          const apiPrefix = typeof window === 'undefined'
-            ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
-            : '';
+        if (inFlightRefreshPromise) {
+          return inFlightRefreshPromise;
+        }
 
-          const response = await fetch(`${apiPrefix}/auth/refresh`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ refresh_token: refreshToken }),
-          });
-
-          if (response.ok) {
-            const result = await response.json();
-            // Handle potentially wrapped response {"success": true, "data": {...}}
-            const data = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
-            const expiresIn = (data.expires_in || 1800) * 1000;
-            const tokenExpiry = Date.now() + expiresIn;
-
-            if (typeof window !== 'undefined') {
-              localStorage.setItem('refresh_token', data.refresh_token);
-              setToken(data.access_token);
-              apiClient.syncAuthCookie(data.access_token);
+        inFlightRefreshPromise = (async () => {
+          try {
+            const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
+            if (!refreshToken) {
+              // Don't clear auth - user might still be authenticated with a valid access token
+              // Let API requests handle 401s which will trigger proper logout
+              return false;
             }
 
-            set({
-              accessToken: data.access_token,
-              tokenExpiry,
-              lastValidated: Date.now(),
+            // Use fetch directly for token refresh to avoid logging out users on temporary network failure.
+            // For client-side, leverage rewrites. For server-side (SSR), use full URL.
+            const apiPrefix = typeof window === 'undefined'
+              ? (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000') + '/api/v1'
+              : '';
+
+            const response = await fetch(`${apiPrefix}/auth/refresh`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ refresh_token: refreshToken }),
             });
 
-            return true;
-          } else {
-            // Only clear auth on specific client errors (400, 401, 403) indicating invalid/expired token.
-            // Avoid logging out user on 5xx server errors.
-            if (response.status === 400 || response.status === 401 || response.status === 403) {
-              get().clearAuth();
+            if (response.ok) {
+              const result = await response.json();
+              // Handle potentially wrapped response {"success": true, "data": {...}}
+              const data = result && typeof result === 'object' && 'success' in result && 'data' in result && result.success === true ? result.data : result;
+              const expiresIn = (data.expires_in || 1800) * 1000;
+              const tokenExpiry = Date.now() + expiresIn;
+
+              if (typeof window !== 'undefined') {
+                localStorage.setItem('refresh_token', data.refresh_token);
+                setToken(data.access_token);
+                apiClient.syncAuthCookie(data.access_token);
+              }
+
+              set({
+                accessToken: data.access_token,
+                tokenExpiry,
+                lastValidated: Date.now(),
+              });
+
+              return true;
+            } else {
+              // Only clear auth on specific client errors (400, 401, 403) indicating invalid/expired token.
+              // Avoid logging out user on 5xx server errors.
+              if (response.status === 400 || response.status === 401 || response.status === 403) {
+                get().clearAuth();
+              }
+              return false;
             }
+          } catch (error) {
+            console.error('Failed to refresh token:', error);
+            // Do not call clearAuth() on network/fetch errors to prevent premature logout.
             return false;
+          } finally {
+            inFlightRefreshPromise = null;
           }
-        } catch (error) {
-          console.error('Failed to refresh token:', error);
-          // Do not call clearAuth() on network/fetch errors to prevent premature logout.
-          return false;
-        }
+        })();
+
+        return inFlightRefreshPromise;
       },
 
       validateSession: async () => {
@@ -830,7 +846,7 @@ export const useAuthStore = create<AuthState>()(
           isDemo: state.isDemo,
           vendorStatus: state.vendorStatus,
         };
-        console.log('💾 [AuthStore] Persisting state:', {
+        logger.log('💾 [AuthStore] Persisting state:', {
           hasUser: !!partial.user,
           userEmail: partial.user?.email,
           isAuthenticated: partial.isAuthenticated,
@@ -843,10 +859,10 @@ export const useAuthStore = create<AuthState>()(
           try {
             const stored = localStorage.getItem('auth-storage');
             const refreshToken = localStorage.getItem('refresh_token');
-            console.log('📦 [AuthStore] Raw localStorage data:', stored ? `${stored.substring(0, 100)}...` : 'null');
+            logger.log('📦 [AuthStore] Raw localStorage data:', stored ? `${stored.substring(0, 100)}...` : 'null');
             if (stored) {
               const parsed = JSON.parse(stored);
-              console.log('📦 [AuthStore] Parsed localStorage:', {
+              logger.log('📦 [AuthStore] Parsed localStorage:', {
                 hasState: !!parsed.state,
                 hasUser: !!parsed.state?.user,
                 userEmail: parsed.state?.user?.email,
@@ -855,11 +871,11 @@ export const useAuthStore = create<AuthState>()(
               });
             }
           } catch (e) {
-            console.error('📦 [AuthStore] Failed to read localStorage:', e);
+            logger.error('📦 [AuthStore] Failed to read localStorage:', e);
           }
         }
 
-        console.log('🔄 [AuthStore] Rehydration started:', {
+        logger.log('🔄 [AuthStore] Rehydration started:', {
           hasState: !!state,
           isAuthenticated: state?.isAuthenticated,
           user: state?.user,
@@ -871,10 +887,17 @@ export const useAuthStore = create<AuthState>()(
         // If isAuthenticated is true but no refresh token exists, clear auth to prevent redirect loops
         if (typeof window !== 'undefined' && state?.isAuthenticated && !state.isDemo) {
           const refreshToken = localStorage.getItem('refresh_token');
+          const storedAccessToken = localStorage.getItem('access_token');
           if (!refreshToken) {
-            console.warn('⚠️ [AuthStore] No refresh token found, clearing isAuthenticated to prevent redirect loop');
+            logger.warn('⚠️ [AuthStore] No refresh token found, clearing isAuthenticated to prevent redirect loop');
             state.isAuthenticated = false;
             state.user = null;
+            state.accessToken = null;
+          } else if (storedAccessToken && !state.accessToken) {
+            state.accessToken = storedAccessToken;
+            state.tokenExpiry = Date.now() + 1800 * 1000;
+            setToken(storedAccessToken);
+            apiClient.syncAuthCookie(storedAccessToken);
           }
         }
 
@@ -884,13 +907,13 @@ export const useAuthStore = create<AuthState>()(
         // Then attempt to refresh the access token in background if user is authenticated
         // Don't clear auth on refresh failure - user remains authenticated with persisted state
         if (state && state.isAuthenticated && state.user && !state.isDemo) {
-          console.log('🔑 [AuthStore] Attempting background token refresh for user:', state.user.email);
+          logger.log('🔑 [AuthStore] Attempting background token refresh for user:', state.user.email);
           state.refreshAccessToken().catch((err) => {
-            console.warn('⚠️ [AuthStore] Token refresh failed on rehydration, but user remains authenticated:', err);
+            logger.warn('⚠️ [AuthStore] Token refresh failed on rehydration, but user remains authenticated:', err);
             // Don't clear auth - let the API requests handle 401s with token refresh
           });
         } else {
-          console.log('✅ [AuthStore] Rehydration complete, no token refresh needed');
+          logger.log('✅ [AuthStore] Rehydration complete, no token refresh needed');
         }
       },
     }
@@ -900,8 +923,9 @@ export const useAuthStore = create<AuthState>()(
 // Handle session expired event globally to sync store state
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:session-expired', () => {
-    console.log('🚨 [AuthStore] session-expired event received, updating isAuthenticated to false');
+    logger.log('🚨 [AuthStore] session-expired event received, updating isAuthenticated to false');
     useAuthStore.setState({ isAuthenticated: false });
   });
 }
+
 

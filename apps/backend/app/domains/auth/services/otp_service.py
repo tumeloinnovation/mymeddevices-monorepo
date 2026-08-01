@@ -127,9 +127,9 @@ class OTPService:
                 OTP.user_id == user_id,
                 OTP.purpose == purpose,
                 OTP.is_used == False
-            )
+            ).order_by(OTP.created_at.desc())
         )
-        otp = result.scalar_one_or_none()
+        otp = result.scalars().first()
 
         if not otp:
             logger.warning(f"No active OTP found for user {user_id}, purpose: {purpose}")

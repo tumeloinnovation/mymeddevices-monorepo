@@ -121,6 +121,10 @@ class ShoppingService {
     return apiClient.patch(`/admin/shopping/orders/${orderId}/status`, { status });
   }
 
+  async updateOrderInternalNotes(orderId: string, internalNotes: string): Promise<any> {
+    return apiClient.patch(`/admin/shopping/orders/${orderId}/internal-notes`, { internal_notes: internalNotes });
+  }
+
   async vendorListOrders(page: number = 1, pageSize: number = 20): Promise<any> {
     return apiClient.get<any>(`/admin/shopping/orders/vendor?page=${page}&page_size=${pageSize}`);
   }

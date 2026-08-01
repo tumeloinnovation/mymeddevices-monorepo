@@ -171,7 +171,7 @@ class LedgerTransaction(Base, IDMixin):
     )
     vendor: Mapped["VendorProfile"] = relationship(
         "VendorProfile",
-        backref="ledger_transactions",
+        overlaps="vendor_ledger,transactions,ledger_transactions",
         foreign_keys=[vendor_id]
     )
     sub_order: Mapped[Optional["SubOrder"]] = relationship(

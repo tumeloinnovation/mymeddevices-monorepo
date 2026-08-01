@@ -6,7 +6,8 @@
  * to the canonical status values used in the current system.
  */
 
-import type { OrderStatus, OrderItemStatus } from '@shared-core/src/lib/data/types';
+export type OrderStatus = 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+export type OrderItemStatus = 'pending' | 'processing' | 'packed' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
 
 /**
  * Map legacy order statuses to canonical ones.

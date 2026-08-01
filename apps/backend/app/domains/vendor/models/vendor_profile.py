@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 from sqlalchemy import String, Text, Boolean, Float, ForeignKey, JSON, DateTime
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -100,3 +100,6 @@ class VendorProfile(Base, IDMixin, AuditMixin):
 
     # Relationship to User
     user: Mapped["User"] = relationship("User", back_populates="vendor_profile", foreign_keys=[user_id])
+
+    # Note: Access ledger transactions through vendor_ledger.transactions relationship
+    # This avoids circular import issues with LedgerTransaction model

@@ -99,6 +99,7 @@ def build_vendor_order_response(order, vendor_profile_id) -> VendorOrderResponse
         vendor_amount=round(vendor_amount),
         item_count=int(item_count),
         created_at=order.created_at,
+        customer_notes=order.notes,
         items=[VendorOrderItemResponse.model_validate(item) for item in vendor_items]
     )
 

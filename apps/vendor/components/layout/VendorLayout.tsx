@@ -24,6 +24,7 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
   const vendorNavConfig = [
     {
       label: 'Overview',
+      icon: LayoutDashboard,
       items: [
         { label: 'Dashboard', href: '/vendor/dashboard', icon: LayoutDashboard },
         { label: 'Analytics', href: '/vendor/analytics', icon: BarChart3 },
@@ -31,6 +32,7 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
     },
     {
       label: 'Store Management',
+      icon: Store,
       items: [
         { label: 'Customer Orders', href: '/vendor/orders', icon: ShoppingCart },
         { label: 'Products Catalog', href: '/vendor/products', icon: Package },
@@ -39,34 +41,30 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
     },
     {
       label: 'Financials',
+      icon: Wallet,
       items: [
         { label: 'Earnings', href: '/vendor/earnings', icon: Wallet },
       ],
     },
     {
       label: 'Marketing',
+      icon: Tag,
       items: [
         { label: 'Coupons', href: '/vendor/coupons', icon: Tag },
       ],
     },
     {
       label: 'System & Support',
+      icon: LifeBuoy,
       items: [
-        {
-          label: 'Settings',
-          href: '/vendor/settings/profile',
-          icon: Store,
-          isCollapsible: true,
-          children: [
-            { label: 'Store Profile', href: '/vendor/settings/profile', icon: Store },
-            { label: 'Notifications', href: '/vendor/settings/notifications', icon: Bell },
-          ],
-        },
+        { label: 'Store Profile', href: '/vendor/settings/profile', icon: Store },
+        { label: 'Notifications', href: '/vendor/settings/notifications', icon: Bell },
         { label: 'Support Tickets', href: '/vendor/support/tickets', icon: LifeBuoy },
       ],
     },
     {
       label: 'Marketplace',
+      icon: Globe,
       items: [
         { label: 'Open Marketplace', href: 'http://localhost:3000', icon: Globe, target: '_blank' },
       ],
@@ -79,5 +77,3 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
     </SharedDashboardLayout>
   );
 }
-
-

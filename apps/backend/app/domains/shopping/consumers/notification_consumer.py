@@ -8,6 +8,7 @@ This consumer listens for OrderPaid events and:
 from faststream.rabbit import RabbitRouter
 from loguru import logger
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.core.broker import order_exchange
 from app.core.database import get_db
@@ -15,6 +16,7 @@ from app.domains.shared.events.events import OrderPaidEvent
 from app.domains.vendor.models.vendor_profile import VendorProfile
 from app.domains.auth.models.user import User
 from app.domains.shopping.services.email_notification_service import EmailNotificationService
+from app.domains.catalog.models.product import Product
 
 
 # Create the notification router
@@ -33,8 +35,9 @@ async def handle_order_paid(message: OrderPaidEvent):
 
     For each sub-order:
     1. Get vendor contact information
-    2. Send email notification
-    3. Optionally send SMS
+    2. Fetch product details for items
+    3. Send email notification with items
+    4. Optionally send SMS
     """
     logger.info(f"Processing vendor notifications for order {message.order_id}")
 
@@ -61,18 +64,60 @@ async def handle_order_paid(message: OrderPaidEvent):
                     logger.warning(f"No email found for vendor {sub_order.vendor_id}, skipping notification")
                     continue
 
-                # Send email notification
+                # Fetch product details for items
                 item_count = len(sub_order.items)
                 total_quantity = sum(item.quantity for item in sub_order.items)
 
+                # Get product IDs for this sub-order
+                product_ids = [item.product_id for item in sub_order.items]
+
+                # Fetch products
+                products_stmt = select(Product).where(Product.id.in_(product_ids))
+                products_result = await db.execute(products_stmt)
+                products = {p.id: p for p in products_result.scalars()}
+
+                # Build items list with product names
+                items_with_names = []
+                for item in sub_order.items:
+                    product = products.get(item.product_id)
+                    items_with_names.append({
+                        "name": product.name if product else f"Product {str(item.product_id)[:8]}",
+                        "quantity": item.quantity,
+                        "unit_price": float(item.unit_price)
+                    })
+
+                # Get order and customer info
+                customer_name = None
+                customer_phone = None
+                from app.domains.shopping.models.order import Order
+                order_stmt = select(Order).where(Order.id == message.order_id).options(
+                    selectinload(Order.user)
+                )
+                order_result = await db.execute(order_stmt)
+                order = order_result.scalar_one_or_none()
+                if order:
+                    if order.user:
+                        customer_name = f"{order.user.first_name or ''} {order.user.last_name or ''}".strip() or order.user.email
+                        customer_phone = order.user.phone
+                    elif order.shipping_address:
+                        customer_name = order.shipping_address.get("full_name") or order.shipping_address.get("first_name")
+                        customer_phone = order.shipping_address.get("phone")
+
+                order_number_display = str(order.order_number) if (order and order.order_number) else str(message.order_id)[:8]
+
+                # Send email notification with items
                 try:
-                    await email_service.send_vendor_new_order(
+                    await email_service.send_vendor_order_with_items(
                         vendor_email=vendor_email,
                         vendor_name=vendor_profile.store_name,
-                        order_number=str(message.order_id)[:8],  # Shortened order number
+                        order_number=order_number_display,
+                        order_id=str(message.order_id),
                         order_total=float(sub_order.subtotal_amount),
+                        items=items_with_names,
                         item_count=item_count,
-                        total_quantity=total_quantity
+                        total_quantity=total_quantity,
+                        customer_name=customer_name,
+                        customer_phone=customer_phone
                     )
                     logger.info(
                         f"Sent new order notification to vendor {sub_order.vendor_id} "

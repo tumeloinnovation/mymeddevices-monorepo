@@ -5,11 +5,23 @@ import { useSidebar } from "@/components/ui/sidebar"
 interface LogoProps {
   theme?: "admin" | "vendor" | "customer"
   className?: string
+  isCollapsed?: boolean
 }
 
-export function SidebarLogo({ theme = "admin", className = "" }: LogoProps) {
-  const { state } = useSidebar()
-  const isCollapsed = state === "collapsed"
+export function SidebarLogo({ theme = "admin", className = "", isCollapsed: isCollapsedProp }: LogoProps) {
+  let isCollapsed = isCollapsedProp ?? false
+  
+  try {
+    // Attempt to use sidebar context if inside a SidebarProvider
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const sidebar = useSidebar()
+    if (isCollapsedProp === undefined && sidebar) {
+      isCollapsed = sidebar.state === "collapsed"
+    }
+  } catch {
+    // Graceful fallback if rendered outside SidebarProvider
+    isCollapsed = isCollapsedProp ?? false
+  }
 
   // Use different viewBox to crop the SVG instead of transforms
   // Full logo: 0 0 180 60
