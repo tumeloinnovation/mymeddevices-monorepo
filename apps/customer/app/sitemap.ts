@@ -1,6 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { SEED_PRODUCTS } from '@/lib/data/seed/products'
-import { SEED_CATEGORIES } from '@/lib/data/seed/categories'
+import { catalogService } from '@mymeddevices/core/services/catalog-service'
 
 const SITE_URL = 'https://mymeddevices.com'
 
@@ -88,21 +87,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         },
     ]
 
-    // Product pages
-    const productPages: MetadataRoute.Sitemap = SEED_PRODUCTS.map((product) => ({
-        url: `${SITE_URL}/products/${product.slug}`,
-        lastModified: new Date(product.date_created),
-        changeFrequency: 'weekly',
-        priority: 0.6,
-    }))
+    let productPages: MetadataRoute.Sitemap = []
+    let categoryPages: MetadataRoute.Sitemap = []
 
-    // Category pages
-    const categoryPages: MetadataRoute.Sitemap = SEED_CATEGORIES.map((category) => ({
-        url: `${SITE_URL}/categories/${category.slug}`,
-        lastModified: new Date(),
-        changeFrequency: 'weekly',
-        priority: 0.5,
-    }))
+    try {
+        const productsRes = await catalogService.getProducts({ limit: 100 })
+        productPages = (productsRes.data || []).map((product) => ({
+            url: `${SITE_URL}/products/${product.slug}`,
+            lastModified: new Date(product.updated_at || product.created_at || Date.now()),
+            changeFrequency: 'weekly',
+            priority: 0.6,
+        }))
+
+        const categoriesRes = await catalogService.getCategories()
+        categoryPages = (categoriesRes || []).map((category) => ({
+            url: `${SITE_URL}/categories/${category.slug}`,
+            lastModified: new Date(),
+            changeFrequency: 'weekly',
+            priority: 0.5,
+        }))
+    } catch {
+        // Fallback to static pages if API is unreachable during build
+    }
 
     return [...staticPages, ...productPages, ...categoryPages]
 }

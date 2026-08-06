@@ -1,10 +1,6 @@
 'use client'
 
 import { useMemo } from 'react';
-import { SEED_PRODUCTS } from '@/lib/data/seed/products';
-import { SEED_ORDERS } from '@/lib/data/seed/orders';
-import { SEED_VENDORS } from '@/lib/data/seed/vendors';
-import { filterProducts } from '@/lib/data/helpers/filter-products';
 import type { Product, Order, Vendor } from '@/lib/data/types';
 
 export const DEMO_VENDOR_ID = 1;
@@ -13,40 +9,21 @@ export const DEMO_VENDOR_ID = 1;
 // Vendor products
 // ─────────────────────────────────────────────
 export function useVendorProducts(vendorId = DEMO_VENDOR_ID): Product[] {
-  return useMemo(
-    () =>
-      SEED_PRODUCTS.filter((p: Product) =>
-        p.meta_data.some(
-          (m) => m.key === '_vendor_id' && Number(m.value) === vendorId
-        )
-      ),
-    [vendorId]
-  );
+  return useMemo(() => [], [vendorId]);
 }
 
 // ─────────────────────────────────────────────
 // Vendor orders
 // ─────────────────────────────────────────────
 export function useVendorOrders(vendorId = DEMO_VENDOR_ID): Order[] {
-  return useMemo(
-    () =>
-      SEED_ORDERS.filter((o: Order) =>
-        (o.meta_data ?? []).some(
-          (m) => m.key === '_vendor_id' && Number(m.value) === vendorId
-        )
-      ),
-    [vendorId]
-  );
+  return useMemo(() => [], [vendorId]);
 }
 
 // ─────────────────────────────────────────────
 // Vendor profile
 // ─────────────────────────────────────────────
 export function useVendorProfile(vendorId = DEMO_VENDOR_ID): Vendor | null {
-  return useMemo(
-    () => SEED_VENDORS.find((v: Vendor) => v.id === vendorId) ?? null,
-    [vendorId]
-  );
+  return null;
 }
 
 // ─────────────────────────────────────────────

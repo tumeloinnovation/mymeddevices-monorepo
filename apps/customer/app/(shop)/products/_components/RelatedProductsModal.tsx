@@ -12,7 +12,7 @@ import { useRouter } from "next/navigation";
 import { Product } from "@/lib/data/types";
 import { formatCurrency } from "@/lib/utils/utils";
 import { trackProductView } from "@/lib/utils/metrics";
-import { SEED_PRODUCTS } from "@/lib/data/seed/products";
+import { useProducts } from "@/lib/hooks/useProducts";
 import { ShoppingCart, Heart, GitCompare } from "lucide-react";
 import useCartStore from "@/lib/store/useCartStore";
 import { useWishlistStore } from "@/lib/store/useWishlistStore";
@@ -31,6 +31,7 @@ const RelatedProductsModal: React.FC<RelatedProductsModalProps> = ({
 }) => {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const { products: allProducts } = useProducts({ per_page: 20 });
 
   const addToCart = useCartStore((state) => state.addItem);
   const addToWishlist = useWishlistStore((state) => state.addItem);
@@ -47,14 +48,14 @@ const RelatedProductsModal: React.FC<RelatedProductsModalProps> = ({
   const isInCompare = (id: number | string) => compareItems.some((item) => item.id === id || item.sku === id || item.slug === id);
 
   const relatedProducts = useMemo(() => {
-    if (!product || !isOpen) return [];
+    if (!product || !isOpen || !allProducts) return [];
     
     const categoryIds = product.categories?.map(c => c.id) || [];
-    return SEED_PRODUCTS.filter(p => 
+    return allProducts.filter(p => 
       p.id !== product.id && 
       p.categories?.some(c => categoryIds.includes(c.id))
     ).slice(0, 6);
-  }, [product, isOpen]);
+  }, [product, isOpen, allProducts]);
 
   useEffect(() => {
     if (isOpen && product) {
