@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { SEED_REVIEWS } from '@/lib/data/seed/reviews'
 import type { Product } from '@/lib/data/types'
 import ProductDetailClient from './_components/ProductDetailClient'
 
@@ -121,9 +120,9 @@ export default async function ProductDetailPage({ params }: Props) {
 
   if (!product) notFound();
 
-  // Related products and reviews still use seed data for now
+  // Related products and reviews defaults
   const relatedProducts: Product[] = [];
-  const reviews = SEED_REVIEWS.filter((r) => r.product_id === product.id);
+  const reviews: any[] = [];
 
   return (
     <ProductDetailClient

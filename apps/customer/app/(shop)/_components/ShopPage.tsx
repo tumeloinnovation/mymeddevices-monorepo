@@ -3,8 +3,25 @@ import React, { useState, useCallback, useMemo } from "react";
 import type { Product, Category } from "@/lib/data/types";
 import { filterProducts } from "@/lib/data/helpers/filter-products";
 import { sortProducts } from "@/lib/data/helpers/sort-products";
-import { buildCategoryTree } from "@/lib/data/seed/categories";
 import ProductGrid from "./ProductGrid";
+
+function buildCategoryTree(categories: Category[]): Category[] {
+  if (!categories || !Array.isArray(categories)) return [];
+  const map = new Map<number | string, Category>();
+  const roots: Category[] = [];
+  categories.forEach((cat) => {
+    map.set(cat.id, { ...cat, children: [] });
+  });
+  categories.forEach((cat) => {
+    const node = map.get(cat.id)!;
+    if (cat.parent && map.has(cat.parent)) {
+      map.get(cat.parent)!.children?.push(node);
+    } else {
+      roots.push(node);
+    }
+  });
+  return roots;
+}
 import ShopHeader from "./ShopHeader";
 import ShopSidebar from "./ShopSidebar";
 import ShopFiltersDrawer from "./ShopFiltersDrawer";

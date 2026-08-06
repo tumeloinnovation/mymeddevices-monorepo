@@ -1,4 +1,3 @@
-import { SEED_CATEGORIES } from "@/lib/data/seed/categories";
 import CategoriesPage from "../_components/CategoriesPage";
 
 export const metadata = {

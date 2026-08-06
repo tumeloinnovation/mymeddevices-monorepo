@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import CategoryDetailPage from "./_components/CategoryDetailPage";
-import { SEED_CATEGORIES } from "@/lib/data/seed/categories";
+import { catalogService } from '@mymeddevices/core/services/catalog-service';
 
 const SITE_URL = 'https://mymeddevices.com'
 
@@ -9,14 +9,15 @@ type Props = {
   params: Promise<{ slug: string }>
 }
 
-// Keep generateStaticParams for static generation
-export async function generateStaticParams() {
-  return SEED_CATEGORIES.map((c) => ({ slug: c.slug }));
-}
-
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params
-  const category = SEED_CATEGORIES.find((c) => c.slug === slug)
+  let category = null;
+  try {
+    const categories = await catalogService.getCategories();
+    category = categories.find((c) => c.slug === slug);
+  } catch {
+    category = null;
+  }
 
   if (!category) {
     return { title: 'Category Not Found', description: 'The requested category could not be found.' }
@@ -52,9 +53,5 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 export default async function CategoryPage({ params }: Props) {
   const { slug } = await params;
-  const category = SEED_CATEGORIES.find((c) => c.slug === slug);
-
-  if (!category) notFound();
-
   return <CategoryDetailPage slug={slug} />;
 }
