@@ -120,7 +120,7 @@ export default function ShippingPage() {
                         </TableCell>
                         <TableCell>
                           <Link 
-                            href={`/dashboard/shopping/orders/${shipment.order_id}`}
+                            href={`/dashboard/orders/${shipment.order_id}`}
                             className="text-orange-600 hover:underline flex items-center gap-1"
                           >
                             {shipment.order_id.split("-")[0]}...
@@ -134,7 +134,7 @@ export default function ShippingPage() {
                         <TableCell>{getStatusBadge(shipment.status)}</TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" asChild>
-                             <Link href={`/dashboard/shopping/orders/${shipment.order_id}`}>
+                             <Link href={`/dashboard/orders/${shipment.order_id}`}>
                                View Order
                              </Link>
                           </Button>

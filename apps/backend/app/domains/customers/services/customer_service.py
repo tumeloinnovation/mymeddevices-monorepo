@@ -256,16 +256,16 @@ class CustomerService:
 
     async def create_review(self, user_id: uuid.UUID, data: ReviewCreate) -> Review:
         profile = await self.get_profile(user_id)
-        
+
         # Check if user already reviewed this product
         existing = await self.review_repo.get_by(customer_id=profile.id, product_id=data.product_id)
         if existing:
             raise HTTPException(status_code=400, detail="You have already reviewed this product")
-            
+
         # Check if user actually purchased the product to set is_verified_purchase
         from app.domains.shopping.models.order import Order, OrderItem, OrderStatus
         from sqlalchemy import select, and_
-        
+
         purchase_stmt = (
             select(Order.id)
             .join(OrderItem, OrderItem.order_id == Order.id)
@@ -278,13 +278,22 @@ class CustomerService:
         )
         purchase_result = await self.db.execute(purchase_stmt)
         is_verified = purchase_result.scalar_one_or_none() is not None
-        
+
+        # Check for profanity
+        from app.domains.customers.services.profanity_filter_service import profanity_filter
+        contains_profanity, flagged_words = profanity_filter.check_text(data.comment)
+
+        # Create review with profanity detection
         review = Review(
             customer_id=profile.id,
             is_verified_purchase=is_verified,
+            contains_profanity=contains_profanity,
+            flagged_words=flagged_words if contains_profanity else None,
+            moderation_status="hidden" if contains_profanity else "visible",
             **data.model_dump()
         )
-        return await self.review_repo.create(review)
+        created = await self.review_repo.create(review)
+        return await self.review_repo.get_with_details(created.id)
 
     async def update_review(self, user_id: uuid.UUID, review_id: uuid.UUID, data: ReviewUpdate) -> Review:
         profile = await self.get_profile(user_id)
@@ -293,13 +302,23 @@ class CustomerService:
         if not review or review.customer_id != profile.id:
             raise HTTPException(status_code=404, detail="Review not found")
 
-        return await self.review_repo.update(review, data.model_dump(exclude_unset=True))
+        update_data = data.model_dump(exclude_unset=True)
+        if "comment" in update_data and update_data["comment"]:
+            from app.domains.customers.services.profanity_filter_service import profanity_filter
+            contains_profanity, flagged_words = profanity_filter.check_text(update_data["comment"])
+            update_data["contains_profanity"] = contains_profanity
+            update_data["flagged_words"] = flagged_words if contains_profanity else None
+            if contains_profanity:
+                update_data["moderation_status"] = "hidden"
+
+        await self.review_repo.update(review, update_data)
+        return await self.review_repo.get_with_details(review.id)
 
     async def delete_review(self, user_id: uuid.UUID, review_id: uuid.UUID):
         profile = await self.get_profile(user_id)
         review = await self.review_repo.get(review_id)
-        
+
         if not review or review.customer_id != profile.id:
             raise HTTPException(status_code=404, detail="Review not found")
-            
+
         await self.review_repo.delete(review_id)

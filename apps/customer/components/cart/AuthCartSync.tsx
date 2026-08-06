@@ -87,10 +87,9 @@ export function AuthCartSync() {
           console.log('✅ [AuthCartSync] Step 1 complete: Cart synced from backend');
 
           // Step 2: Check if there's a guest cart to merge
-          // needsGuestCartMerge now checks for both token AND items
           if (needsGuestCartMerge()) {
             console.log('🔄 [AuthCartSync] Step 2: Merging guest cart...');
-            await mergeGuestCartOnLogin('merge');
+            await cartStore.mergeCart('merge');
             console.log('✅ [AuthCartSync] Step 2 complete: Guest cart merged');
           } else {
             console.log('ℹ️ [AuthCartSync] Step 2 skipped: No guest cart to merge');

@@ -1,6 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
+import { Star, Truck, ShieldCheck, Award, HeadphonesIcon, ChevronDown } from 'lucide-react'
 import RelatedProductsModal from './RelatedProductsModal'
-import PriceTag from './PriceTag'
 import DirectCheckout from '../../../checkout/_components/DirectCheckout'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -50,6 +50,26 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
   const [added, setAdded] = useState(false)
   const [isRelatedModalOpen, setIsRelatedModalOpen] = useState(false)
 
+  // Variant selection state
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
+
+  // Get available variants
+  const variants = product.variants || []
+
+  // Calculate current price based on selected variant or base price
+  const currentPrice = useMemo(() => {
+    if (selectedVariant) {
+      const variant = variants.find(v => v.id === selectedVariant)
+      if (variant) return variant.price
+    }
+    return parseFloat(product.price) || 0
+  }, [selectedVariant, variants, product.price])
+
+  // Total price for display
+  const totalPrice = useMemo(() => {
+    return currentPrice * quantity
+  }, [currentPrice, quantity])
+
   const handleWishlistToggle = () => {
     if (isInWishlist(product.id)) {
       removeFromWishlist(product.id);
@@ -93,193 +113,317 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
     setIsShareOpen(false);
   };
 
+  const price = parseFloat(product.price) || 0
+
+  // Group variants by attribute type
+  const variantGroups = useMemo(() => {
+    if (variants.length === 0) return {}
+
+    const groups: Record<string, Set<string>> = {}
+    variants.forEach(variant => {
+      Object.entries(variant.attributes).forEach(([key, value]) => {
+        if (!groups[key]) groups[key] = new Set()
+        groups[key].add(value)
+      })
+    })
+
+    // Convert Sets to arrays
+    const result: Record<string, string[]> = {}
+    Object.entries(groups).forEach(([key, values]) => {
+      result[key] = Array.from(values)
+    })
+    return result
+  }, [variants])
+
+  // Get available variant combinations
+  const getAvailableVariants = (selectedAttrs: Record<string, string>) => {
+    return variants.filter(variant => {
+      return Object.entries(selectedAttrs).every(([key, value]) =>
+        variant.attributes[key] === value
+      )
+    })
+  }
+
+  const trustSignals = [
+    {
+      icon: Truck,
+      title: 'Free Delivery',
+      description: 'On orders over KES 50,000',
+    },
+    {
+      icon: ShieldCheck,
+      title: '2-Year Warranty',
+      description: 'Comprehensive coverage',
+    },
+    {
+      icon: Award,
+      title: 'Certified Authentic',
+      description: '100% genuine equipment',
+    },
+    {
+      icon: HeadphonesIcon,
+      title: '24/7 Support',
+      description: 'Expert assistance anytime',
+    },
+  ]
+
   return (
-    <div>
-      <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold mb-1">{product.name}</h1>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-500">
-        <p>SKU: <span className="font-medium">{product.sku}</span></p>
-        {product.model_number && (
-          <p>Model: <span className="font-medium">{product.model_number}</span></p>
+    <div className="space-y-5">
+      {/* Stock Status Badge */}
+      <div className="flex items-center gap-3">
+        {product.stock_status === 'instock' ? (
+          <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
+            IN STOCK
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="text-gray-600">
+            OUT OF STOCK
+          </Badge>
+        )}
+        {product.on_sale && (
+          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-900/40 dark:text-red-400 border-red-200 dark:border-red-800">
+            SALE
+          </Badge>
         )}
       </div>
 
+      {/* Product Title */}
+      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
+        {product.name}
+      </h1>
+
+      {/* Rating & Reviews */}
+      <div className="flex items-center gap-2">
+        <div className="flex items-center">
+          {[...Array(5)].map((_, i) => (
+            <Star
+              key={i}
+              className={`h-4 w-4 ${
+                i < 5 ? 'fill-amber-400 text-amber-400' : 'text-gray-300 dark:text-gray-600'
+              }`}
+            />
+          ))}
+        </div>
+        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">5.0</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">(124 reviews)</span>
+      </div>
+
+      {/* Brand */}
       {product.brands && product.brands.length > 0 && (
-        <p className="text-sm text-gray-500 mt-1">
-          Brand: <span className="font-medium">{product.brands[0].name}</span>
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          by <span className="font-medium text-gray-900 dark:text-gray-100">{product.brands[0].name}</span>
         </p>
       )}
 
-      {((product.categories && product.categories.length > 0) || (product.tags && product.tags.length > 0)) && (
-        <div className="mt-3 mb-3 flex flex-wrap gap-1.5 items-center">
-          {product.categories?.map((cat) => (
-            <Badge key={cat.id} className="text-xs">{cat.name}</Badge>
+      {/* Price Section */}
+      <div className="space-y-1">
+        <div className="flex items-baseline gap-2">
+          <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+            KES {formatCurrency(currentPrice)}
+          </span>
+          {product.on_sale && product.sale_price && (
+            <span className="text-lg text-gray-400 line-through">
+              KES {formatCurrency(parseFloat(product.sale_price))}
+            </span>
+          )}
+        </div>
+        {quantity > 1 && (
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Total: <span className="font-semibold text-gray-900 dark:text-gray-100">KES {formatCurrency(totalPrice)}</span>
+          </p>
+        )}
+      </div>
+
+      {/* Variant Selection */}
+      {variants.length > 0 && Object.keys(variantGroups).length > 0 && (
+        <div className="space-y-4">
+          {Object.entries(variantGroups).map(([attrName, options]) => (
+            <div key={attrName} className="space-y-2">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">
+                {attrName.replace(/_/g, ' ')}
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {options.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => {
+                      // Find matching variant with this attribute
+                      const matchingVariant = variants.find(v =>
+                        v.attributes[attrName] === option
+                      )
+                      if (matchingVariant) {
+                        setSelectedVariant(matchingVariant.id)
+                      }
+                    }}
+                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
+                      selectedVariant && variants.find(v => v.id === selectedVariant)?.attributes[attrName] === option
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+            </div>
           ))}
-          {product.tags?.map((tag) => (
-            <Badge key={tag.name} variant="outline" className="text-xs bg-gray-50 dark:bg-muted text-gray-600 dark:text-gray-300">
+        </div>
+      )}
+
+      {/* Short Description */}
+      {product.short_description && (
+        <div
+          className="text-sm text-gray-600 dark:text-gray-400"
+          dangerouslySetInnerHTML={{ __html: product.short_description }}
+        />
+      )}
+
+      {/* Categories and Tags */}
+      {((product.categories && product.categories.length > 0) || (product.tags && product.tags.length > 0)) && (
+        <div className="flex flex-wrap gap-2 items-center">
+          {product.categories?.map((cat) => (
+            <Badge key={cat.id} variant="outline" className="text-xs">
+              {cat.name}
+            </Badge>
+          ))}
+          {product.tags?.slice(0, 3).map((tag) => (
+            <Badge key={tag.name} className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
               {tag.name}
             </Badge>
           ))}
         </div>
       )}
 
-      {product.short_description && (
-        <div
-          className="mt-4 text-gray-700"
-          dangerouslySetInnerHTML={{ __html: product.short_description }}
-        />
-      )}
+      {/* Wishlist, Compare, Share */}
+      <div className="flex items-center gap-6">
+        <button
+          onClick={handleWishlistToggle}
+          className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors"
+        >
+          <Heart className={`h-4 w-4 ${wishlistHydrated && isInWishlist(product.id) ? 'fill-red-500 text-red-500' : ''}`} />
+          <span>Wishlist</span>
+        </button>
 
-        <div className="mt-4 gap-4">
-          <PriceTag price={parseFloat(product.price)} mrp={parseFloat(product.regular_price)} />
-          <div className="mt-1 text-sm text-gray-700">Total: <span className="font-semibold">Ksh. {formatCurrency(parseFloat(product.price) * quantity)}</span></div>
-          <div className="mt-1 text-sm text-gray-600">Delivery from <span className="font-semibold">KSh 170</span> around Nairobi</div>
-        </div>
+        <button
+          onClick={handleCompareToggle}
+          disabled={!isInCompare(product.id) && !canAddMoreCompare()}
+          className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <GitCompare className={`h-4 w-4 ${compareHydrated && isInCompare(product.id) ? 'fill-blue-500 text-blue-500' : ''}`} />
+          <span>Compare</span>
+        </button>
 
-
-
-      <div className="mt-6">
-        {/* Add to cart and WhatsApp - stack on small screens */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <div className="w-full sm:w-auto">
-            {!added ? (
+        <Popover open={isShareOpen} onOpenChange={setIsShareOpen}>
+          <PopoverTrigger asChild>
+            <button className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 transition-colors">
+              <Share2 className="h-4 w-4" />
+              <span>Share</span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-44 p-2" side="top" align="end">
+            <div className="flex flex-col gap-1">
               <Button
-                onClick={() => {
-                  addToCart()
-                  setAdded(true)
-                }}
-                className="w-full sm:min-w-[180px]"
+                variant="ghost"
+                size="sm"
+                onClick={() => handleShare('facebook')}
+                className="flex items-center gap-2 justify-start h-8"
               >
-                Add to cart
+                <Facebook className="h-4 w-4 text-blue-600" />
+                <span className="text-xs">Facebook</span>
               </Button>
-            ) : (
-              <div className="flex items-center border rounded-md overflow-hidden transition-all duration-200 w-full sm:w-auto">
-                <button
-                  type="button"
-                  aria-label={quantity <= 1 ? 'remove from cart' : 'decrease'}
-                  onClick={() => {
-                    if (quantity <= 1) {
-                      // remove from cart UI
-                      setAdded(false)
-                      // inform cart (qty 0 = remove)
-                      addToCart(0)
-                      // keep quantity at 1 (or optionally reset to 1)
-                      setQuantity(1)
-                      return
-                    }
-
-                    const newQty = quantity - 1
-                    setQuantity(newQty)
-                    addToCart(newQty)
-                  }}
-                  className={`px-3 py-2 ${quantity <= 1 ? 'text-red-600 hover:bg-red-50' : 'hover:bg-gray-100'}`}
-                >
-                  -
-                </button>
-
-                <div className="px-6 py-2 font-medium" aria-live="polite">{quantity}</div>
-
-                <button
-                  type="button"
-                  aria-label="increase"
-                  onClick={() => {
-                    const newQty = quantity + 1
-                    setQuantity(newQty)
-                    addToCart(newQty)
-                  }}
-                  className="px-3 py-2 hover:bg-gray-100"
-                >
-                  +
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="w-full sm:w-auto">
-            <DirectCheckout
-              productName={product.name}
-              price={parseFloat(product.price)}
-              quantity={quantity}
-              className="w-full sm:min-w-[220px]"
-              onAddToCart={() => {
-                // ensure cart UI is in added state when user checks out
-                addToCart()
-                setAdded(true)
-              }}
-            />
-          </div>
-        </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleShare('twitter')}
+                className="flex items-center gap-2 justify-start h-8"
+              >
+                <Twitter className="h-4 w-4 text-black dark:text-white" />
+                <span className="text-xs">X (Twitter)</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleShare('whatsapp')}
+                className="flex items-center gap-2 justify-start h-8"
+              >
+                <MessageCircle className="h-4 w-4 text-green-600" />
+                <span className="text-xs">WhatsApp</span>
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
       </div>
-        <div className="flex items-center gap-5 mt-6  ">
-          {/* Wishlist / Compare / Share with labels (labels shown on md+) */}
-                    <div className="flex flex-col items-center text-center">
-            <Button variant="ghost" size="icon" onClick={handleWishlistToggle} aria-label="wishlist">
-              <Heart className={`h-4 w-4 ${wishlistHydrated && isInWishlist(product.id) ? 'fill-current text-red-500' : ''}`} />
-            </Button>
-            <span className="mt-1 text-xs text-gray-500 hidden md:block">Wishlist</span>
-          </div>
 
-          <div className="flex flex-col items-center text-center">
-            <Button variant="ghost" size="icon" onClick={handleCompareToggle} disabled={!isInCompare(product.id) && !canAddMoreCompare()} aria-label="compare">
-              <GitCompare className={`h-4 w-4 ${compareHydrated && isInCompare(product.id) ? 'fill-current text-blue-500' : ''}`} />
-            </Button>
-            <span className="mt-1 text-xs text-gray-500 hidden md:block">Compare</span>
+      {/* Quantity Selector with Add to Cart */}
+      <div className="flex items-center gap-3">
+        <div className="flex items-center border rounded-lg overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setQuantity(Math.max(1, quantity - 1))}
+            className="px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Decrease quantity"
+          >
+            -
+          </button>
+          <div className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100 min-w-[50px] text-center">
+            {quantity}
           </div>
-
-          <div className="flex flex-col items-center text-center">
-            <Popover open={isShareOpen} onOpenChange={setIsShareOpen}>
-              <PopoverTrigger asChild>
-                <Button variant="ghost" size="icon" aria-label={isShareOpen ? 'Share menu open' : 'Share'}>
-                  <Share2 className="h-4 w-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-44 p-2" side="bottom" align="center">
-                <div className="flex flex-col gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleShare('facebook')}
-                    className="flex items-center gap-2 justify-start h-8"
-                  >
-                    <Facebook className="h-4 w-4 text-blue-600" />
-                    <span className="text-xs">Share on Facebook</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleShare('twitter')}
-                    className="flex items-center gap-2 justify-start h-8"
-                  >
-                    <Twitter className="h-4 w-4 text-black dark:text-white" />
-                    <span className="text-xs">Share on X</span>
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleShare('whatsapp')}
-                    className="flex items-center gap-2 justify-start h-8"
-                  >
-                    <MessageCircle className="h-4 w-4 text-green-600" />
-                    <span className="text-xs">Share on WhatsApp</span>
-                  </Button>
-                </div>
-              </PopoverContent>
-            </Popover>
-            <span className="mt-1 text-xs text-gray-500 hidden md:block">Share</span>
-          </div>
-          {/* inquiry */}
-          {/* <div className="flex flex-col items-center text-center">
-            <Button variant="ghost" size="icon" aria-label="inquiry">
-              <MessageCircle className="h-4 w-4" />
-            </Button>
-            <span className="mt-1 text-xs text-gray-500 hidden md:block">Inquiry</span>
-          </div> */}
+          <button
+            type="button"
+            onClick={() => setQuantity(quantity + 1)}
+            className="px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+            aria-label="Increase quantity"
+          >
+            +
+          </button>
         </div>
+        <Button
+          onClick={() => {
+            addToCart()
+            setAdded(true)
+          }}
+          className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium"
+          size="lg"
+        >
+          {added ? 'Added to Cart' : 'Add to Cart'}
+        </Button>
+      </div>
 
-        <RelatedProductsModal
-          isOpen={isRelatedModalOpen}
-          onClose={() => setIsRelatedModalOpen(false)}
-          product={product}
-        />
+      {/* Buy Now Button */}
+      <DirectCheckout
+        productName={product.name}
+        price={currentPrice}
+        quantity={quantity}
+        onAddToCart={() => {
+          addToCart()
+          setAdded(true)
+        }}
+      />
+
+      {/* Trust Signals */}
+      <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-200 dark:border-gray-800">
+        {trustSignals.map((signal) => {
+          const Icon = signal.icon
+          return (
+            <div key={signal.title} className="flex items-center gap-2">
+              <div className="text-gray-500 dark:text-gray-400">
+                <Icon className="h-4 w-4" strokeWidth={2} />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-900 dark:text-gray-100">{signal.title}</p>
+                <p className="text-[10px] text-gray-500 dark:text-gray-400">{signal.description}</p>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <RelatedProductsModal
+        isOpen={isRelatedModalOpen}
+        onClose={() => setIsRelatedModalOpen(false)}
+        product={product}
+      />
     </div>
   )
 }

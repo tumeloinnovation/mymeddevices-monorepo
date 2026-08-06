@@ -75,7 +75,7 @@ class Order(Base, IDMixin, AuditMixin):
     @property
     def subtotal(self) -> float:
         if self.items:
-            return float(sum(item.subtotal for item in self.items))
+            return float(sum(float(item.subtotal) for item in self.items))
         if self.shipping_address and isinstance(self.shipping_address, dict):
             return float(self.shipping_address.get("subtotal", 0.0))
         return 0.0

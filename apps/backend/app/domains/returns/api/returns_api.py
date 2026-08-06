@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.responses import success_response, ApiSuccessResponse
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, require_role
 from app.domains.auth.models.user import User
 from app.domains.returns.schemas.return_schemas import (
     ReturnRequestCreate,
@@ -169,6 +169,58 @@ async def cancel_return_request(
         )
 
     return success_response(_return_to_response(cancelled))
+
+
+# ============================================================================
+# ADMIN RETURN MANAGEMENT
+# ============================================================================
+
+@router.get("/admin/list", response_model=ApiSuccessResponse[ReturnRequestListResponse])
+async def admin_list_all_returns(
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin lists all customer return requests."""
+    service = ReturnService(db)
+    offset = (page - 1) * limit
+
+    returns, total = await service.list_returns(
+        status=status_filter,
+        offset=offset,
+        limit=limit,
+    )
+
+    return success_response(
+        ReturnRequestListResponse(
+            items=[_return_to_response(r) for r in returns],
+            total=total,
+            page=page,
+            limit=limit,
+        )
+    )
+
+
+@router.put("/{return_id}/status", response_model=ApiSuccessResponse[ReturnRequestResponse])
+async def admin_update_return_status(
+    return_id: uuid.UUID,
+    payload: dict,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin updates status of a return request."""
+    service = ReturnService(db)
+    new_status = payload.get("status")
+    if not new_status:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Status is required")
+
+    updated = await service.update_status(return_id, new_status, current_user.id)
+    if not updated:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found")
+
+    return success_response(_return_to_response(updated))
 
 
 # Helper function

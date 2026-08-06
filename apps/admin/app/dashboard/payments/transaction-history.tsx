@@ -282,7 +282,7 @@ export default function TransactionHistory() {
                         <TableCell>
                           {transaction.order_id ? (
                             <Link
-                              href={`/dashboard/shopping/orders/${transaction.order_id}`}
+                              href={`/dashboard/orders/${transaction.order_id}`}
                               className="text-blue-600 hover:underline flex items-center gap-1"
                             >
                               {transaction.order_id.slice(0, 8)}...

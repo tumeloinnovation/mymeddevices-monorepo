@@ -2,10 +2,12 @@
 
 import React from 'react';
 import { SidebarNavItem, type SidebarNavItemProps } from './SidebarNavItem';
+import { SidebarNavItemWithChildren, type SidebarNavItemWithChildrenProps } from './SidebarNavItemWithChildren';
+import type { NavItem } from '@/lib/config/navigation';
 
 interface SidebarSectionProps {
   title: string;
-  items: Omit<SidebarNavItemProps, 'isCollapsed'>[];
+  items: NavItem[];
   isCollapsed: boolean;
 }
 
@@ -22,13 +24,35 @@ export function SidebarSection({
         </h3>
       )}
       <div className="flex flex-col gap-0.5">
-        {items.map((item) => (
-          <SidebarNavItem 
-            key={item.href} 
-            {...item} 
-            isCollapsed={isCollapsed} 
-          />
-        ))}
+        {items.map((item) => {
+          const hasChildren = item.children && item.children.length > 0;
+
+          if (hasChildren) {
+            return (
+              <SidebarNavItemWithChildren
+                key={item.href}
+                href={item.href}
+                icon={item.icon}
+                label={item.label}
+                badge={item.badge}
+                isCollapsed={isCollapsed}
+                children={item.children}
+                activePattern={item.activePattern}
+              />
+            );
+          }
+
+          return (
+            <SidebarNavItem
+              key={item.href}
+              href={item.href}
+              icon={item.icon}
+              label={item.label}
+              badge={item.badge}
+              isCollapsed={isCollapsed}
+            />
+          );
+        })}
       </div>
     </div>
   );

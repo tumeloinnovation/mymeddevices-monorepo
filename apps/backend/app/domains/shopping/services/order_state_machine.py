@@ -38,6 +38,7 @@ ORDER_TRANSITIONS: Dict[OrderStatus, List[OrderStatus]] = {
 ORDER_ITEM_TRANSITIONS: Dict[OrderItemFulfillmentStatus, List[OrderItemFulfillmentStatus]] = {
     OrderItemFulfillmentStatus.PENDING: [
         OrderItemFulfillmentStatus.PROCESSING,
+        OrderItemFulfillmentStatus.PACKED,
         OrderItemFulfillmentStatus.CANCELLED
     ],
     OrderItemFulfillmentStatus.PROCESSING: [

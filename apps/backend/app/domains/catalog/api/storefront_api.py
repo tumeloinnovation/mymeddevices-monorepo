@@ -1,15 +1,19 @@
+import uuid
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
+from app.core.responses import success_response, ApiSuccessResponse
 from app.domains.catalog.services.catalog_service import CatalogService
 from app.domains.catalog.schemas.product_schemas import (
     StorefrontProductResponse,
     StorefrontProductListResponse,
 )
 from app.domains.catalog.schemas.category_schemas import CategoryTreeResponse
+from app.domains.customers.repositories.customer_repository import ReviewRepository
+from app.domains.customers.schemas.customer_schemas import PublicReviewResponse
 from app.core.rate_limiting import RateLimiterDependency
 
 router = APIRouter(prefix="", tags=["Public Storefront"])
@@ -130,3 +134,58 @@ async def get_storefront_products_by_category(
         "page": page,
         "page_size": page_size
     }
+
+
+@router.get("/products/{slug}/reviews", response_model=ApiSuccessResponse[List[PublicReviewResponse]], dependencies=[Depends(RateLimiterDependency("products_get"))])
+async def get_product_reviews(
+    slug: str,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get visible reviews for a product by slug.
+    Returns only reviews with moderation_status='visible'.
+    """
+    from app.domains.catalog.models.product import Product
+    # Check if slug is a valid UUID or product slug
+    is_uuid = False
+    try:
+        product_uuid = uuid.UUID(slug)
+        is_uuid = True
+    except ValueError:
+        pass
+
+    if is_uuid:
+        product_stmt = select(Product).where((Product.id == product_uuid) | (Product.slug == slug))
+    else:
+        product_stmt = select(Product).where(Product.slug == slug)
+
+    product_result = await db.execute(product_stmt)
+    product = product_result.scalar_one_or_none()
+
+    if not product:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")
+
+    # Get reviews for this product
+    review_repo = ReviewRepository(db)
+    reviews = await review_repo.get_product_reviews(product.id, include_hidden=False)
+
+    # Convert to public response (anonymize customer info)
+    public_reviews = []
+    for review in reviews:
+        # Get customer name from relationship
+        customer_name = None
+        if review.customer and review.customer.user:
+            first = review.customer.user.first_name or ""
+            last = review.customer.user.last_name or ""
+            customer_name = f"{first[0]}. {last}" if first and last else (first or last or "Customer")
+
+        public_reviews.append({
+            "id": str(review.id),
+            "rating": review.rating,
+            "comment": review.comment,
+            "is_verified_purchase": review.is_verified_purchase,
+            "created_at": review.created_at,
+            "reviewer_name": customer_name
+        })
+
+    return success_response(public_reviews)

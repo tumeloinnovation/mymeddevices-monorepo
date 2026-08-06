@@ -145,12 +145,16 @@ export interface Review {
   rating: number;
   comment?: string;
   is_verified_purchase: boolean;
-  is_approved: boolean;
+  contains_profanity?: boolean;
+  flagged_words?: string[];
+  moderation_status?: 'visible' | 'hidden' | 'removed' | string;
+  is_approved?: boolean;
   created_at: string;
   updated_at: string;
   product?: {
     id: string;
     name: string;
+    slug?: string;
     image_url?: string;
   };
 }
@@ -530,11 +534,9 @@ export const customerService = {
   async getReviews(): Promise<Review[]> {
     try {
       const response = await apiClient.get<any>('/customers/reviews');
-
-      if (response && response.data) {
-        return response.data;
-      }
-
+      const data = response?.data ?? response;
+      if (Array.isArray(data)) return data;
+      if (data?.reviews && Array.isArray(data.reviews)) return data.reviews;
       return [];
     } catch (error) {
       console.error('Failed to fetch reviews:', error);
@@ -548,16 +550,9 @@ export const customerService = {
   async createReview(data: ReviewCreate): Promise<Review> {
     try {
       const response = await apiClient.post<any>('/customers/reviews', data);
-
-      if (response && response.data) {
-        toast.success('Review submitted successfully');
-        return response.data;
-      }
-
-      throw new Error('Invalid response format');
-    } catch (error) {
+      return response?.data ?? response;
+    } catch (error: any) {
       console.error('Failed to create review:', error);
-      toast.error('Failed to submit review');
       throw error;
     }
   },
@@ -568,16 +563,9 @@ export const customerService = {
   async updateReview(id: string, data: ReviewUpdate): Promise<Review> {
     try {
       const response = await apiClient.put<any>(`/customers/reviews/${id}`, data);
-
-      if (response && response.data) {
-        toast.success('Review updated successfully');
-        return response.data;
-      }
-
-      throw new Error('Invalid response format');
-    } catch (error) {
+      return response?.data ?? response;
+    } catch (error: any) {
       console.error('Failed to update review:', error);
-      toast.error('Failed to update review');
       throw error;
     }
   },
@@ -588,10 +576,8 @@ export const customerService = {
   async deleteReview(id: string): Promise<void> {
     try {
       await apiClient.delete(`/customers/reviews/${id}`);
-      toast.success('Review deleted successfully');
     } catch (error) {
       console.error('Failed to delete review:', error);
-      toast.error('Failed to delete review');
       throw error;
     }
   },

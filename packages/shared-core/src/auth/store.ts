@@ -459,7 +459,7 @@ export const useAuthStore = create<AuthState>()(
 
       getSystemStatus: async () => {
         try {
-          const result = await apiClient.get<any>('/system/status');
+          const result = await apiClient.get<any>('/admin/system/status');
           return result?.data || result;
         } catch (error: any) {
           toast.error('Failed to fetch system status');

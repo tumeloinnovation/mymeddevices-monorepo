@@ -32,6 +32,7 @@ interface CartState {
   // Backend state
   cart: Cart | null;
   cartToken: string | null;
+  guestCartExpiry: number | null;
   isLoading: boolean;
   error: string | null;
   isSyncing: boolean;
@@ -67,7 +68,7 @@ interface CartState {
   removeCoupon: (discountId: string) => Promise<void>;
 
   // Cart token management
-  setCartToken: (token: string) => void;
+  setCartToken: (token: string | null, expiry?: number | null) => void;
   clearCartToken: () => void;
   mergeCart: (method?: 'merge' | 'replace') => Promise<void>;
 
@@ -100,6 +101,15 @@ interface CartState {
 // Track sync state to prevent concurrent operations
 let syncInProgress = false;
 
+// Serial queue for mutating operations to eliminate race conditions
+let mutationQueue: Promise<void> = Promise.resolve();
+
+function enqueueMutation<T>(fn: () => Promise<T>): Promise<T> {
+  const result = mutationQueue.then(fn, fn);
+  mutationQueue = result.then(() => {}, () => {});
+  return result;
+}
+
 /**
  * Generate a unique key for tracking operations
  */
@@ -115,6 +125,7 @@ const useCartStore = create<CartState>()(
       hydrated: false,
       cart: null,
       cartToken: null,
+      guestCartExpiry: null,
       isLoading: false,
       error: null,
       isSyncing: false,
@@ -136,8 +147,8 @@ const useCartStore = create<CartState>()(
 
       getCount: () => {
         const state = get();
-        // Use backend cart item count when available (more accurate)
-        if (state.cart?.items) {
+        // Use backend cart item count when available and no pending operations exist
+        if (state.pendingOps.size === 0 && state.cart?.items) {
           return state.cart.items.reduce((acc, item) => acc + item.quantity, 0);
         }
         // Fallback to local items
@@ -148,34 +159,35 @@ const useCartStore = create<CartState>()(
         const state = get();
         const id = String(productId);
 
-        // Check backend cart first (source of truth)
-        const inBackendCart = state.cart?.items?.some((item) => item.product_id === id);
-        if (inBackendCart) return true;
+        // Check local items first (for pending or current changes)
+        if (state.items.some((item) => String(item.id) === id)) return true;
 
-        // Also check local items (for pending changes not yet synced)
-        return state.items.some((item) => String(item.id) === id);
+        // Fallback to backend cart
+        return state.cart?.items?.some((item) => item.product_id === id) ?? false;
       },
 
       getItemQuantity: (productId: number | string) => {
         const state = get();
         const id = String(productId);
 
-        // Check backend cart first (source of truth)
+        // Check local items first (source of optimistic truth)
+        const localItem = state.items.find((item) => String(item.id) === id);
+        if (localItem !== undefined) return localItem.quantity;
+
+        // Fallback to backend cart
         if (state.cart?.items) {
           const item = state.cart.items.find((item) => item.product_id === id);
           if (item) return item.quantity;
         }
 
-        // Fallback to local items
-        const localItem = state.items.find((item) => String(item.id) === id);
-        return localItem?.quantity || 0;
+        return 0;
       },
 
       getTotal: () => {
         const state = get();
 
-        // Use backend cart totals when available (more accurate)
-        if (state.cart?.items && state.cart.items.length > 0) {
+        // Use backend cart totals when available and no pending operations exist
+        if (state.pendingOps.size === 0 && state.cart?.items && state.cart.items.length > 0) {
           return state.cart.items.reduce((acc, item) => {
             const price = parseFloat(item.unit_price || item.product?.price || '0');
             return acc + price * item.quantity;
@@ -218,6 +230,9 @@ const useCartStore = create<CartState>()(
           }
         }
 
+        // Create snapshot for potential rollback
+        get().createSnapshot();
+
         // Optimistic update
         const updatedItems = existingItem
           ? state.items.map((item) =>
@@ -229,22 +244,18 @@ const useCartStore = create<CartState>()(
 
         set({ items: updatedItems });
 
-        // Mark operation as pending and sync to backend
+        // Mark operation as pending and sync to backend via queued execution
         get().pendingOps.add(opKey);
-        get().addItemToBackend(productId, validQuantity)
-          .then(() => {
-            // Success - remove from pending ops
-            get().pendingOps.delete(opKey);
-            // No need to sync again - addItemToBackend already returns the full cart
-            // and updates the cart state with the latest data from backend
-          })
-          .catch((err) => {
+        enqueueMutation(async () => {
+          try {
+            await get().addItemToBackend(productId, validQuantity);
+          } catch (err) {
             console.error('Failed to add item to backend:', err);
-            // Rollback on failure
-            get().pendingOps.delete(opKey);
             get().rollback();
-            // Note: toast is already shown by cart-service
-          });
+          } finally {
+            get().pendingOps.delete(opKey);
+          }
+        });
       },
 
       updateQuantity: (productId: number | string, quantity: number) => {
@@ -270,20 +281,20 @@ const useCartStore = create<CartState>()(
 
           // Mark operation as pending and sync to backend
           get().pendingOps.add(opKey);
-          const backendItem = state.cart?.items?.find(i => i.product_id === id);
-          if (backendItem) {
-            get().removeItemFromBackend(backendItem.id)
-              .then(() => {
-                get().pendingOps.delete(opKey);
-                get().syncWithBackend({ force: false });
-              })
-              .catch((err) => {
-                console.error('Failed to remove item from backend:', err);
-                get().pendingOps.delete(opKey);
-                get().rollback();
-                // Note: toast is already shown by cart-service
-              });
-          }
+          enqueueMutation(async () => {
+            try {
+              const currentCart = get().cart;
+              const backendItem = currentCart?.items?.find(i => i.product_id === id);
+              if (backendItem) {
+                await get().removeItemFromBackend(backendItem.id);
+              }
+            } catch (err) {
+              console.error('Failed to remove item from backend:', err);
+              get().rollback();
+            } finally {
+              get().pendingOps.delete(opKey);
+            }
+          });
           return;
         }
 
@@ -309,33 +320,22 @@ const useCartStore = create<CartState>()(
 
         // Mark operation as pending and sync to backend
         get().pendingOps.add(opKey);
-        const backendItem = state.cart?.items?.find(i => i.product_id === id);
-        if (backendItem) {
-          get().updateItemInBackend(backendItem.id, { quantity: validQuantity })
-            .then(() => {
-              get().pendingOps.delete(opKey);
-              get().syncWithBackend({ force: false });
-            })
-            .catch((err) => {
-              console.error('Failed to update item in backend:', err);
-              get().pendingOps.delete(opKey);
-              get().rollback();
-              // Note: toast is already shown by cart-service
-            });
-        } else {
-          // Item not in backend yet, add it
-          get().addItemToBackend(id, validQuantity)
-            .then(() => {
-              get().pendingOps.delete(opKey);
-              get().syncWithBackend({ force: false });
-            })
-            .catch((err) => {
-              console.error('Failed to add item to backend:', err);
-              get().pendingOps.delete(opKey);
-              get().rollback();
-              // Note: toast is already shown by cart-service
-            });
-        }
+        enqueueMutation(async () => {
+          try {
+            const currentCart = get().cart;
+            const backendItem = currentCart?.items?.find(i => i.product_id === id);
+            if (backendItem) {
+              await get().updateItemInBackend(backendItem.id, { quantity: validQuantity });
+            } else {
+              await get().addItemToBackend(id, validQuantity);
+            }
+          } catch (err) {
+            console.error('Failed to update item in backend:', err);
+            get().rollback();
+          } finally {
+            get().pendingOps.delete(opKey);
+          }
+        });
       },
 
       removeItem: (productId: number | string) => {
@@ -355,20 +355,20 @@ const useCartStore = create<CartState>()(
 
         // Mark operation as pending and sync to backend
         get().pendingOps.add(opKey);
-        const backendItem = state.cart?.items?.find(i => i.product_id === id);
-        if (backendItem) {
-          get().removeItemFromBackend(backendItem.id)
-            .then(() => {
-              get().pendingOps.delete(opKey);
-              get().syncWithBackend({ force: false });
-            })
-            .catch((err) => {
-              console.error('Failed to remove item from backend:', err);
-              get().pendingOps.delete(opKey);
-              get().rollback();
-              // Note: toast is already shown by cart-service
-            });
-        }
+        enqueueMutation(async () => {
+          try {
+            const currentCart = get().cart;
+            const backendItem = currentCart?.items?.find(i => i.product_id === id);
+            if (backendItem) {
+              await get().removeItemFromBackend(backendItem.id);
+            }
+          } catch (err) {
+            console.error('Failed to remove item from backend:', err);
+            get().rollback();
+          } finally {
+            get().pendingOps.delete(opKey);
+          }
+        });
       },
 
       clear: () => {
@@ -426,7 +426,7 @@ const useCartStore = create<CartState>()(
 
           // Check if cart is valid
           if (!cart) {
-            set({ isSyncing: false, cart: null, items: [] });
+            set({ isSyncing: false, cart: null });
             return;
           }
 
@@ -476,8 +476,7 @@ const useCartStore = create<CartState>()(
           // If error indicates invalid cart token, clear it
           if (errorMessage.includes('not found') ||
               errorMessage.includes('expired') ||
-              errorMessage.includes('invalid') ||
-              errorMessage.includes('500')) {
+              errorMessage.includes('invalid')) {
             console.log('[Cart] Clearing invalid cart token after sync failure');
             get().clearCartToken();
             set({ cart: null, items: [] });
@@ -700,37 +699,56 @@ const useCartStore = create<CartState>()(
       // Cart Token Management
       // ============================================================================
 
-      setCartToken: (token: string) => {
-        set({ cartToken: token });
+      setCartToken: (token: string | null, expiry?: number | null) => {
+        set({
+          cartToken: token,
+          guestCartExpiry: expiry ?? (token ? Date.now() + 30 * 24 * 60 * 60 * 1000 : null),
+        });
       },
 
       clearCartToken: () => {
-        set({ cartToken: null });
+        set({ cartToken: null, guestCartExpiry: null });
       },
 
       mergeCart: async (method: 'merge' | 'replace' = 'merge') => {
         const state = get();
-        if (!state.cartToken) return;
+        const guestToken = state.cartToken;
 
-        try {
-          set({ isLoading: true, error: null });
-          await cartService.mergeGuestCart(state.cartToken, method);
-
-          // Clear guest token after successful merge
-          set({ cartToken: null });
-
-          // Sync with the now authenticated backend cart
+        if (!guestToken) {
+          console.log('[Cart] No guest cart token in store to merge, skipping');
           await get().syncWithBackend({ force: true });
-        } catch (error) {
-          console.error('Failed to merge cart:', error);
-          set({
-            isLoading: false,
-            error: error instanceof Error ? error.message : 'Failed to merge cart',
-          });
-          throw error;
-        } finally {
-          set({ isLoading: false });
+          return;
         }
+
+        return enqueueMutation(async () => {
+          try {
+            set({ isLoading: true, error: null });
+            await cartService.mergeGuestCart(guestToken, method);
+
+            // Clear guest token from store after successful merge
+            get().clearCartToken();
+
+            // Sync with the now authenticated backend cart
+            await get().syncWithBackend({ force: true });
+          } catch (error) {
+            console.error('Failed to merge cart:', error);
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
+              console.log('[Cart] Guest cart not found or expired, clearing local token and proceeding');
+              get().clearCartToken();
+              set({ isLoading: false, error: null });
+              await get().syncWithBackend({ force: true });
+              return;
+            }
+            set({
+              isLoading: false,
+              error: error instanceof Error ? error.message : 'Failed to merge cart',
+            });
+            throw error;
+          } finally {
+            set({ isLoading: false });
+          }
+        });
       },
 
       // ============================================================================
@@ -764,6 +782,7 @@ const useCartStore = create<CartState>()(
       partialize: (state) => ({
         items: state.items,
         cartToken: state.cartToken,
+        guestCartExpiry: state.guestCartExpiry,
         // Exclude rollbackSnapshot, pendingOps, syncRequested from persistence
       }),
       onRehydrateStorage: () => (state) => {
@@ -777,23 +796,27 @@ const useCartStore = create<CartState>()(
 
           // Auto-sync with backend if cart token exists
           if (state.cartToken) {
-            // Small delay to ensure auth state is hydrated first
-            setTimeout(() => {
-              state.syncWithBackend({ force: true })
-                .catch((error) => {
-                  // If sync fails with a 500 or cart not found error, clear the invalid token
-                  console.error('[Cart] Auto-sync failed on rehydrate:', error);
-                  const errorMessage = error?.message || error?.toString() || '';
-                  if (errorMessage.includes('500') ||
-                      errorMessage.includes('not found') ||
-                      errorMessage.includes('expired') ||
-                      errorMessage.includes('cart')) {
-                    console.log('[Cart] Clearing invalid cart token');
-                    state.clearCartToken();
-                    state.clear();
-                  }
-                });
-            }, 100);
+            if (state.guestCartExpiry && Date.now() > state.guestCartExpiry) {
+              console.log('[Cart] Guest cart token expired on rehydrate, clearing token');
+              state.clearCartToken();
+              state.clearLocalOnly();
+            } else {
+              // Small delay to ensure auth state is hydrated first
+              setTimeout(() => {
+                state.syncWithBackend({ force: true })
+                  .catch((error) => {
+                    console.error('[Cart] Auto-sync failed on rehydrate:', error);
+                    const errorMessage = error?.message || error?.toString() || '';
+                    if (errorMessage.includes('not found') ||
+                        errorMessage.includes('expired') ||
+                        errorMessage.includes('invalid')) {
+                      console.log('[Cart] Clearing invalid cart token');
+                      state.clearCartToken();
+                      state.clearLocalOnly();
+                    }
+                  });
+              }, 100);
+            }
           }
         }
       },

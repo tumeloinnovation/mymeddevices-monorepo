@@ -10,6 +10,7 @@ import { useTheme } from 'next-themes';
 import { Sun, Moon, Store } from 'lucide-react';
 import Link from 'next/link';
 import { DashboardSidebar } from './_components/DashboardSidebar';
+import { useDashboardPageTitle } from './_hooks/use-dashboard-page-title';
 
 export default function DashboardLayout({
   children,
@@ -20,6 +21,7 @@ export default function DashboardLayout({
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const pageTitle = useDashboardPageTitle();
 
   useEffect(() => {
     if (!hydrated) return;
@@ -73,7 +75,7 @@ export default function DashboardLayout({
             <SidebarTrigger className="-ml-1" />
             <Separator orientation="vertical" className="mr-2 h-4" />
             <div className="flex items-center gap-2">
-              <h1 className="text-lg font-semibold">Dashboard</h1>
+              <h1 className="text-lg font-semibold">{pageTitle}</h1>
             </div>
           </div>
           <div className="flex items-center gap-2">

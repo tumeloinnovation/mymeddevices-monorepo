@@ -73,6 +73,73 @@ export interface ShoppingAnalytics {
   status_breakdown: Record<string, number>;
 }
 
+export enum BannerPlacement {
+  HOMEPAGE_HERO = "homepage_hero",
+  HOMEPAGE_SIDEBAR = "homepage_sidebar",
+  CATEGORY_PAGE = "category_page",
+  PRODUCT_PAGE = "product_page",
+  CHECKOUT_PAGE = "checkout_page",
+  HEADER_BAR = "header_bar",
+  FOOTER = "footer",
+}
+
+export enum BannerStatus {
+  DRAFT = "draft",
+  SCHEDULED = "scheduled",
+  ACTIVE = "active",
+  PAUSED = "paused",
+  EXPIRED = "expired",
+}
+
+export interface Banner {
+  id: string;
+  title: string;
+  description?: string;
+  image_url?: string;
+  image_alt_text?: string;
+  background_color?: string;
+  text_color?: string;
+  cta_text?: string;
+  cta_link?: string;
+  button_text?: string;
+  target_url?: string;
+  text_alignment?: "left" | "center" | "right";
+  cta_target: string;
+  placement: BannerPlacement;
+  priority: number;
+  status: BannerStatus;
+  scheduled_start?: string;
+  scheduled_end?: string;
+  target_audience?: string[];
+  target_categories?: string[];
+  target_products?: string[];
+  exclude_products?: string[];
+  coupon_id?: string;
+  vendor_id?: string;
+  is_dismissible: boolean;
+  show_close_button: boolean;
+  mobile_hidden: boolean;
+  desktop_hidden: boolean;
+  impressions: number;
+  clicks: number;
+  dismissals: number;
+  click_through_rate: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BannerAnalytics {
+  banner_id: string;
+  title: string;
+  impressions: number;
+  clicks: number;
+  dismissals: number;
+  click_through_rate: number;
+  status: BannerStatus;
+  scheduled_start?: string;
+  scheduled_end?: string;
+}
+
 class ShoppingService {
   // ============================================================================
   // ADMIN API
@@ -119,6 +186,10 @@ class ShoppingService {
 
   async adminUpdateOrderStatus(orderId: string, status: string): Promise<any> {
     return apiClient.patch(`/admin/shopping/orders/${orderId}/status`, { status });
+  }
+
+  async adminGetOrderDetails(orderId: string): Promise<any> {
+    return apiClient.get<any>(`/admin/shopping/orders/${orderId}`);
   }
 
   async updateOrderInternalNotes(orderId: string, internalNotes: string): Promise<any> {
@@ -198,6 +269,73 @@ class ShoppingService {
     return apiClient.delete(`/shopping/cart/coupon`, {
       params: { cart_id: cartId }
     });
+  }
+
+  // ============================================================================
+  // BANNERS
+  // ============================================================================
+
+  async getBanners(params?: {
+    placement?: BannerPlacement;
+    status?: BannerStatus;
+    page?: number;
+    page_size?: number;
+  }): Promise<Banner[]> {
+    return apiClient.get<Banner[]>("/admin/banners", { params });
+  }
+
+  async getBanner(id: string): Promise<Banner> {
+    return apiClient.get<Banner>(`/admin/banners/${id}`);
+  }
+
+  async createBanner(data: Partial<Banner>): Promise<Banner> {
+    return apiClient.post<Banner>("/admin/banners", data);
+  }
+
+  async updateBanner(id: string, data: Partial<Banner>): Promise<Banner> {
+    return apiClient.patch<Banner>(`/admin/banners/${id}`, data);
+  }
+
+  async deleteBanner(id: string): Promise<any> {
+    return apiClient.delete(`/admin/banners/${id}`);
+  }
+
+  async activateBanner(id: string): Promise<any> {
+    return apiClient.post(`/admin/banners/${id}/activate`, {});
+  }
+
+  async pauseBanner(id: string): Promise<any> {
+    return apiClient.post(`/admin/banners/${id}/pause`, {});
+  }
+
+  async getBannerAnalytics(id: string): Promise<BannerAnalytics> {
+    return apiClient.get<BannerAnalytics>(`/admin/banners/${id}/analytics`);
+  }
+
+  async getAllBannerAnalytics(params?: {
+    page?: number;
+    page_size?: number;
+  }): Promise<BannerAnalytics[]> {
+    return apiClient.get<BannerAnalytics[]>("/admin/banners/analytics/all", { params });
+  }
+
+  // ============================================================================
+  // PUBLIC BANNER API (CUSTOMER FACING)
+  // ============================================================================
+
+  async getPublicBanners(params?: {
+    placement?: BannerPlacement;
+    limit?: number;
+  }): Promise<Banner[]> {
+    return apiClient.get<Banner[]>("/shopping/banners", { params });
+  }
+
+  async recordBannerClick(bannerId: string, sessionId?: string): Promise<any> {
+    return apiClient.post("/shopping/banners/click", { banner_id: bannerId, session_id: sessionId });
+  }
+
+  async dismissBanner(bannerId: string, sessionId?: string): Promise<any> {
+    return apiClient.post("/shopping/banners/dismiss", { banner_id: bannerId, session_id: sessionId });
   }
 }
 

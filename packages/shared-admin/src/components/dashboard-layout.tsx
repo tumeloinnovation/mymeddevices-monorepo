@@ -9,14 +9,17 @@ import {
   CogIcon,
   SettingsIcon,
   PackageIcon,
+  PackageCheckIcon,
   ShoppingCartIcon,
   TagIcon,
   BarChart3Icon,
   StoreIcon,
   FileTextIcon,
+  FileCheckIcon,
   CreditCardIcon,
   TruckIcon,
   AlertCircleIcon,
+  XCircleIcon,
   LogOutIcon,
   SunIcon,
   MoonIcon,
@@ -26,22 +29,56 @@ import {
   FolderTreeIcon,
   TrendingUpIcon,
   HeadphonesIcon,
+  HelpCircleIcon,
   FileEditIcon,
   GitBranchIcon,
   ShieldIcon,
+  ShieldCheckIcon,
   ActivityIcon,
   HeartIcon,
   MapPinIcon,
+  MapIcon,
+  BuildingIcon,
+  GlobeIcon,
   ClockIcon,
   SearchIcon,
   LockIcon,
   EyeIcon,
+  KeyIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   SparklesIcon,
   UserCogIcon,
   HomeIcon,
   XIcon,
+  UploadIcon,
+  UndoIcon,
+  MegaphoneIcon,
+  GiftIcon,
+  ImageIcon,
+  MailIcon,
+  DollarSignIcon,
+  ReceiptIcon,
+  PercentIcon,
+  WalletIcon,
+  PieChartIcon,
+  LineChartIcon,
+  Users2Icon,
+  PackageSearchIcon,
+  BoxesIcon,
+  ShipIcon,
+  WrenchIcon,
+  BarcodeIcon,
+  PrinterIcon,
+  WarehouseIcon,
+  Globe2Icon,
+  MousePointerClickIcon,
+  FilterIcon,
+  FileBarChartIcon,
+  TrendingDownIcon,
+  ArrowUpDownIcon,
+  CopyIcon,
+  RefreshCwIcon,
   type LucideIcon,
 } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
@@ -88,6 +125,9 @@ interface DashboardLayoutProps {
 
 const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
   admin: [
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // PRIMARY DASHBOARD
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
       label: "Overview",
       icon: LayoutDashboardIcon,
@@ -95,26 +135,10 @@ const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
         { label: "Dashboard", href: "/dashboard", icon: LayoutDashboardIcon },
       ],
     },
-    {
-      label: "Analytics",
-      icon: BarChart3Icon,
-      items: [
-        { label: "Overview", href: "/dashboard/analytics", icon: BarChart3Icon },
-        { label: "Shopping Analytics", href: "/dashboard/shopping/analytics", icon: BarChart3Icon },
-        { label: "Customer Analytics", href: "/dashboard/analytics/customers", icon: UsersIcon },
-        { label: "Product Analytics", href: "/dashboard/analytics/products", icon: PackageIcon },
-      ],
-    },
-    {
-      label: "Reports",
-      icon: TrendingUpIcon,
-      items: [
-        { label: "Sales Reports", href: "/dashboard/reports/sales", icon: TrendingUpIcon },
-        { label: "Inventory Reports", href: "/dashboard/reports/inventory", icon: PackageIcon },
-        { label: "Customer Insights", href: "/dashboard/reports/customers", icon: UsersIcon },
-        { label: "Vendor Performance", href: "/dashboard/reports/vendors", icon: StoreIcon },
-      ],
-    },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // CATALOG MANAGEMENT
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
       label: "Catalog",
       icon: PackageIcon,
@@ -123,63 +147,125 @@ const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
         { label: "Categories", href: "/dashboard/catalog/categories", icon: FolderTreeIcon },
         { label: "Brands", href: "/dashboard/catalog/brands", icon: TagIcon },
         { label: "Tags", href: "/dashboard/catalog/tags", icon: TagIcon },
+        { label: "Reviews", href: "/dashboard/catalog/reviews", icon: MessageSquareIcon },
       ],
     },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ORDER MANAGEMENT
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
       label: "Orders",
       icon: ShoppingCartIcon,
       items: [
-        { label: "Orders", href: "/dashboard/shopping/orders", icon: ShoppingCartIcon },
-        { label: "Order Statuses", href: "/dashboard/shopping/order-statuses", icon: GitBranchIcon },
-        { label: "Returns", href: "/dashboard/shopping/returns", icon: AlertCircleIcon },
-        { label: "Refunds", href: "/dashboard/shopping/refunds", icon: CreditCardIcon },
-        { label: "Coupons", href: "/dashboard/shopping/coupons", icon: TagIcon },
+        { label: "All Orders", href: "/dashboard/orders", icon: ShoppingCartIcon },
+        { label: "Order Statuses", href: "/dashboard/orders/statuses", icon: GitBranchIcon },
+        { label: "Returns", href: "/dashboard/orders/returns", icon: UndoIcon },
+        { label: "Refunds", href: "/dashboard/orders/refunds", icon: CreditCardIcon },
+        { label: "Abandoned Carts", href: "/dashboard/shopping/abandoned-carts", icon: XIcon },
       ],
     },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // CUSTOMER & VENDOR MANAGEMENT
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
       label: "Users",
       icon: UsersIcon,
       items: [
         { label: "Customers", href: "/dashboard/users/customers", icon: UsersIcon },
         { label: "Vendors", href: "/dashboard/vendors", icon: StoreIcon },
-        { label: "Staff", href: "/dashboard/users/staff", icon: UsersIcon },
-        { label: "Reviews", href: "/dashboard/users/reviews", icon: MessageSquareIcon },
+        { label: "Staff & Admins", href: "/dashboard/users/staff", icon: UserCogIcon },
       ],
     },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // MARKETING & PROMOTIONS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    {
+      label: "Marketing",
+      icon: MegaphoneIcon,
+      items: [
+        { label: "Coupons", href: "/dashboard/marketing/coupons", icon: TagIcon },
+        { label: "Banners", href: "/dashboard/marketing/banners", icon: ImageIcon },
+        { label: "Email Campaigns", href: "/dashboard/marketing/email-campaigns", icon: MailIcon },
+        { label: "SMS Marketing", href: "/dashboard/marketing/sms", icon: MessageSquareIcon },
+        { label: "Flash Sales", href: "/dashboard/marketing/flash-sales", icon: ClockIcon },
+        { label: "Product Promotions", href: "/dashboard/marketing/promotions", icon: PercentIcon },
+        { label: "Bundle Deals", href: "/dashboard/marketing/bundles", icon: PackageIcon },
+        { label: "Free Shipping", href: "/dashboard/marketing/free-shipping", icon: TruckIcon },
+      ],
+    },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // FINANCIAL MANAGEMENT
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
       label: "Financial",
       icon: CreditCardIcon,
       items: [
-        { label: "Payments", href: "/dashboard/payments", icon: CreditCardIcon },
-        { label: "Invoices", href: "/dashboard/financial/invoices", icon: FileTextIcon },
-        { label: "Payouts", href: "/dashboard/financial/payouts", icon: CreditCardIcon },
-        { label: "Tax Settings", href: "/dashboard/financial/tax", icon: FileEditIcon },
+        { label: "Transactions", href: "/dashboard/payments", icon: CreditCardIcon },
+        { label: "Transaction History", href: "/dashboard/payments/transaction-history", icon: FileTextIcon },
+        { label: "Payment Methods", href: "/dashboard/payments/payment-methods", icon: WalletIcon },
+        { label: "Refund Management", href: "/dashboard/payments/refund-management", icon: RefreshCwIcon },
+        { label: "Payment Analytics", href: "/dashboard/payments/payment-analytics", icon: PieChartIcon },
+        { label: "Invoices", href: "/dashboard/financial/invoices", icon: ReceiptIcon },
+        { label: "Revenue Reports", href: "/dashboard/financial/revenue", icon: TrendingUpIcon },
+        { label: "Tax Reports", href: "/dashboard/financial/tax", icon: PercentIcon },
+        { label: "Vendor Payouts", href: "/dashboard/financial/payouts", icon: DollarSignIcon },
       ],
     },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // SHIPPING & LOGISTICS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
       label: "Shipping",
       icon: TruckIcon,
       items: [
-        { label: "Delivery Tracking", href: "/dashboard/shipping/tracking", icon: ActivityIcon },
-        { label: "Warehouse", href: "/dashboard/shipping/warehouse", icon: PackageIcon },
+        { label: "Delivery Tracking", href: "/dashboard/shipping", icon: TruckIcon },
+        { label: "Nairobi Rates", href: "/dashboard/shipping/nairobi-rates", icon: MapIcon },
+        { label: "County Zones", href: "/dashboard/shipping/zones", icon: MapIcon },
+        { label: "Carriers", href: "/dashboard/shipping/carriers", icon: ShipIcon },
+        { label: "Shipping Labels", href: "/dashboard/shipping/labels", icon: PrinterIcon },
       ],
     },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ANALYTICS & REPORTS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
-      label: "Support",
-      icon: HeadphonesIcon,
+      label: "Analytics",
+      icon: BarChart3Icon,
       items: [
-        { label: "Support Tickets", href: "/dashboard/support/tickets", icon: HeadphonesIcon },
-        { label: "Disputes", href: "/dashboard/support/disputes", icon: AlertCircleIcon },
+        { label: "Overview", href: "/dashboard/shopping/analytics", icon: BarChart3Icon },
+        { label: "Sales Reports", href: "/dashboard/analytics/sales", icon: LineChartIcon },
+        { label: "Product Analytics", href: "/dashboard/analytics/products", icon: PackageSearchIcon },
+        { label: "Customer Analytics", href: "/dashboard/analytics/customers", icon: Users2Icon },
+        { label: "Vendor Performance", href: "/dashboard/analytics/vendors", icon: StoreIcon },
+        { label: "Traffic & Conversion", href: "/dashboard/analytics/traffic", icon: MousePointerClickIcon },
+        { label: "Inventory Reports", href: "/dashboard/analytics/inventory", icon: BoxesIcon },
       ],
     },
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // SYSTEM SETTINGS
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     {
-      label: "System",
+      label: "Settings",
       icon: SettingsIcon,
       items: [
-        { label: "Settings", href: "/settings", icon: SettingsIcon },
-        { label: "System Health", href: "/dashboard/system/health", icon: ActivityIcon },
-        { label: "Audit Logs", href: "/dashboard/system/audit-logs", icon: ShieldIcon },
-        { label: "Feature Flags", href: "/dashboard/system/feature-flags", icon: GitBranchIcon },
+        { label: "General", href: "/settings/general", icon: SettingsIcon },
+        { label: "Account & Security", href: "/settings", icon: ShieldIcon },
+        { label: "Notifications", href: "/settings/notifications", icon: BellIcon },
+        { label: "Shipping Logistics", href: "/settings/shipping", icon: TruckIcon },
+        { label: "Payment Gateway", href: "/settings/payments", icon: CreditCardIcon },
+        { label: "Email & SMS", href: "/settings/communications", icon: MailIcon },
+        { label: "Localization", href: "/settings/localization", icon: GlobeIcon },
+        { label: "System Health", href: "/system", icon: ActivityIcon },
+        { label: "Rate Limiting", href: "/settings/rate-limits", icon: FilterIcon },
+        { label: "API & Integrations", href: "/settings/integrations", icon: KeyIcon },
+        { label: "Maintenance", href: "/settings/maintenance", icon: WrenchIcon },
       ],
     },
   ],
@@ -256,6 +342,7 @@ const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
       icon: HeartIcon,
       items: [
         { label: "Wishlist", href: "/dashboard/wishlist", icon: HeartIcon },
+        { label: "Product Reviews", href: "/dashboard/reviews", icon: MessageSquareIcon },
         { label: "Recently Viewed", href: "/dashboard/recently-viewed", icon: ClockIcon },
         { label: "Saved Searches", href: "/dashboard/saved-searches", icon: SearchIcon },
       ],
@@ -507,18 +594,50 @@ export default function DashboardLayout({
 
   const searchInputRef = useRef<HTMLInputElement>(null)
 
-  // Find active group based on current pathname
-  useEffect(() => {
-    config.forEach((group, gIdx) => {
-      group.items.forEach((item) => {
-        if (pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/dashboard")) {
-          setActiveGroupIndex(gIdx)
+  // Find active group & page label based on current pathname
+  const activeMatch = useMemo(() => {
+    // Handle order status pages: /dashboard/orders/by-status/{status}
+    const orderStatusMatch = pathname.match(/\/dashboard\/orders\/by-status\/(\w+)/)
+    if (orderStatusMatch) {
+      const status = orderStatusMatch[1]
+      const pageLabel = status.charAt(0).toUpperCase() + status.slice(1)
+      const ordersGroupIdx = config.findIndex((g) => g.items.some((i) => i.href.includes("/orders")))
+      return { groupIdx: ordersGroupIdx !== -1 ? ordersGroupIdx : 0, pageLabel }
+    }
+
+    // 1. Exact match first across all groups
+    for (let gIdx = 0; gIdx < config.length; gIdx++) {
+      const exactItem = config[gIdx].items.find((i) => i.href === pathname)
+      if (exactItem) {
+        return { groupIdx: gIdx, pageLabel: exactItem.label }
+      }
+    }
+
+    // 2. Prefix match (prefer longest matching href)
+    let bestMatch: { groupIdx: number; pageLabel: string; matchLength: number } | null = null
+    for (let gIdx = 0; gIdx < config.length; gIdx++) {
+      for (const item of config[gIdx].items) {
+        if (item.href !== "/dashboard" && item.href !== "/settings" && pathname.startsWith(item.href + "/")) {
+          if (!bestMatch || item.href.length > bestMatch.matchLength) {
+            bestMatch = { groupIdx: gIdx, pageLabel: item.label, matchLength: item.href.length }
+          }
         }
-      })
-    })
+      }
+    }
+
+    if (bestMatch) {
+      return { groupIdx: bestMatch.groupIdx, pageLabel: bestMatch.pageLabel }
+    }
+
+    return { groupIdx: 0, pageLabel: "Dashboard" }
   }, [pathname, config])
 
+  useEffect(() => {
+    setActiveGroupIndex(activeMatch.groupIdx)
+  }, [activeMatch.groupIdx])
+
   const activeGroup = config[activeGroupIndex] || config[0]
+  const currentPage = activeMatch.pageLabel
 
   // Filter items in active group based on input
   const filteredItems = useMemo(() => {
@@ -526,14 +645,6 @@ export default function DashboardLayout({
     const q = filterQuery.toLowerCase()
     return activeGroup.items.filter((item) => item.label.toLowerCase().includes(q))
   }, [activeGroup, filterQuery])
-
-  // Active page label for breadcrumbs
-  const currentPage = useMemo(() => {
-    const item = activeGroup.items.find(
-      (i) => pathname === i.href || pathname.startsWith(i.href + "/")
-    )
-    return item?.label || "Dashboard"
-  }, [activeGroup, pathname])
 
   // Keyboard shortcut to focus global search (/)
   useEffect(() => {
@@ -655,7 +766,10 @@ export default function DashboardLayout({
                     <div className="p-4 text-xs text-muted-foreground text-center">No items found</div>
                   ) : (
                     filteredItems.map((item) => {
-                      const isActive = pathname === item.href || (pathname.startsWith(item.href + "/") && item.href !== "/dashboard")
+                      // Check if another item in the active group has an exact or longer match for the current pathname
+                      const isExactMatch = pathname === item.href
+                      const hasExactSiblingMatch = activeGroup.items.some((other) => other.href === pathname)
+                      const isActive = isExactMatch || (!hasExactSiblingMatch && item.href !== "/dashboard" && item.href !== "/settings" && pathname.startsWith(item.href + "/"))
                       const ItemIcon = item.icon
 
                       return (

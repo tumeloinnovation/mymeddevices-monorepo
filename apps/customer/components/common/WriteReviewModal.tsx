@@ -3,17 +3,19 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Star, X, Send, User, Mail, MessageSquare } from 'lucide-react';
 import { useAuthStore } from '@/lib/store/useAuthStore';
+import { customerService } from '@/lib/services/customer-service';
 import { toast } from 'sonner';
 
 type Props = {
   open: boolean;
   onClose: () => void;
-  productId: number | string;
+  onSuccess?: () => void; // Callback to refresh reviews list
+  productId: string;
 };
 
 const ratingLabels = ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
 
-export default function WriteReviewModal({ open, onClose }: Props) {
+export default function WriteReviewModal({ open, onClose, onSuccess, productId }: Props) {
   const { user, isAuthenticated } = useAuthStore();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -53,17 +55,54 @@ export default function WriteReviewModal({ open, onClose }: Props) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return setError('Please enter your name');
-    if (!email.trim()) return setError('Please enter your email');
-    if (!text.trim()) return setError('Please add a short review');
-    setError(null);
 
+    // Validation
+    if (!text.trim()) {
+      setError('Please add a short review');
+      return;
+    }
+
+    if (rating < 1 || rating > 5) {
+      setError('Please select a rating');
+      return;
+    }
+
+    setError(null);
     setIsPending(true);
-    // Mock review submission
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsPending(false);
-    toast.success('Review submitted successfully !');
-    onClose();
+
+    try {
+      const result = await customerService.createReview({
+        product_id: productId,
+        rating: rating,
+        comment: text.trim(),
+      });
+
+      // Check if review was flagged for profanity
+      if ((result as any)?.contains_profanity) {
+        toast.warning(
+          'Review submitted! Your review has been flagged for containing potentially inappropriate language and is under review.',
+          { duration: 5000 }
+        );
+      } else {
+        toast.success('Review submitted successfully!');
+      }
+
+      // Reset form
+      setText('');
+      setRating(5);
+      onClose();
+
+      // Refresh reviews list
+      if (onSuccess) {
+        onSuccess();
+      }
+    } catch (err: any) {
+      const errMsg = err?.detail || err?.error || err?.message || 'Failed to submit review';
+      setError(errMsg);
+      toast.error(errMsg);
+    } finally {
+      setIsPending(false);
+    }
   }
 
   const displayRating = hoverRating ?? rating;
@@ -144,39 +183,6 @@ export default function WriteReviewModal({ open, onClose }: Props) {
             </div>
           )}
 
-          {/* Name & Email Inputs - Only show for non-authenticated users */}
-          {!isAuthenticated && (
-            <>
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                  <User className="h-4 w-4 text-muted-foreground" />
-                  Your Name
-                </label>
-                <input
-                  ref={nameRef}
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-muted/50 border border-gray-200 dark:border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all duration-200"
-                  placeholder="Enter your full name"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <label className="text-sm font-medium text-foreground flex items-center gap-2">
-                  <Mail className="h-4 w-4 text-muted-foreground" />
-                  Your Email
-                </label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  className="w-full px-4 py-3 bg-gray-50 dark:bg-muted/50 border border-gray-200 dark:border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all duration-200"
-                  placeholder="Enter your email address"
-                />
-              </div>
-            </>
-          )}
-
           {/* Review Textarea */}
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-foreground flex items-center gap-2">
@@ -189,6 +195,7 @@ export default function WriteReviewModal({ open, onClose }: Props) {
               className="w-full px-4 py-3 bg-gray-50 dark:bg-muted/50 border border-gray-200 dark:border-border rounded-xl text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition-all duration-200 resize-none"
               rows={4}
               placeholder="Share your experience with this product. What did you like or dislike?"
+              maxLength={500}
             />
             <p className="text-xs text-muted-foreground text-right">{text.length}/500 characters</p>
           </div>

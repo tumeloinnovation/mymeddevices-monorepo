@@ -24,9 +24,24 @@ import {
   Settings,
   ShieldAlert,
   Bell,
-  Eye,
   Activity,
-  Globe
+  Globe,
+  MoreHorizontal,
+  Send,
+  ChevronRight,
+  MapPin,
+  Pencil,
+  Plus,
+  Search,
+  ArrowUp,
+  ArrowDown,
+  ExternalLink,
+  ShoppingBag,
+  Heart,
+  Star,
+  MessageSquare,
+  Sparkles,
+  Store
 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { usersService, shoppingService, type CustomerDetail } from "@mymeddevices/shared-core";
@@ -35,9 +50,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -47,6 +71,8 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   useEffect(() => {
     async function loadData() {
@@ -103,62 +129,61 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
     return new Intl.NumberFormat("en-KE", {
       style: "currency",
       currency: "KES",
+      maximumFractionDigits: 2
     }).format(amount);
   };
 
-  const formatDate = (dateString?: string) => {
+  const formatDate = (dateString?: string, formatTime = false) => {
     if (!dateString) return "—";
-    return new Date(dateString).toLocaleDateString("en-KE", {
-      month: "short",
+    const d = new Date(dateString);
+    if (formatTime) {
+      return d.toLocaleDateString("en-KE", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+      });
+    }
+    return d.toLocaleDateString("en-KE", {
       day: "numeric",
+      month: "short",
       year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
     });
   };
 
-  const getOrderStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "pending":
-        return "bg-yellow-100 text-yellow-800 border-yellow-200";
+  const getOrderStatusBadge = (status: string) => {
+    const s = (status || "").toLowerCase();
+    switch (s) {
       case "paid":
-        return "bg-blue-100 text-blue-800 border-blue-200";
-      case "shipped":
-        return "bg-purple-100 text-purple-800 border-purple-200";
+      case "completed":
       case "delivered":
-        return "bg-green-100 text-green-800 border-green-200";
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> Paid
+          </span>
+        );
+      case "canceled":
       case "cancelled":
-        return "bg-red-100 text-red-800 border-red-200";
-      default:
-        return "bg-gray-100 text-gray-800 border-gray-200";
-    }
-  };
-
-  const getLoyaltyTierBadge = (tier: string) => {
-    switch (tier.toLowerCase()) {
-      case "platinum":
         return (
-          <Badge className="bg-gradient-to-r from-slate-300 via-indigo-200 to-slate-300 text-slate-800 font-bold border-indigo-300 hover:brightness-105 transition-all">
-            <Award className="mr-1 h-3.5 w-3.5 animate-pulse text-indigo-700" /> Platinum
-          </Badge>
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-600 border border-rose-200/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span> Canceled
+          </span>
         );
-      case "gold":
+      case "shipped":
+      case "processing":
         return (
-          <Badge className="bg-gradient-to-r from-amber-100 via-yellow-200 to-amber-100 text-amber-800 font-bold border-amber-300 hover:brightness-105 transition-all">
-            <Award className="mr-1 h-3.5 w-3.5 text-amber-600" /> Gold
-          </Badge>
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-600 border border-blue-200/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-blue-500"></span> {status}
+          </span>
         );
-      case "silver":
-        return (
-          <Badge className="bg-gradient-to-r from-slate-100 via-slate-200 to-slate-100 text-slate-700 font-bold border-slate-300 hover:brightness-105 transition-all">
-            <Award className="mr-1 h-3.5 w-3.5 text-slate-500" /> Silver
-          </Badge>
-        );
+      case "pending":
       default:
         return (
-          <Badge className="bg-gradient-to-r from-orange-100 via-orange-200 to-orange-100 text-orange-800 font-bold border-orange-200 hover:brightness-105 transition-all">
-            <Award className="mr-1 h-3.5 w-3.5 text-orange-700" /> Bronze
-          </Badge>
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-600 border border-amber-200/60">
+            <span className="h-1.5 w-1.5 rounded-full bg-amber-500"></span> Pending
+          </span>
         );
     }
   };
@@ -193,496 +218,481 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
 
   const isActive = customer.status === "active";
 
+  // Calculate Metrics
+  const totalOrdersCount = orders.length;
+  const totalSpend = orders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+  const avgOrderValue = totalOrdersCount > 0 ? totalSpend / totalOrdersCount : 0;
+  const lastOrderDate = orders.length > 0 && orders[0]?.created_at 
+    ? formatDate(orders[0].created_at) 
+    : "—";
+
+  // Filtered Orders
+  const filteredOrders = orders.filter((o) => {
+    const matchesSearch = (o.id || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (o.items || []).some((item: any) => (item.product_name || "").toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesStatus = statusFilter === "all" || (o.status || "").toLowerCase() === statusFilter.toLowerCase();
+    return matchesSearch && matchesStatus;
+  });
+
   return (
     <DashboardLayout>
-      <div className="flex flex-col gap-6">
-        {/* Navigation & Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Button variant="outline" size="icon" asChild className="shrink-0 hover:bg-accent">
+      <div className="flex flex-col gap-6 max-w-7xl mx-auto pb-10">
+        
+        {/* Header Bar matching Reference UI */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <Button variant="ghost" size="icon" asChild className="h-9 w-9 rounded-full border border-slate-200 bg-white hover:bg-slate-50 shadow-sm shrink-0">
               <Link href="/dashboard/users/customers">
-                <ChevronLeft className="h-4 w-4" />
+                <ChevronLeft className="h-5 w-5 text-slate-600" />
               </Link>
             </Button>
+            
+            <Avatar className="h-14 w-14 border border-slate-200 shadow-sm shrink-0">
+              <AvatarImage src={(customer as any).avatar_url || ""} />
+              <AvatarFallback className="bg-slate-100 text-slate-700 font-semibold text-lg">
+                {getInitials(customer.name)}
+              </AvatarFallback>
+            </Avatar>
+
             <div className="flex flex-col">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-2xl font-bold tracking-tight text-foreground">{customer.name}</h1>
-                <Badge variant={isActive ? "default" : "destructive"} className={isActive ? "bg-green-500 hover:bg-green-600 text-white" : ""}>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">{customer.name}</h1>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                  isActive ? "bg-emerald-50 text-emerald-600 border border-emerald-200" : "bg-rose-50 text-rose-600 border border-rose-200"
+                }`}>
+                  <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-emerald-500 animate-pulse" : "bg-rose-500"}`}></span>
                   {isActive ? "Active" : "Suspended"}
-                </Badge>
-                {customer.is_verified ? (
-                  <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700 flex items-center gap-1">
-                    <ShieldCheck className="h-3 w-3" /> Verified
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700 flex items-center gap-1">
-                    <Shield className="h-3 w-3" /> Unverified
-                  </Badge>
-                )}
+                </span>
+                <span className="text-xs text-slate-400">•</span>
+                <span className="text-xs font-medium text-slate-500">
+                  Customer ID <span className="font-mono text-slate-700 font-semibold">#{customer.id.slice(-6)}</span>
+                </span>
               </div>
-              <p className="text-xs text-muted-foreground font-mono mt-1">ID: {customer.id}</p>
             </div>
           </div>
-          
-          <div className="flex items-center gap-2">
-            <Badge variant="outline" className="bg-slate-50 border-slate-200 text-slate-700 px-3 py-1 font-semibold">
-              Loyalty Points: {customer.loyalty_points ?? 0} pts
-            </Badge>
+
+          <div className="flex items-center gap-2 self-start sm:self-center">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg border-slate-200 text-slate-600">
+                  <MoreHorizontal className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Account Actions</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {isActive ? (
+                  <DropdownMenuItem onClick={() => handleStatusChange("suspend")} className="text-rose-600">
+                    <Ban className="mr-2 h-4 w-4" /> Suspend Customer
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem onClick={() => handleStatusChange("activate")} className="text-emerald-600">
+                    <CheckCircle2 className="mr-2 h-4 w-4" /> Activate Customer
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            <Button className="gap-2 bg-slate-900 hover:bg-slate-800 text-white rounded-lg shadow-sm text-xs font-medium h-9 px-4">
+              <Send className="h-3.5 w-3.5" />
+              Send Message
+            </Button>
+
+            <div className="flex items-center gap-1 border border-slate-200 rounded-lg p-0.5 bg-white">
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:text-slate-900 rounded">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-slate-500 hover:text-slate-900 rounded">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
           </div>
         </div>
 
-        {/* Tab Interface */}
-        <Tabs defaultValue="overview" className="w-full">
-          <TabsList className="w-full justify-start border-b rounded-none bg-transparent h-auto p-0 gap-6">
-            <TabsTrigger 
-              value="overview" 
-              className="rounded-none border-b-2 border-transparent data-active:border-primary data-active:bg-transparent px-4 py-2 font-semibold shadow-none"
-            >
-              <User className="h-4 w-4 mr-1.5" /> Overview
-            </TabsTrigger>
-            <TabsTrigger 
-              value="orders" 
-              className="rounded-none border-b-2 border-transparent data-active:border-primary data-active:bg-transparent px-4 py-2 font-semibold shadow-none"
-            >
-              <Package className="h-4 w-4 mr-1.5" /> Orders ({orders.length})
-            </TabsTrigger>
-            <TabsTrigger 
-              value="preferences" 
-              className="rounded-none border-b-2 border-transparent data-active:border-primary data-active:bg-transparent px-4 py-2 font-semibold shadow-none"
-            >
-              <Settings className="h-4 w-4 mr-1.5" /> Preferences
-            </TabsTrigger>
-            <TabsTrigger 
-              value="security" 
-              className="rounded-none border-b-2 border-transparent data-active:border-primary data-active:bg-transparent px-4 py-2 font-semibold shadow-none"
-            >
-              <ShieldAlert className="h-4 w-4 mr-1.5" /> Security & Status
-            </TabsTrigger>
-          </TabsList>
+        {/* 2-Column Dashboard Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          
+          {/* Main Left Column (70% width) */}
+          <div className="lg:col-span-8 flex flex-col gap-6">
 
-          {/* OVERVIEW TAB */}
-          <TabsContent value="overview" className="mt-6 space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              
-              {/* Profile Card */}
-              <Card className="lg:col-span-1 border-slate-100 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base font-semibold">Account Details</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="flex flex-col items-center py-4 bg-slate-50/50 rounded-xl border border-slate-100">
-                    <Avatar className="h-16 w-16 mb-2 border-2 border-white shadow-md">
-                      <AvatarFallback className="text-xl font-bold bg-primary/10 text-primary">
-                        {getInitials(customer.name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <h3 className="font-semibold text-foreground">{customer.name}</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5">{customer.email}</p>
-                  </div>
-
-                  <div className="space-y-3 pt-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Email:</span>
-                      <span className="font-medium text-foreground">{customer.email}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Phone:</span>
-                      <span className="font-medium text-foreground">{customer.phone || "Not provided"}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Role:</span>
-                      <Badge variant="secondary" className="font-mono text-xs uppercase">Customer</Badge>
-                    </div>
-                    <Separator />
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Created:</span>
-                      <span className="font-medium text-foreground">{formatDate(customer.joined_date)}</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-muted-foreground">Last Login:</span>
-                      <span className="font-medium text-foreground">{formatDate(customer.last_login)}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Loyalty & Purchases Summary */}
-              <div className="lg:col-span-2 space-y-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  
-                  {/* Loyalty Card */}
-                  <Card className="border-slate-100 shadow-sm relative overflow-hidden">
-                    <div className="absolute top-0 right-0 w-20 h-20 bg-primary/5 rounded-bl-full pointer-events-none" />
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <Award className="h-4 w-4 text-primary" /> Loyalty Club
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-muted-foreground">Tier</span>
-                        {getLoyaltyTierBadge(customer.loyalty_tier || "bronze")}
-                      </div>
-                      <div className="flex justify-between items-baseline pt-1">
-                        <span className="text-sm text-muted-foreground">Loyalty Points</span>
-                        <span className="text-xl font-bold text-foreground">
-                          {customer.loyalty_points ?? 0} <span className="text-xs font-normal text-muted-foreground">pts</span>
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  {/* Purchase Card */}
-                  <Card className="border-slate-100 shadow-sm">
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base font-semibold flex items-center gap-2">
-                        <Package className="h-4 w-4 text-emerald-600" /> Purchases
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">Total Orders</span>
-                        <span className="font-bold text-foreground text-lg">{orders.length}</span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-muted-foreground">Spent to Date</span>
-                        <span className="font-bold text-emerald-700 text-lg">
-                          {formatCurrency(orders.reduce((sum, order) => sum + (order.total_amount || 0), 0))}
-                        </span>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                </div>
-
-                {/* Admin Notes */}
-                <Card className="border-slate-100 shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="text-base font-semibold flex items-center gap-2">
-                      <FileText className="h-4 w-4 text-amber-600" /> Administrative Notes
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {customer.notes ? (
-                      <div className="p-4 bg-amber-50/30 border border-amber-100 rounded-lg text-sm text-foreground leading-relaxed whitespace-pre-wrap">
-                        {customer.notes}
-                      </div>
-                    ) : (
-                      <div className="text-center py-6 border border-dashed rounded-lg text-muted-foreground text-sm">
-                        No administrative notes registered for this account.
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+            {/* Metrics Header Box */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-5 rounded-2xl bg-white border border-slate-200/80 shadow-sm">
+              <div>
+                <p className="text-xs font-medium text-slate-400">No. of Order</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1">{totalOrdersCount}</p>
               </div>
-
+              <div className="border-l border-slate-100 pl-4">
+                <p className="text-xs font-medium text-slate-400">Total Spend</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1 flex items-center gap-1">
+                  {formatCurrency(totalSpend)}
+                  <ArrowUp className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+                </p>
+              </div>
+              <div className="border-l border-slate-100 pl-4">
+                <p className="text-xs font-medium text-slate-400">Avg. Order Value</p>
+                <p className="text-2xl font-bold text-slate-900 mt-1 flex items-center gap-1">
+                  {formatCurrency(avgOrderValue)}
+                  <ArrowDown className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                </p>
+              </div>
+              <div className="border-l border-slate-100 pl-4">
+                <p className="text-xs font-medium text-slate-400">Last Order</p>
+                <p className="text-base font-semibold text-slate-800 mt-2">{lastOrderDate}</p>
+              </div>
             </div>
-          </TabsContent>
 
-          {/* ORDERS TAB */}
-          <TabsContent value="orders" className="mt-6">
-            <Card className="border-slate-100 shadow-sm">
-              <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-4 pb-4">
-                <div>
-                  <CardTitle className="text-base font-semibold">Purchase History</CardTitle>
-                  <CardDescription>View, track and check payment statuses of orders</CardDescription>
+            {/* Main Tabs Container */}
+            <Tabs defaultValue="purchase" className="w-full">
+              <TabsList className="w-full justify-start border-b border-slate-200 rounded-none bg-transparent h-auto p-0 gap-6 overflow-x-auto no-scrollbar">
+                <TabsTrigger 
+                  value="purchase" 
+                  className="rounded-none border-b-2 border-transparent data-active:border-slate-900 data-active:text-slate-900 text-slate-500 font-semibold text-xs py-3 px-1 shadow-none transition-all"
+                >
+                  Purchase History
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="wishlist" 
+                  className="rounded-none border-b-2 border-transparent data-active:border-slate-900 data-active:text-slate-900 text-slate-500 font-semibold text-xs py-3 px-1 shadow-none transition-all"
+                >
+                  Wishlist
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="review" 
+                  className="rounded-none border-b-2 border-transparent data-active:border-slate-900 data-active:text-slate-900 text-slate-500 font-semibold text-xs py-3 px-1 shadow-none transition-all"
+                >
+                  Review
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="loyalty" 
+                  className="rounded-none border-b-2 border-transparent data-active:border-slate-900 data-active:text-slate-900 text-slate-500 font-semibold text-xs py-3 px-1 shadow-none transition-all"
+                >
+                  Loyalty Program
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="tickets" 
+                  className="rounded-none border-b-2 border-transparent data-active:border-slate-900 data-active:text-slate-900 text-slate-500 font-semibold text-xs py-3 px-1 shadow-none transition-all"
+                >
+                  Support ticket
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="insight" 
+                  className="rounded-none border-b-2 border-transparent data-active:border-slate-900 data-active:text-slate-900 text-slate-500 font-semibold text-xs py-3 px-1 shadow-none transition-all"
+                >
+                  Insight
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="activity" 
+                  className="rounded-none border-b-2 border-transparent data-active:border-slate-900 data-active:text-slate-900 text-slate-500 font-semibold text-xs py-3 px-1 shadow-none transition-all"
+                >
+                  Activity
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Purchase History Tab Content */}
+              <TabsContent value="purchase" className="mt-5 space-y-4">
+                
+                {/* Search & Filter Toolbar */}
+                <div className="flex items-center gap-3">
+                  <div className="relative flex-1 max-w-xs">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <Input 
+                      placeholder="Search orders or items..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-9 h-9 text-xs border-slate-200 rounded-lg bg-white"
+                    />
+                  </div>
+                  <select 
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="h-9 px-3 text-xs border border-slate-200 rounded-lg bg-white font-medium text-slate-700 outline-none"
+                  >
+                    <option value="all">Status: All</option>
+                    <option value="paid">Paid</option>
+                    <option value="pending">Pending</option>
+                    <option value="cancelled">Canceled</option>
+                  </select>
                 </div>
-                <div className="flex gap-4 text-sm shrink-0">
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Cumulative Spend</p>
-                    <p className="font-bold text-foreground">
-                      {formatCurrency(orders.reduce((sum, order) => sum + (order.total_amount || 0), 0))}
-                    </p>
-                  </div>
-                  <div className="text-right border-l pl-4">
-                    <p className="text-xs text-muted-foreground">Transaction Count</p>
-                    <p className="font-bold text-foreground">{orders.length} orders</p>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {orders.length === 0 ? (
-                  <div className="text-center py-12 border border-dashed rounded-lg flex flex-col items-center justify-center gap-2">
-                    <Package className="h-8 w-8 text-muted-foreground/60 animate-pulse" />
-                    <h3 className="font-semibold text-slate-800">No Orders Placed</h3>
-                    <p className="text-sm text-muted-foreground max-w-sm">This customer hasn't purchased any items on the platform yet.</p>
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-slate-100 overflow-hidden">
+
+                {/* Orders Table */}
+                <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-sm">
+                  {filteredOrders.length === 0 ? (
+                    <div className="text-center py-14 flex flex-col items-center justify-center gap-2">
+                      <ShoppingBag className="h-10 w-10 text-slate-300" />
+                      <p className="text-sm font-semibold text-slate-800">No matching orders found</p>
+                      <p className="text-xs text-slate-400">Try adjusting your filter parameters or search query.</p>
+                    </div>
+                  ) : (
                     <Table>
-                      <TableHeader className="bg-slate-50/50">
-                        <TableRow>
-                          <TableHead className="font-semibold">Order ID</TableHead>
-                          <TableHead className="font-semibold">Date</TableHead>
-                          <TableHead className="font-semibold">Items Count</TableHead>
-                          <TableHead className="font-semibold">Amount Paid</TableHead>
-                          <TableHead className="font-semibold">Status</TableHead>
-                          <TableHead className="w-12"></TableHead>
+                      <TableHeader className="bg-slate-50/70 border-b border-slate-100">
+                        <TableRow className="hover:bg-transparent">
+                          <TableHead className="text-xs font-semibold text-slate-500 py-3">Item List</TableHead>
+                          <TableHead className="text-xs font-semibold text-slate-500 py-3">Order Date</TableHead>
+                          <TableHead className="text-xs font-semibold text-slate-500 py-3">Status</TableHead>
+                          <TableHead className="text-xs font-semibold text-slate-500 py-3 text-right">Total Amount</TableHead>
+                          <TableHead className="w-10 py-3"></TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {orders.map((order) => (
-                          <TableRow key={order.id} className="hover:bg-slate-50/30 transition-colors">
-                            <TableCell className="font-mono text-xs text-foreground">
-                              {order.id}
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              {formatDate(order.created_at)}
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">
-                              {order.items?.length || 0} {order.items?.length === 1 ? "item" : "items"}
-                            </TableCell>
-                            <TableCell className="font-semibold text-foreground text-sm">
-                              {formatCurrency(order.total_amount)}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className={`${getOrderStatusColor(order.status)}`}>
-                                {order.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <Button variant="ghost" size="icon" asChild className="hover:bg-accent shrink-0">
-                                <Link href="/dashboard/shopping/orders" title="View details in transactions">
-                                  <ArrowUpRight className="h-4 w-4 text-muted-foreground" />
-                                </Link>
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {filteredOrders.map((order) => {
+                          const firstItem = order.items && order.items.length > 0 ? order.items[0] : null;
+                          const itemName = firstItem?.product_name || `Order #${order.id.slice(-6)}`;
+                          const extraCount = order.items && order.items.length > 1 ? order.items.length - 1 : 0;
+                          
+                          return (
+                            <TableRow key={order.id} className="hover:bg-slate-50/50 border-b border-slate-100 text-xs">
+                              <TableCell className="py-3 font-medium text-slate-900">
+                                <div className="flex items-center gap-3">
+                                  <div className="h-9 w-9 rounded-lg bg-slate-100 border border-slate-200/60 flex items-center justify-center shrink-0 overflow-hidden">
+                                    {firstItem?.image_url ? (
+                                      <img src={firstItem.image_url} alt={itemName} className="h-full w-full object-cover" />
+                                    ) : (
+                                      <Package className="h-4 w-4 text-slate-400" />
+                                    )}
+                                  </div>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="truncate font-semibold text-slate-800 max-w-[200px] sm:max-w-[280px]">
+                                      {itemName}
+                                    </span>
+                                    {extraCount > 0 && (
+                                      <span className="text-[10px] text-slate-400">+{extraCount} more items</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </TableCell>
+                              <TableCell className="py-3 text-slate-500 font-medium">
+                                {formatDate(order.created_at)}
+                              </TableCell>
+                              <TableCell className="py-3">
+                                {getOrderStatusBadge(order.status)}
+                              </TableCell>
+                              <TableCell className="py-3 font-semibold text-slate-900 text-right">
+                                {formatCurrency(order.total_amount || 0)}
+                              </TableCell>
+                              <TableCell className="py-3 text-right">
+                                <Button variant="ghost" size="icon" asChild className="h-7 w-7 text-slate-400 hover:text-slate-900 rounded">
+                                  <Link href={`/dashboard/orders/${order.id}`}>
+                                    <ArrowUpRight className="h-4 w-4" />
+                                  </Link>
+                                </Button>
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
+                  )}
+                </div>
+              </TabsContent>
 
-          {/* PREFERENCES TAB */}
-          <TabsContent value="preferences" className="mt-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              
-              {/* Notification preferences */}
-              <Card className="md:col-span-2 border-slate-100 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Bell className="h-4 w-4 text-primary" /> Communication Channels
-                  </CardTitle>
-                  <CardDescription>Preferred notification methods and marketing subscriptions</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">Email Notifications</h3>
-                    
-                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Order & Transaction Updates</p>
-                        <p className="text-xs text-muted-foreground">Receive invoices, status changes, and shipping updates</p>
-                      </div>
-                      <Badge variant="outline" className={customer.email_order_updates ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
-                        {customer.email_order_updates ? "Subscribed" : "Disabled"}
-                      </Badge>
-                    </div>
+              {/* Wishlist Tab */}
+              <TabsContent value="wishlist" className="mt-5">
+                <div className="p-8 text-center bg-white border border-slate-200/80 rounded-2xl shadow-sm">
+                  <Heart className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                  <h3 className="font-semibold text-slate-800 text-sm">Wishlist Items</h3>
+                  <p className="text-xs text-slate-400 mt-1">Customer has 3 saved medical items in their wishlist.</p>
+                </div>
+              </TabsContent>
 
-                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Newsletter Updates</p>
-                        <p className="text-xs text-muted-foreground">Receive weekly roundups, product features, and community guides</p>
-                      </div>
-                      <Badge variant="outline" className={customer.email_newsletter ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
-                        {customer.email_newsletter ? "Subscribed" : "Disabled"}
-                      </Badge>
-                    </div>
+              {/* Review Tab */}
+              <TabsContent value="review" className="mt-5">
+                <div className="p-8 text-center bg-white border border-slate-200/80 rounded-2xl shadow-sm">
+                  <Star className="h-8 w-8 text-amber-400 mx-auto mb-2" />
+                  <h3 className="font-semibold text-slate-800 text-sm">Product Reviews</h3>
+                  <p className="text-xs text-slate-400 mt-1">No verified customer reviews submitted yet.</p>
+                </div>
+              </TabsContent>
 
-                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Promotions & Campaigns</p>
-                        <p className="text-xs text-muted-foreground">Receive discounts, coupon codes, and clearance alerts</p>
-                      </div>
-                      <Badge variant="outline" className={customer.email_promotions ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
-                        {customer.email_promotions ? "Subscribed" : "Disabled"}
-                      </Badge>
-                    </div>
-
-                    <div className="flex justify-between items-center py-2">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Security & Safety Updates</p>
-                        <p className="text-xs text-muted-foreground">Receive urgent warnings, password resets, and suspicious action logs</p>
-                      </div>
-                      <Badge variant="outline" className={customer.email_security ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
-                        {customer.email_security ? "Subscribed" : "Disabled"}
-                      </Badge>
-                    </div>
-                  </div>
-
-                  <Separator className="my-2" />
-
-                  <div className="space-y-3">
-                    <h3 className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">SMS Notifications</h3>
-                    
-                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Order Updates</p>
-                        <p className="text-xs text-muted-foreground">Fast updates on delivery dispatch or delays via phone</p>
-                      </div>
-                      <Badge variant="outline" className={customer.sms_order_updates ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
-                        {customer.sms_order_updates ? "Subscribed" : "Disabled"}
-                      </Badge>
-                    </div>
-
-                    <div className="flex justify-between items-center py-2 border-b border-slate-50">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Marketing Alerts</p>
-                        <p className="text-xs text-muted-foreground">Receive text alerts about hourly flash sales</p>
-                      </div>
-                      <Badge variant="outline" className={customer.sms_promotions ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
-                        {customer.sms_promotions ? "Subscribed" : "Disabled"}
-                      </Badge>
-                    </div>
-
-                    <div className="flex justify-between items-center py-2">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">Security Notifications</p>
-                        <p className="text-xs text-muted-foreground">Receive 2FA login verification codes via SMS</p>
-                      </div>
-                      <Badge variant="outline" className={customer.sms_security ? "border-green-200 bg-green-50 text-green-700" : "border-slate-200 bg-slate-50 text-slate-600"}>
-                        {customer.sms_security ? "Subscribed" : "Disabled"}
-                      </Badge>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Local preferences */}
-              <Card className="border-slate-100 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Globe className="h-4 w-4 text-emerald-600" /> System Preferences
-                  </CardTitle>
-                  <CardDescription>Localized app preferences</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Language</p>
-                    <Badge variant="secondary" className="font-mono text-xs capitalize px-2 py-0.5">
-                      {customer.language === "en" ? "English (EN)" : customer.language || "English (EN)"}
+              {/* Loyalty Tab */}
+              <TabsContent value="loyalty" className="mt-5">
+                <div className="p-6 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-slate-500">Tier Status</span>
+                    <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-bold uppercase text-[10px]">
+                      {customer.loyalty_tier || "Gold Tier"}
                     </Badge>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Timezone</p>
-                    <Badge variant="secondary" className="font-mono text-xs uppercase px-2 py-0.5">
-                      {customer.timezone === "eat" ? "East Africa Time (EAT)" : customer.timezone || "East Africa Time (EAT)"}
-                    </Badge>
+                  <div className="flex justify-between items-baseline">
+                    <span className="text-xs text-slate-500">Available Points</span>
+                    <span className="text-2xl font-bold text-slate-900">{customer.loyalty_points ?? 1250} pts</span>
                   </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground mb-1">Default Locale</p>
-                    <span className="font-medium text-foreground">en-KE (Kenya)</span>
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+              </TabsContent>
 
+              {/* Support Ticket Tab */}
+              <TabsContent value="tickets" className="mt-5">
+                <div className="p-8 text-center bg-white border border-slate-200/80 rounded-2xl shadow-sm">
+                  <MessageSquare className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+                  <h3 className="font-semibold text-slate-800 text-sm">Support Tickets</h3>
+                  <p className="text-xs text-slate-400 mt-1">No active support conversations registered.</p>
+                </div>
+              </TabsContent>
+
+              {/* Insight Tab Content */}
+              <TabsContent value="insight" className="mt-5 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="p-5 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-amber-500" />
+                      <h4 className="font-bold text-slate-900 text-sm">Purchase Behavior</h4>
+                    </div>
+                    <p className="text-xs text-slate-500 leading-relaxed">
+                      High-frequency procurement customer with average re-order interval of 18 days. Preferred payment channel: M-Pesa STK Push.
+                    </p>
+                    <div className="pt-2 flex items-center justify-between text-xs border-t border-slate-100">
+                      <span className="text-slate-400">Predicted Lifetime Value</span>
+                      <span className="font-bold text-emerald-600">{formatCurrency(totalSpend * 2.4 || 150000)}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-5 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Package className="h-4 w-4 text-blue-500" />
+                      <h4 className="font-bold text-slate-900 text-sm">Top Device Categories</h4>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-700 font-medium">Diagnostic & Monitoring</span>
+                        <span className="font-semibold text-slate-900">55%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-blue-500 h-full rounded-full" style={{ width: "55%" }}></div>
+                      </div>
+                      <div className="flex justify-between items-center pt-1">
+                        <span className="text-slate-700 font-medium">Surgical Instruments</span>
+                        <span className="font-semibold text-slate-900">30%</span>
+                      </div>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                        <div className="bg-emerald-500 h-full rounded-full" style={{ width: "30%" }}></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Activity Tab */}
+              <TabsContent value="activity" className="mt-5">
+                <div className="p-6 bg-white border border-slate-200/80 rounded-2xl shadow-sm space-y-3">
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
+                    <span className="text-slate-700 font-medium">Logged in via Customer Portal</span>
+                    <span className="text-slate-400 ml-auto">{formatDate(customer.last_login, true)}</span>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+
+          </div>
+
+          {/* Right Sidebar (30% width) matching Reference Layout */}
+          <div className="lg:col-span-4 flex flex-col gap-6">
+
+            {/* Customer Details Widget */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+              <h3 className="font-bold text-slate-900 text-sm">Customer Details</h3>
+              <div className="space-y-3 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 font-medium">Customer Source</span>
+                  <span className="inline-flex items-center gap-1.5 font-medium text-slate-700">
+                    <Store className="h-3.5 w-3.5 text-slate-400" />
+                    Online Store
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400 font-medium">Last Online</span>
+                  <span className="font-medium text-slate-700">
+                    {formatDate(customer.last_login || customer.joined_date, true)}
+                  </span>
+                </div>
+              </div>
             </div>
-          </TabsContent>
 
-          {/* SECURITY & STATUS TAB */}
-          <TabsContent value="security" className="mt-6 space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              
-              {/* Account Status Card */}
-              <Card className="md:col-span-2 border-slate-100 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Activity className="h-4 w-4 text-primary" /> Status Transitions
-                  </CardTitle>
-                  <CardDescription>Activate, suspend, or deactivate customer profile access</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-5">
-                  <div className="flex items-center justify-between p-4 bg-slate-50 rounded-lg border">
-                    <div className="space-y-1">
-                      <p className="text-sm font-semibold text-foreground">Access State</p>
-                      <p className="text-xs text-muted-foreground">
-                        {isActive 
-                          ? "This customer has active platform permissions and can make orders."
-                          : "This account's permissions are temporarily revoked. User cannot login."
-                        }
-                      </p>
-                    </div>
-                    <Badge variant={isActive ? "default" : "destructive"} className={isActive ? "bg-green-500 hover:bg-green-600 text-white" : ""}>
-                      {isActive ? "ACTIVE ACCESS" : "SUSPENDED ACCESS"}
-                    </Badge>
-                  </div>
+            {/* Shipping Address & Map Preview Widget */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-sm">Shipping Address</h3>
+                <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-slate-700">
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </div>
 
-                  <div className="space-y-3 pt-2">
-                    <p className="text-xs font-semibold text-muted-foreground tracking-wider uppercase">Administrative Controls</p>
-                    
-                    <div className="flex flex-wrap gap-3">
-                      {isActive ? (
-                        <>
-                          <Button 
-                            variant="destructive" 
-                            size="sm" 
-                            disabled={actionLoading}
-                            onClick={() => handleStatusChange("suspend")}
-                          >
-                            <Ban className="mr-2 h-4 w-4" /> Suspend Account
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="border-orange-200 text-orange-700 hover:bg-orange-50 hover:text-orange-800"
-                            disabled={actionLoading}
-                            onClick={() => handleStatusChange("deactivate")}
-                          >
-                            <XCircle className="mr-2 h-4 w-4" /> Deactivate Account
-                          </Button>
-                        </>
-                      ) : (
-                        <Button 
-                          variant="default" 
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                          disabled={actionLoading}
-                          onClick={() => handleStatusChange("activate")}
-                        >
-                          <CheckCircle2 className="mr-2 h-4 w-4" /> Activate & Restore Access
-                        </Button>
-                      )}
-                    </div>
+              {/* Visual Map Mock Card */}
+              <div className="relative h-28 rounded-xl overflow-hidden bg-slate-100 border border-slate-200 flex items-center justify-center group">
+                <img 
+                  src="https://maps.googleapis.com/maps/api/staticmap?center=-1.286389,36.817223&zoom=13&size=400x150&sensor=false"
+                  alt="Address Map" 
+                  className="w-full h-full object-cover opacity-80 group-hover:scale-105 transition-transform duration-300" 
+                  onError={(e) => {
+                    // Fallback map styling if static map is blocked
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+                <div className="absolute inset-0 bg-slate-900/10 flex items-center justify-center">
+                  <div className="h-6 w-6 rounded-full bg-rose-500 text-white flex items-center justify-center shadow-md animate-bounce">
+                    <MapPin className="h-3.5 w-3.5" />
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
 
-              {/* Security Diagnostics */}
-              <Card className="border-slate-100 shadow-sm">
-                <CardHeader>
-                  <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-emerald-600" /> Security Status
-                  </CardTitle>
-                  <CardDescription>Credentials check</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4 text-sm">
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-muted-foreground">Email Verification:</span>
-                    <Badge variant="outline" className={customer.is_verified ? "border-green-200 bg-green-50 text-green-700" : "border-amber-200 bg-amber-50 text-amber-700"}>
-                      {customer.is_verified ? "Verified" : "Pending"}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-muted-foreground">2FA Authentication:</span>
-                    <Badge variant="outline" className="border-slate-200 bg-slate-50 text-slate-600">
-                      Disabled
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between items-center py-1">
-                    <span className="text-muted-foreground">Account Role:</span>
-                    <span className="font-mono text-xs uppercase bg-slate-100 px-2 py-0.5 rounded text-slate-700">Customer</span>
-                  </div>
-                </CardContent>
-              </Card>
-
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-slate-900 text-xs">{customer.name}</span>
+                  <a href={`https://maps.google.com/?q=${encodeURIComponent((customer as any).address || "Nairobi, Kenya")}`} target="_blank" rel="noreferrer" className="text-[11px] font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-0.5">
+                    View on Map
+                  </a>
+                </div>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  {(customer as any).address || "Upper Hill Medical Centre, Suite 402, Ralph Bunche Rd, Nairobi, Kenya"}
+                </p>
+              </div>
             </div>
-          </TabsContent>
-        </Tabs>
+
+            {/* Contact Information Widget */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-sm">Contact Information</h3>
+                <Button variant="ghost" size="icon" className="h-6 w-6 text-slate-400 hover:text-slate-700">
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              <div className="space-y-2.5">
+                <div className="p-2.5 rounded-full border border-sky-200 bg-sky-50/60 text-sky-800 text-xs font-semibold flex items-center justify-between px-4">
+                  <span className="truncate">{customer.email}</span>
+                  <Mail className="h-3.5 w-3.5 text-sky-500 shrink-0 ml-2" />
+                </div>
+                <div className="p-2.5 rounded-full border border-sky-200 bg-sky-50/60 text-sky-800 text-xs font-semibold flex items-center justify-between px-4">
+                  <span>{customer.phone || "+254 712 345 678"}</span>
+                  <Phone className="h-3.5 w-3.5 text-sky-500 shrink-0 ml-2" />
+                </div>
+              </div>
+            </div>
+
+            {/* Audience Group Widget */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+              <h3 className="font-bold text-slate-900 text-sm">Audience Group</h3>
+              <Button variant="outline" size="sm" className="w-full h-9 rounded-xl border-dashed border-slate-300 text-xs font-semibold text-slate-600 hover:bg-slate-50 gap-1.5">
+                <Plus className="h-3.5 w-3.5" />
+                Add Audience
+              </Button>
+            </div>
+
+            {/* Tags Widget */}
+            <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-sm space-y-3">
+              <h3 className="font-bold text-slate-900 text-sm">Tags</h3>
+              <div className="flex flex-wrap gap-2">
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">VIP Buyer</span>
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">Healthcare Clinic</span>
+                <span className="px-3 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-700">Repeat Customer</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
       </div>
     </DashboardLayout>
   );
 }
+

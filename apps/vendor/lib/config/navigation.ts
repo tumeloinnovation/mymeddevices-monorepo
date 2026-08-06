@@ -2,11 +2,9 @@ import {
   LayoutDashboard,
   Package,
   ShoppingCart,
-  Layers,
   BarChart3,
   Wallet,
   Settings,
-  HelpCircle,
   Bell,
   Store,
   Warehouse,
@@ -14,7 +12,19 @@ import {
   Image,
   LifeBuoy,
   Tag,
-  Percent,
+  Truck,
+  PackageCheck,
+  Ban,
+  RefreshCw,
+  CreditCard,
+  Eye,
+  Filter,
+  Undo,
+  RotateCcw,
+  ClipboardList,
+  AlertTriangle,
+  Clock,
+  CheckCircle2,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -22,6 +32,8 @@ export interface NavItem {
   href: string;
   icon: any;
   badge?: number;
+  children?: NavItem[];
+  activePattern?: string;
 }
 
 export interface NavSection {
@@ -42,18 +54,56 @@ export const vendorNavSections: NavSection[] = [
     items: [
       { href: "/vendor/products", icon: Package, label: "Products" },
       { href: "/vendor/media", icon: Image, label: "Media Library" },
+      { href: "/vendor/inventory", icon: Warehouse, label: "Inventory" },
     ]
   },
   {
     section: "Orders",
     items: [
-      { href: "/vendor/orders", icon: ShoppingCart, label: "Orders" },
-    ]
-  },
-  {
-    section: "Inventory",
-    items: [
-      { href: "/vendor/inventory", icon: Warehouse, label: "Inventory" },
+      {
+        href: "/vendor/orders",
+        icon: ShoppingCart,
+        label: "All Orders",
+        activePattern: "/vendor/orders",
+        children: [
+          { href: "/vendor/orders", icon: Eye, label: "All Orders" },
+          { href: "/vendor/orders/pending", icon: Clock, label: "Pending" },
+          { href: "/vendor/orders/paid", icon: CreditCard, label: "Paid" },
+          { href: "/vendor/orders/processing", icon: Filter, label: "Processing" },
+          { href: "/vendor/orders/shipped", icon: Truck, label: "Shipped" },
+          { href: "/vendor/orders/delivered", icon: PackageCheck, label: "Delivered" },
+          { href: "/vendor/orders/cancelled", icon: Ban, label: "Cancelled" },
+          { href: "/vendor/orders/refunded", icon: RefreshCw, label: "Refunded" },
+        ],
+      },
+      {
+        href: "/vendor/returns",
+        icon: Undo,
+        label: "Returns",
+        activePattern: "/vendor/returns",
+        children: [
+          { href: "/vendor/returns", icon: Eye, label: "All Returns" },
+          { href: "/vendor/returns/pending", icon: Clock, label: "Pending" },
+          { href: "/vendor/returns/approved", icon: CheckCircle2, label: "Approved" },
+          { href: "/vendor/returns/rejected", icon: Ban, label: "Rejected" },
+          { href: "/vendor/returns/completed", icon: PackageCheck, label: "Completed" },
+        ],
+      },
+      {
+        href: "/vendor/refunds",
+        icon: RotateCcw,
+        label: "Refunds",
+        activePattern: "/vendor/refunds",
+        children: [
+          { href: "/vendor/refunds", icon: Eye, label: "All Refunds" },
+          { href: "/vendor/refunds/pending", icon: Clock, label: "Pending" },
+          { href: "/vendor/refunds/processing", icon: Filter, label: "Processing" },
+          { href: "/vendor/refunds/completed", icon: CheckCircle2, label: "Completed" },
+          { href: "/vendor/refunds/rejected", icon: Ban, label: "Rejected" },
+        ],
+      },
+      { href: "/vendor/order-issues", icon: AlertTriangle, label: "Order Issues" },
+      { href: "/vendor/disputes", icon: ClipboardList, label: "Disputes" },
     ]
   },
   {
@@ -63,18 +113,21 @@ export const vendorNavSections: NavSection[] = [
       { href: "/vendor/payouts", icon: Banknote, label: "Payouts" },
     ]
   },
-    {
-      section: "Marketing",
-      items: [
-        { href: "/vendor/coupons", icon: Tag, label: "Coupons" },
-      ]
-    },
-    {
-      section: "Settings",
-      items: [
-        { href: "/vendor/support/tickets", icon: LifeBuoy, label: "Support Tickets" },
-        { href: "/vendor/settings/profile", icon: Store, label: "Store Profile" },
-        { href: "/vendor/settings/notifications", icon: Bell, label: "Notifications" },
-      ]
-    },
+  {
+    section: "Marketing",
+    items: [
+      { href: "/vendor/coupons", icon: Tag, label: "Coupons" },
+    ]
+  },
+  {
+    section: "Settings",
+    items: [
+      { href: "/vendor/shipping-settings", icon: Truck, label: "Shipping Settings" },
+      { href: "/vendor/order-templates", icon: ClipboardList, label: "Order Templates" },
+      { href: "/vendor/delivery-zones", icon: Package, label: "Delivery Zones" },
+      { href: "/vendor/settings/profile", icon: Store, label: "Store Profile" },
+      { href: "/vendor/settings/notifications", icon: Bell, label: "Notifications" },
+      { href: "/vendor/support/tickets", icon: LifeBuoy, label: "Support Tickets" },
+    ]
+  },
 ];

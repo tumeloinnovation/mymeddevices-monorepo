@@ -16,6 +16,13 @@ from app.domains.shopping.models.sub_order import SubOrder, SubOrderStatus
 from app.domains.shopping.models.vendor_ledger import VendorLedger, LedgerTransaction, LedgerTransactionType
 from app.domains.shopping.models.payment import Payment
 from app.domains.shopping.models.shipment import Shipment, ShipmentStatus
+from app.domains.shopping.models.banner import (
+    Banner,
+    BannerPlacement,
+    BannerStatus,
+    BannerClick,
+    BannerDismissal
+)
 
 __all__ = [
     "Cart",
@@ -43,4 +50,9 @@ __all__ = [
     "Payment",
     "Shipment",
     "ShipmentStatus",
+    "Banner",
+    "BannerPlacement",
+    "BannerStatus",
+    "BannerClick",
+    "BannerDismissal",
 ]

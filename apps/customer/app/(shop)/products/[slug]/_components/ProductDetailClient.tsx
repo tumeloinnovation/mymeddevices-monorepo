@@ -1,16 +1,18 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import type { Product, Review } from '@/lib/data/types'
+import { useRecentlyViewedStore } from '@/lib/store/useRecentlyViewedStore'
 
 import DescriptionTab from '@/app/(shop)/products/_components/DescriptionTab'
+import OffersTab from '@/app/(shop)/products/_components/OffersTab'
 import ProductGallery from '@/app/(shop)/products/_components/ProductGallery'
 import ProductSection from '@/components/common/ProductSection'
 import ProductInfo from '@/app/(shop)/products/_components/ProductInfo'
 import ReviewsTab from '@/app/(shop)/products/[slug]/_components/ReviewsTab'
 import SpecsTab from '@/app/(shop)/products/_components/SpecsTab'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { ShieldCheck, Truck, MapPin, FileText, MessageSquare, Sliders } from 'lucide-react'
+import { FileText, MessageSquare, Sliders, Tag } from 'lucide-react'
 import ProductNotFound from '../../_components/ProductNotFound'
 import { ProductJsonLd, BreadcrumbJsonLd } from '@/components/seo'
 
@@ -23,9 +25,20 @@ interface ProductDetailClientProps {
 }
 
 export default function ProductDetailClient({ product, relatedProducts, reviews }: ProductDetailClientProps) {
-  const [activeTab, setActiveTab] = useState('description')
+  const [activeTab, setActiveTab] = useState('overview')
   const [selectedImage, setSelectedImage] = useState(0)
   const [quantity, setQuantity] = useState(1)
+
+  const addRecentlyViewed = useRecentlyViewedStore((s) => s.addProduct)
+  const recentlyViewedItems = useRecentlyViewedStore((s) => s.items).filter(
+    (p) => p.id !== product?.id && p.slug !== product?.slug
+  )
+
+  useEffect(() => {
+    if (product) {
+      addRecentlyViewed(product)
+    }
+  }, [product, addRecentlyViewed])
 
   if (!product) return <ProductNotFound />
 
@@ -48,14 +61,9 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
       <BreadcrumbJsonLd items={breadcrumbItems} />
 
       <div className="px-4 py-8 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
+          <div className="sticky top-8">
             <ProductGallery images={images} selected={selectedImage} onSelect={setSelectedImage} />
-            <div className="flex items-center gap-6 mt-4 text-sm text-gray-600">
-              <div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-green-600" /> 100% Authentic</div>
-              <div className="flex items-center gap-2"><Truck className="h-5 w-5" /> Fast Delivery</div>
-              <div className="flex items-center gap-2"><MapPin className="h-5 w-5" /> Pickup Available</div>
-            </div>
           </div>
 
           <div>
@@ -63,27 +71,28 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
           </div>
         </div>
 
-        <div className="mt-10">
+        {/* Tabs Section */}
+        <div className="mt-8">
           <div className="bg-white dark:bg-card border dark:border-border rounded-lg shadow-sm transition-colors duration-300">
             <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="px-4 py-3 border-b dark:border-border bg-gray-50 dark:bg-muted/30 rounded-t-lg">
-                <TabsTrigger value="description" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
+              <TabsList className="px-4 py-3 border-b dark:border-border bg-gray-50 dark:bg-muted/30 rounded-t-lg flex gap-2">
+                <TabsTrigger value="overview" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
                   <FileText className="h-4 w-4" /> Description
-                </TabsTrigger>
-                <TabsTrigger value="reviews" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-                  <MessageSquare className="h-4 w-4" /> Reviews ({reviews.length})
                 </TabsTrigger>
                 <TabsTrigger value="specs" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
                   <Sliders className="h-4 w-4" /> Specifications
                 </TabsTrigger>
+                <TabsTrigger value="reviews" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
+                  <MessageSquare className="h-4 w-4" /> Reviews
+                </TabsTrigger>
+                <TabsTrigger value="offers" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
+                  <Tag className="h-4 w-4" /> Offers
+                </TabsTrigger>
               </TabsList>
 
               <div className="p-4">
-                <TabsContent value="description">
+                <TabsContent value="overview">
                   <DescriptionTab description={product.description} />
-                </TabsContent>
-                <TabsContent value="reviews">
-                  <ReviewsTab productId={product.id} reviews={reviews} />
                 </TabsContent>
                 <TabsContent value="specs">
                   <SpecsTab
@@ -97,18 +106,36 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
                     tags={product.tags?.map((t) => t.name)}
                   />
                 </TabsContent>
+                <TabsContent value="reviews">
+                  <ReviewsTab productId={String(product.id)} productSlug={product.slug} productName={product.name} />
+                </TabsContent>
+                <TabsContent value="offers">
+                  <OffersTab />
+                </TabsContent>
               </div>
             </Tabs>
           </div>
         </div>
 
-        <section className="py-2 mt-12">
-          <ProductSection
-            title="You may also like"
-            description="Explore similar products that might interest you."
-            items={relatedProducts}
-          />
-        </section>
+        {relatedProducts.length > 0 && (
+          <section className="py-2 mt-12">
+            <ProductSection
+              title="You may also like"
+              description="Explore similar products that might interest you."
+              items={relatedProducts}
+            />
+          </section>
+        )}
+
+        {recentlyViewedItems.length > 0 && (
+          <section className="py-2 mt-12">
+            <ProductSection
+              title="Recently Viewed"
+              description="Products you browsed recently."
+              items={recentlyViewedItems}
+            />
+          </section>
+        )}
       </div>
     </>
   )

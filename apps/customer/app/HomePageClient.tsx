@@ -7,6 +7,8 @@ import NewsletterSection from "@/components/layout/footer/NewsLetter";
 import { WhyUs } from "@/components/layout/hero/WhyUs";
 import { useOnSaleProducts, useNewArrivals } from "@/lib/hooks/useProducts";
 import TrendingSection from "./_components/TrendingSection";
+import { BannerCarousel, HeaderBanner } from "@mymeddevices/shared-ui";
+import { BannerPlacement } from "@mymeddevices/shared-core";
 
 export default function HomePageClient() {
   const { data: onSaleProducts = [], isLoading: saleLoading } = useOnSaleProducts(10);
@@ -14,7 +16,7 @@ export default function HomePageClient() {
 
   return (
     <>
-      <HeroSection />
+      <BannerCarousel placement={BannerPlacement.HOMEPAGE_HERO} fallback={<HeroSection />} />
 
       <main className="container mx-auto px-4 sm:px-6 lg:px-8">
         <section className="py-6">

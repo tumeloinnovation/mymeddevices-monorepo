@@ -185,8 +185,8 @@ async def remove_coupon_from_cart(
 
 @router.get("/available", response_model=ApiSuccessResponse[List])
 async def get_available_coupons(
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_current_user)
 ):
     """Get all available coupons for the customer."""
     now = datetime.now(timezone.utc)

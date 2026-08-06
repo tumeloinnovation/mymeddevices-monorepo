@@ -339,11 +339,11 @@ function SessionsSection() {
             <div key={device.id} className="flex items-start justify-between p-3 border rounded-lg hover:border-accent transition-colors">
               <div className="flex items-start gap-3">
                 <div className="p-2 bg-muted rounded-lg">
-                  <DeviceIcon type={device.name.toLowerCase().includes('mobile') || device.name.toLowerCase().includes('phone') ? 'mobile' : 'desktop'} />
+                  <DeviceIcon type={device.name?.toLowerCase().includes('mobile') || device.name?.toLowerCase().includes('phone') ? 'mobile' : 'desktop'} />
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium">{device.name}</p>
+                    <p className="text-sm font-medium">{device.name || 'Unknown Device'}</p>
                     {device.is_current && (
                       <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-50 dark:bg-green-950/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-900/30">
                         Current

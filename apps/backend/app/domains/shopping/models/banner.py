@@ -1,0 +1,301 @@
+import uuid
+from datetime import datetime, timezone
+from typing import Optional
+from sqlalchemy import String, Boolean, Integer, DateTime, Text, ForeignKey, Enum as SQLEnum
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.dialects.postgresql import UUID, ARRAY
+from enum import Enum
+
+from app.core.database import Base
+from app.domains.shared.models import IDMixin, AuditMixin
+
+
+class BannerPlacement(str, Enum):
+    """Where banners can be displayed."""
+    HOMEPAGE_HERO = "homepage_hero"          # Full-width hero carousel
+    HOMEPAGE_SIDEBAR = "homepage_sidebar"    # Sidebar on homepage
+    CATEGORY_PAGE = "category_page"          # Top of category pages
+    PRODUCT_PAGE = "product_page"            # On product detail pages
+    CHECKOUT_PAGE = "checkout_page"          # During checkout
+    HEADER_BAR = "header_bar"                # Top announcement bar
+    FOOTER = "footer"                        # Footer banner
+
+
+class BannerStatus(str, Enum):
+    """Banner status."""
+    DRAFT = "draft"
+    SCHEDULED = "scheduled"
+    ACTIVE = "active"
+    PAUSED = "paused"
+    EXPIRED = "expired"
+
+
+class Banner(Base, IDMixin, AuditMixin):
+    __tablename__ = "banners"
+
+    # Basic Information
+    title: Mapped[str] = mapped_column(
+        String(200),
+        nullable=False
+    )
+    description: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True
+    )
+
+    # Visual Assets
+    image_url: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True
+    )
+    image_alt_text: Mapped[Optional[str]] = mapped_column(
+        String(200),
+        nullable=True
+    )
+    background_color: Mapped[Optional[str]] = mapped_column(
+        String(20),  # Hex color
+        nullable=True
+    )
+    text_color: Mapped[Optional[str]] = mapped_column(
+        String(20),  # Hex color
+        nullable=True
+    )
+
+    # Call to Action
+    cta_text: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True
+    )
+    cta_link: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True
+    )
+    cta_target: Mapped[str] = mapped_column(
+        String(20),  # '_self', '_blank'
+        default="_self",
+        nullable=False
+    )
+
+    # Placement and Priority
+    placement: Mapped[str] = mapped_column(
+        SQLEnum(BannerPlacement),
+        nullable=False,
+        index=True
+    )
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        default=0,  # Higher = shown first
+        nullable=False
+    )
+
+    # Scheduling
+    status: Mapped[str] = mapped_column(
+        SQLEnum(BannerStatus),
+        default=BannerStatus.DRAFT,
+        nullable=False,
+        index=True
+    )
+    scheduled_start: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True
+    )
+    scheduled_end: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        index=True
+    )
+
+    # Targeting
+    target_audience: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(String(50)),
+        nullable=True
+    )  # ['new_customers', 'returning', 'vip', etc.]
+    target_categories: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(String(100)),
+        nullable=True
+    )  # Category IDs or slugs
+    target_products: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(String(100)),
+        nullable=True
+    )  # Product IDs
+    exclude_products: Mapped[Optional[list[str]]] = mapped_column(
+        ARRAY(String(100)),
+        nullable=True
+    )  # Product IDs to exclude
+
+    # Coupon Association
+    coupon_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("coupons.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+
+    # Vendor-specific banners
+    vendor_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("vendor_profiles.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True
+    )
+
+    # Display Settings
+    is_dismissible: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+    show_close_button: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        nullable=False
+    )
+    mobile_hidden: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+    desktop_hidden: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        nullable=False
+    )
+
+    # Analytics
+    impressions: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False
+    )
+    clicks: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False
+    )
+    dismissals: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False
+    )
+
+    # Metadata
+    created_by_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True
+    )
+
+    # Relationships
+    coupon: Mapped[Optional["Coupon"]] = relationship(
+        "Coupon",
+        foreign_keys=[coupon_id],
+        lazy="selectin"
+    )
+    vendor: Mapped[Optional["VendorProfile"]] = relationship(
+        "VendorProfile",
+        foreign_keys=[vendor_id],
+        lazy="selectin"
+    )
+
+    def is_active_for_display(self) -> bool:
+        """Check if banner should be displayed based on status and schedule."""
+        if self.status != BannerStatus.ACTIVE:
+            return False
+
+        now = datetime.now(timezone.utc)
+
+        if self.scheduled_start and now < self.scheduled_start:
+            return False
+
+        if self.scheduled_end and now > self.scheduled_end:
+            return False
+
+        return True
+
+    def get_click_through_rate(self) -> float:
+        """Calculate CTR as percentage."""
+        if self.impressions == 0:
+            return 0.0
+        return round((self.clicks / self.impressions) * 100, 2)
+
+
+class BannerClick(Base, IDMixin):
+    """Track individual banner clicks for analytics."""
+    __tablename__ = "banner_clicks"
+
+    banner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("banners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+    session_id: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True
+    )  # For anonymous tracking
+    ip_address: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True
+    )
+    user_agent: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True
+    )
+    referrer: Mapped[Optional[str]] = mapped_column(
+        String(500),
+        nullable=True
+    )
+    clicked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.now(timezone.utc),
+        nullable=False,
+        index=True
+    )
+
+    # Relationships
+    banner: Mapped["Banner"] = relationship(
+        "Banner",
+        foreign_keys=[banner_id]
+    )
+
+
+class BannerDismissal(Base, IDMixin):
+    """Track when users dismiss banners."""
+    __tablename__ = "banner_dismissals"
+
+    banner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("banners.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True
+    )
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True
+    )
+    session_id: Mapped[Optional[str]] = mapped_column(
+        String(100),
+        nullable=True,
+        index=True
+    )
+    dismissed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.now(timezone.utc),
+        nullable=False
+    )
+
+    # Relationships
+    banner: Mapped["Banner"] = relationship(
+        "Banner",
+        foreign_keys=[banner_id]
+    )

@@ -229,16 +229,17 @@ export function useCheckoutLogic() {
             // Get cart ID from the cart store
             const cartId = cart?.id || 'default-cart';
             const result = await shoppingService.applyCoupon(cartId, couponCode);
+            const data = (result as any)?.data ?? result;
             
-            if (result.success && result.data.is_valid) {
-                setAppliedCoupon(result.data);
-                toast.success('Coupon applied successfully!');
+            if (data && data.is_valid) {
+                setAppliedCoupon(data);
+                toast.success(data.message || 'Coupon applied successfully!');
             } else {
-                toast.error(result.data?.message || 'Invalid coupon code');
+                toast.error(data?.message || 'Invalid coupon code');
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error('Coupon error:', error);
-            toast.error('Failed to apply coupon');
+            toast.error(error?.message || 'Failed to apply coupon');
         } finally {
             setIsApplyingCoupon(false);
         }
@@ -265,12 +266,24 @@ export function useCheckoutLogic() {
     // Handlers
     const handleAuthComplete = async () => {
         setShowAuthModal(false);
-        
+
         try {
-            await mergeCart();
-            toast.success('Welcome! Your cart has been updated.');
+            // Check if there's a guest cart to merge
+            const guestToken = typeof window !== 'undefined'
+                ? localStorage.getItem('guest_cart_token')
+                : null;
+
+            if (guestToken) {
+                console.log('[AuthComplete] Merging guest cart into user cart');
+                await mergeCart();
+                toast.success('Welcome! Your cart has been updated.');
+            } else {
+                console.log('[AuthComplete] No guest cart to merge, syncing user cart');
+                await syncLocalItemsToBackend();
+                toast.success('Welcome!');
+            }
         } catch (error) {
-            console.error('Failed to merge cart:', error);
+            console.error('Failed to sync cart:', error);
             toast.error('Failed to sync your cart. Please check your items.');
         }
 
@@ -301,7 +314,17 @@ export function useCheckoutLogic() {
             // First, sync any local items to backend cart
             console.log('[Checkout] Starting checkout, local items:', items.length);
             toast.loading('Syncing cart...', { id: 'cart-sync' });
-            await mergeCart();
+
+            // Only attempt merge if authenticated user has a guest token to merge
+            const activeCartToken = useCartStore.getState().cartToken;
+
+            if (isAuthenticated && activeCartToken) {
+                console.log('[Checkout] Guest cart token found, merging into user cart');
+                await mergeCart();
+            } else {
+                console.log('[Checkout] Syncing local items with backend');
+                await syncLocalItemsToBackend();
+            }
 
             // Get cart from store (mergeCart already synced)
             let cart = useCartStore.getState().cart;
@@ -313,30 +336,15 @@ export function useCheckoutLogic() {
                 console.warn('[Checkout] Cart is invalid or inactive, getting fresh cart');
                 toast.loading('Getting fresh cart...', { id: 'cart-refresh' });
 
-                // Clear the cart token to force creation of new cart
-                if (typeof window !== 'undefined') {
-                    localStorage.removeItem('cart_token');
-                    localStorage.removeItem('guest_token');
-                }
-
                 // Clear the cart token in the store
                 const { setCartToken: clearToken, syncWithBackend } = useCartStore.getState();
-                clearToken('');
+                clearToken(null);
 
                 // Sync with backend (this will create a new guest cart if needed)
                 await syncWithBackend({ force: true });
 
                 // Get the fresh cart from store
                 cart = useCartStore.getState().cart;
-
-                // Save the new cart token
-                if (cart?.cart_token) {
-                    useCartStore.getState().setCartToken(cart.cart_token);
-                    if (typeof window !== 'undefined') {
-                        localStorage.setItem('cart_token', cart.cart_token);
-                        localStorage.setItem('guest_token', cart.cart_token);
-                    }
-                }
 
                 console.log('[Checkout] Fresh cart:', cart ? `${cart.id} (active: ${cart.is_active}, items: ${cart.items?.length || 0})` : 'null');
 
@@ -380,14 +388,14 @@ export function useCheckoutLogic() {
             };
 
             // Get guest token for non-authenticated users
-            const guestToken = !isAuthenticated ? (typeof window !== 'undefined' ? localStorage.getItem('guest_token') : null) : null;
+            const orderGuestToken = !isAuthenticated ? useCartStore.getState().cartToken : null;
 
             const order = await orderService.createOrderFromCart(
                 cart,
                 shippingAddress,
                 shippingAddress, // billing same as shipping
                 orderNotes || undefined, // notes from customer input
-                guestToken || undefined
+                orderGuestToken || undefined
             );
 
             const orderId = order.id;

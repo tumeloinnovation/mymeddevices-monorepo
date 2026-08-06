@@ -49,9 +49,10 @@ export const customerCouponsApi = {
   async getAvailable(): Promise<Coupon[]> {
     try {
       const response = await apiClient.get<any>('/shopping/cart/coupon/available');
+      const data = (response as any)?.data ?? response;
 
-      if (response && response.data) {
-        return Array.isArray(response.data) ? response.data : [];
+      if (Array.isArray(data)) {
+        return data;
       }
 
       return [];
@@ -67,9 +68,10 @@ export const customerCouponsApi = {
   async getMyCoupons(): Promise<CouponUsageResponse> {
     try {
       const response = await apiClient.get<any>('/shopping/cart/coupon/my-coupons');
+      const data = (response as any)?.data ?? response;
 
-      if (response && response.data) {
-        return response.data;
+      if (data && Array.isArray(data.items)) {
+        return data;
       }
 
       return { items: [], total: 0 };
@@ -98,14 +100,15 @@ export const customerCouponsApi = {
           params: { code, cart_id: cartId },
         }
       );
+      const data = (response as any)?.data ?? response;
 
-      if (response && response.data) {
-        if (response.data.is_valid) {
-          toast.success('Coupon applied successfully');
+      if (data && typeof data === 'object') {
+        if (data.is_valid) {
+          toast.success(data.message || 'Coupon applied successfully');
         } else {
-          toast.error(response.data.message || 'Invalid coupon');
+          toast.error(data.message || 'Invalid coupon');
         }
-        return response.data;
+        return data;
       }
 
       throw new Error('Invalid response format');

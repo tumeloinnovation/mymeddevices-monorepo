@@ -50,6 +50,8 @@ import {
     Lock,
     Eye,
     Bell,
+    MessageSquare,
+    Clock,
 } from 'lucide-react';
 import type { NavigationItem } from '@/types/dashboard';
 import { toast } from 'sonner';
@@ -157,6 +159,18 @@ export function DashboardSidebar() {
                     icon: Heart,
                     badge: wishlistItems.length,
                     isActive: pathname?.startsWith('/dashboard/wishlist'),
+                },
+                {
+                    label: 'Product Reviews',
+                    href: '/dashboard/reviews',
+                    icon: MessageSquare,
+                    isActive: pathname?.startsWith('/dashboard/reviews'),
+                },
+                {
+                    label: 'Recently Viewed',
+                    href: '/dashboard/recently-viewed',
+                    icon: Clock,
+                    isActive: pathname?.startsWith('/dashboard/recently-viewed'),
                 },
             ],
         },

@@ -17,6 +17,17 @@ export interface ProductImageCreate {
   is_primary?: boolean;
 }
 
+export interface ProductVariant {
+  id: string;
+  product_id: string;
+  name: string;
+  sku?: string;
+  price_adjustment?: number;
+  stock_quantity: number;
+  attributes?: Record<string, any>;
+  is_active: boolean;
+}
+
 export interface Product {
   id: string;
   vendor_id: string;
@@ -60,6 +71,7 @@ export interface Product {
   ai_generated_fields?: Record<string, any>;
   completeness_score: number;
   images: ProductImage[];
+  variants?: ProductVariant[];
   created_at: string;
   updated_at: string;
 }

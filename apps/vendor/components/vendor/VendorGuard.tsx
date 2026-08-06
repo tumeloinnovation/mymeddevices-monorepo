@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore, logger } from '@mymeddevices/shared-core';
 import { Loader2 } from 'lucide-react';
@@ -10,10 +10,18 @@ export default function VendorGuard({ children }: { children: React.ReactNode })
     const router = useRouter();
     const pathname = usePathname();
     const [isChecking, setIsChecking] = useState(true);
+    const hasPassedGuardRef = useRef(false);
 
     useEffect(() => {
         // Wait for store rehydration
         if (!hydrated) return;
+
+        // Skip checks if we've already validated and are just navigating between authorized pages
+        // Only re-check if auth state changes (user, isAuthenticated), not on every pathname change
+        if (hasPassedGuardRef.current && isAuthenticated && user) {
+            setIsChecking(false);
+            return;
+        }
 
         const checkAccess = () => {
             // CRITICAL FIX: Check for refresh token to handle stale auth state from localStorage
@@ -21,14 +29,21 @@ export default function VendorGuard({ children }: { children: React.ReactNode })
             const hasRefreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
             if (!isAuthenticated || !user || !hasRefreshToken) {
                 logger.log('🛡️ [VendorGuard] Access denied: unauthenticated, redirecting to /login');
-                router.replace('/login');
+                hasPassedGuardRef.current = false;
+                // Only redirect if not already on login page to prevent loops
+                if (pathname !== '/login') {
+                    router.replace('/login');
+                }
                 return;
             }
 
             // 2. Not a vendor -> Redirect to login
             if (user.role !== 'vendor') {
                 logger.log('🛡️ [VendorGuard] Access denied: role is not vendor, redirecting to /login', { role: user.role });
-                router.replace('/login');
+                hasPassedGuardRef.current = false;
+                if (pathname !== '/login') {
+                    router.replace('/login');
+                }
                 return;
             }
 
@@ -44,6 +59,7 @@ export default function VendorGuard({ children }: { children: React.ReactNode })
                     router.replace('/pending-vendor');
                 } else {
                     // Allow access to pending page
+                    hasPassedGuardRef.current = true;
                     setIsChecking(false);
                 }
                 return;
@@ -55,7 +71,8 @@ export default function VendorGuard({ children }: { children: React.ReactNode })
                 return;
             }
 
-            // Allowed
+            // Allowed - mark as passed to skip checks on subsequent navigations
+            hasPassedGuardRef.current = true;
             setIsChecking(false);
         };
 

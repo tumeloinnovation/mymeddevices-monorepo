@@ -9,29 +9,55 @@ type Props = {
 
 export default function ProductGallery({ images, selected = 0, onSelect }: Props) {
   const clampedSelected = images.length > 0 ? Math.min(selected, images.length - 1) : 0
+
+  if (images.length === 0) {
+    return (
+      <div className="bg-white dark:bg-card rounded-lg p-4 shadow-sm border border-gray-200 dark:border-border">
+        <div className="aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-md">
+          <Image src="/logos/logo-portrait.png" alt="No image" width={200} height={200} className="opacity-50" />
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="bg-white rounded-lg p-4 shadow-sm">
-      <div className="flex flex-col sm:flex-row gap-4">
-        {/* Thumbnails - on small screens show horizontally above image */}
-        <div className="flex sm:flex-col gap-3 overflow-auto sm:overflow-visible">
+    <div className="bg-white dark:bg-card rounded-lg overflow-hidden shadow-sm border border-gray-200 dark:border-border">
+      {/* Main Image */}
+      <div className="aspect-square flex items-center justify-center bg-gray-50 dark:bg-gray-900/20 p-8">
+        <Image
+          src={images[clampedSelected] || '/logos/logo-portrait.png'}
+          alt={`Product image ${clampedSelected + 1}`}
+          width={800}
+          height={800}
+          className="max-h-full max-w-full object-contain"
+          priority
+        />
+      </div>
+
+      {/* Thumbnails */}
+      {images.length > 1 && (
+        <div className="flex gap-2 p-4 overflow-x-auto">
           {images.map((src, i) => (
             <button
               key={i}
               onClick={() => onSelect?.(i)}
-              className={`flex-shrink-0 w-16 h-16 sm:w-20 sm:h-20 rounded border ${clampedSelected === i ? 'border-primary' : 'border-gray-200'} overflow-hidden`}
+              className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 transition-all ${
+                clampedSelected === i
+                  ? 'border-primary ring-2 ring-primary/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+              }`}
             >
-              <Image src={src ?? '/logos/logo-portrait.png'} alt={`img-${i}`} width={80} height={80} className="object-cover w-full h-full" />
+              <Image
+                src={src ?? '/logos/logo-portrait.png'}
+                alt={`Thumbnail ${i + 1}`}
+                width={64}
+                height={64}
+                className="w-full h-full object-cover"
+              />
             </button>
           ))}
         </div>
-
-        <div className="flex-1 flex items-center justify-center">
-          {/* responsive main image: smaller on mobile, larger on desktop */}
-          <div className="w-full max-w-md sm:max-w-2xl">
-            <Image src={images[clampedSelected] || '/logos/logo-portrait.png'} alt={`selected image`} width={800} height={800} className="rounded-md object-contain w-full h-auto" />
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

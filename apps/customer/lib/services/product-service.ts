@@ -30,17 +30,22 @@ interface Product {
   id: string;
   vendor_id: string;
   sku: string;
+  slug: string;
   name: string;
   description: string;
-  price: string;
-  cost_price?: string;
-  compare_at_price?: string;
+  short_description?: string;
+  price: number;
+  cost_price?: number;
+  compare_at_price?: number;
   stock_quantity: number;
-  status: 'active' | 'inactive';
+  status: 'active' | 'inactive' | 'published';
   approval_status: 'approved' | 'pending' | 'rejected';
   image_url?: string;
   images?: ProductImage[];
+  category_id?: string;
+  category_name?: string;
   category?: string;
+  brand?: string;
   created_at: string;
   updated_at: string;
 }
@@ -55,9 +60,9 @@ interface ProductImage {
 
 interface PricingSummary {
   product_id: string;
-  price: string;
-  cost_price: string | null;
-  compare_at_price: string | null;
+  price: number;
+  cost_price: number | null;
+  compare_at_price: number | null;
   markup_percentage: number | null;
   profit_margin: number;
 }
@@ -196,9 +201,9 @@ export const productService = {
       const product = await this.getProduct(id);
 
       // Calculate pricing summary from product data
-      const price = parseFloat(product.price);
-      const costPrice = product.cost_price ? parseFloat(product.cost_price) : null;
-      const compareAtPrice = product.compare_at_price ? parseFloat(product.compare_at_price) : null;
+      const price = typeof product.price === 'number' ? product.price : parseFloat(product.price);
+      const costPrice = product.cost_price ? (typeof product.cost_price === 'number' ? product.cost_price : parseFloat(product.cost_price)) : null;
+      const compareAtPrice = product.compare_at_price ? (typeof product.compare_at_price === 'number' ? product.compare_at_price : parseFloat(String(product.compare_at_price))) : null;
 
       let markupPercentage = null;
       let profitMargin = 0;
@@ -210,9 +215,9 @@ export const productService = {
 
       return {
         product_id: product.id,
-        price: product.price,
-        cost_price: product.cost_price ?? null,
-        compare_at_price: product.compare_at_price ?? null,
+        price: price,
+        cost_price: costPrice,
+        compare_at_price: compareAtPrice,
         markup_percentage: markupPercentage,
         profit_margin: profitMargin,
       };
@@ -385,7 +390,8 @@ export function formatPrice(price: string | number): string {
   return new Intl.NumberFormat('en-KE', {
     style: 'currency',
     currency: 'KES',
-    minimumFractionDigits: 2,
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
   }).format(numPrice);
 }
 

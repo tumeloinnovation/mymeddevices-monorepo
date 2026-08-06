@@ -15,6 +15,7 @@ from app.domains.shopping.schemas.coupon_schemas import (
     CouponCreate,
     CouponUpdate,
 )
+from app.domains.shopping.schemas.cart_schemas import CartResponse
 from app.domains.shopping.services.coupon_service import CouponService
 from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.models.order import Order, OrderItem
@@ -131,12 +132,16 @@ async def admin_list_abandoned_carts(
             Cart.is_active == True,
             Cart.user_id.isnot(None)
         )
-    ).options(selectinload(Cart.items))
+    ).options(selectinload(Cart.user), selectinload(Cart.items).selectinload(CartItem.product))
     
     result = await db.execute(stmt)
     carts = result.scalars().all()
     
-    abandoned = [c for c in carts if len(c.items) > 0]
+    abandoned = []
+    for c in carts:
+        if len(c.items) > 0:
+            cart_dict = CartResponse.model_validate(c).model_dump(mode="json")
+            abandoned.append(cart_dict)
     
     return success_response(abandoned)
 
@@ -149,6 +154,7 @@ async def admin_get_abandoned_cart(
 ):
     """Get details of an abandoned cart."""
     stmt = select(Cart).where(Cart.id == cart_id).options(
+        selectinload(Cart.user),
         selectinload(Cart.items).selectinload(CartItem.product)
     )
     result = await db.execute(stmt)
@@ -157,7 +163,8 @@ async def admin_get_abandoned_cart(
     if not cart:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cart not found")
     
-    return success_response(cart)
+    cart_dict = CartResponse.model_validate(cart).model_dump(mode="json")
+    return success_response(cart_dict)
 
 
 @router.post("/carts/abandoned/{cart_id}/recover")

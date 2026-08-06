@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import DashboardLayout from "@/components/dashboard-layout"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
@@ -10,13 +11,18 @@ import {
   DollarSign, 
   Activity, 
   CreditCard, 
-  Apple, 
   MoreHorizontal,
   ChevronLeft,
   ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
-  LucideIcon
+  Download,
+  ChevronDown,
+  Star,
+  CheckCircle2,
+  Clock,
+  QrCode,
+  Laptop
 } from "lucide-react"
 import { 
   BarChart, 
@@ -34,557 +40,630 @@ import {
 } from "recharts"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Progress } from "@/components/ui/progress"
-import Link from "next/link"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
-// --- Mock Data ---
+// --- Custom Replicated Mock Datasets ---
 
-const KPI_DATA = [
-  { title: "Total Revenue", value: "Ksh 5,650,000", trend: "+20.1%", trendType: "up" as const, icon: DollarSign },
-  { title: "Active Customers", value: "+2,350", trend: "+180.1%", trendType: "up" as const, icon: Users },
-  { title: "Products Sold", value: "+12,234", trend: "+19%", trendType: "up" as const, icon: Package },
-  { title: "Conversion Rate", value: "3.2%", trend: "-4%", trendType: "down" as const, icon: Activity },
-  { title: "Revenue Growth", value: "+Ksh 1,550,000", trend: "+12%", trendType: "up" as const, icon: TrendingUp },
+const TOP_SPARKLINE_1 = [
+  { val: 12 }, { val: 18 }, { val: 14 }, { val: 24 }, { val: 20 }, { val: 30 }, { val: 28 }, { val: 35 }
 ]
 
-const SALES_DATA = [
-  { name: "Jan", total: 1200 },
-  { name: "Feb", total: 2100 },
-  { name: "Mar", total: 1800 },
-  { name: "Apr", total: 2400 },
-  { name: "May", total: 1900 },
-  { name: "Jun", total: 2800 },
+const TOP_SPARKLINE_2 = [
+  { val: 10 }, { val: 15 }, { val: 22 }, { val: 19 }, { val: 28 }, { val: 24 }, { val: 32 }
 ]
 
-const RECENT_TRANSACTIONS = [
-  { id: "1", type: "Credit Card", status: "Completed", date: "2024-03-12 10:45", amount: "Ksh 15,500", methodIcon: CreditCard },
-  { id: "2", type: "M-Pesa Mobile", status: "Pending", date: "2024-03-12 09:30", amount: "Ksh 5,800", methodIcon: Apple },
-  { id: "3", type: "Credit Card", status: "Completed", date: "2024-03-11 16:20", amount: "Ksh 27,000", methodIcon: CreditCard },
-  { id: "4", type: "M-Pesa Mobile", status: "Failed", date: "2024-03-11 14:15", amount: "Ksh 11,500", methodIcon: Apple },
+const TOP_BAR_SPARKLINE = [
+  { period: "M1", growth: 15 },
+  { period: "M2", growth: 22 },
+  { period: "M3", growth: 18 },
+  { period: "M4", growth: 28 },
+  { period: "M5", growth: 24 }
 ]
 
-const POPULAR_PRODUCTS = [
-  { name: "Surgical Scalpels Kit", price: "Ksh 24,900", image: "https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=100&h=100&fit=crop", sales: 120 },
-  { name: "Patient Vital Sign Monitor", price: "Ksh 85,000", image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?w=100&h=100&fit=crop", sales: 85 },
-  { name: "Portable Ultrasound Scanner", price: "Ksh 49,500", image: "https://images.unsplash.com/photo-1581594693702-fbdc51b2763b?w=100&h=100&fit=crop", sales: 64 },
+const SEGMENTATION_DATA = [
+  { name: "Startup", value: 2310, growth: "+32.8%", color: "#000000" },
+  { name: "Enterprise", value: 800, growth: "+32.8%", color: "#3b82f6" },
+  { name: "Individuals", value: 310, growth: "-17%", color: "#10b981" }
 ]
 
-const RECENT_ORDERS = [
-  { id: "ORD-7392", customer: "John Doe", email: "john@example.com", product: "Surgical Scalpels Kit", amount: "Ksh 24,900", status: "Shipped", date: "2024-03-12", method: "Express" },
-  { id: "ORD-7391", customer: "Jane Smith", email: "jane@example.com", product: "Patient Vital Sign Monitor", amount: "Ksh 85,000", status: "Processing", date: "2024-03-12", method: "Standard" },
-  { id: "ORD-7390", customer: "Robert Brown", email: "robert@example.com", product: "Portable Ultrasound Scanner", amount: "Ksh 49,500", status: "Delivered", date: "2024-03-11", method: "Next Day" },
-  { id: "ORD-7389", customer: "Alice Johnson", email: "alice@example.com", product: "Patient Vital Sign Monitor", amount: "Ksh 85,000", status: "Cancelled", date: "2024-03-11", method: "Standard" },
-  { id: "ORD-7388", customer: "Michael Wilson", email: "michael@example.com", product: "Surgical Scalpels Kit", amount: "Ksh 24,900", status: "Shipped", date: "2024-03-10", method: "Express" },
+const ORDER_OVERVIEW_DATA = [
+  { date: "Mar 30", total: 8000, orders: 400 },
+  { date: "Apr 9", total: 18000, orders: 1200 },
+  { date: "Apr 14", total: 14000, orders: 900 },
+  { date: "Apr 19", total: 22560, orders: 1540 },
+  { date: "Apr 24", total: 19000, orders: 1100 },
+  { date: "Apr 29", total: 28000, orders: 1800 },
 ]
 
-const SPARKLINE_DATA = [
-  { value: 10 }, { value: 15 }, { value: 8 }, { value: 22 }, { value: 18 }, { value: 25 }, { value: 20 },
+const USER_ACTIVITY_DATA = [
+  { day: "M", checkout: 45, active: 85 },
+  { day: "T", checkout: 55, active: 90 },
+  { day: "W", checkout: 75, active: 110 },
+  { day: "T", checkout: 60, active: 95 },
+  { day: "F", checkout: 85, active: 130 },
+  { day: "S", checkout: 95, active: 140 },
+  { day: "S", checkout: 70, active: 105 },
 ]
 
-// --- Helper Components ---
-
-interface KPICardProps {
-  title: string
-  value: string
-  trend: string
-  trendType: "up" | "down"
-  icon: LucideIcon
-}
-
-const KPICard = ({ title, value, trend, trendType, icon: Icon }: KPICardProps) => (
-  <Card>
-    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-      <CardTitle className="text-sm font-medium">{title}</CardTitle>
-      <Icon className="h-4 w-4 text-muted-foreground" />
-    </CardHeader>
-    <CardContent>
-      <div className="text-2xl font-bold">{value}</div>
-      <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
-        {trendType === "up" ? (
-          <TrendingUp className="h-3 w-3 text-emerald-500" />
-        ) : (
-          <TrendingDown className="h-3 w-3 text-rose-500" />
-        )}
-        <span className={trendType === "up" ? "text-emerald-500" : "text-rose-500"}>
-          {trend}
-        </span>
-        from last month
-      </div>
-    </CardContent>
-  </Card>
-)
-
-const CircularProgress = ({ value, label }: { value: number, label: string }) => {
-  const data = [
-    { name: "Progress", value: value },
-    { name: "Remaining", value: 100 - value },
-  ]
-  const COLORS = ["#3b82f6", "#f1f5f9"]
-
-  return (
-    <div className="relative flex flex-col items-center justify-center h-48 w-full">
-      <ResponsiveContainer width="100%" height="100%">
-        <PieChart>
-          <Pie
-            data={data}
-            cx="50%"
-            cy="50%"
-            innerRadius={60}
-            outerRadius={80}
-            paddingAngle={0}
-            dataKey="value"
-            startAngle={90}
-            endAngle={450}
-            stroke="none"
-          >
-            {data.map((_, index) => (
-              <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-            ))}
-          </Pie>
-        </PieChart>
-      </ResponsiveContainer>
-      <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-bold">{value}%</span>
-        <span className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{label}</span>
-      </div>
-    </div>
-  )
-}
-
-const Sparkline = ({ data }: { data: { value: number }[] }) => (
-  <div className="h-[40px] w-full">
-    <ResponsiveContainer width="100%" height="100%">
-      <AreaChart data={data}>
-        <defs>
-          <linearGradient id="gradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3}/>
-            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
-          </linearGradient>
-        </defs>
-        <Area type="monotone" dataKey="value" stroke="#3b82f6" strokeWidth={2} fillOpacity={1} fill="url(#gradient)" />
-      </AreaChart>
-    </ResponsiveContainer>
-  </div>
-)
-
-const StatusBadge = ({ status }: { status: string }) => {
-  const variants: Record<string, string> = {
-    "Shipped": "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
-    "Processing": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    "Delivered": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-    "Cancelled": "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
-    "Completed": "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400",
-    "Pending": "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
-    "Failed": "bg-rose-100 text-rose-700 dark:bg-rose-900/30 dark:text-rose-400",
+const RECENT_SALES_ORDERS = [
+  {
+    id: "1",
+    product: "Livesoft Memory Foam Pillow Set",
+    customer: "Emma Watson",
+    qty: "3 Pcs",
+    status: "Pending",
+    paymentMethod: "Credit Card",
+    totalPrice: "$180.00",
+    image: "https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?w=80&h=80&fit=crop"
+  },
+  {
+    id: "2",
+    product: "Solar Desk Lamp with Matte Finish",
+    customer: "Michael Brown",
+    qty: "2 Pcs",
+    status: "Shipped",
+    paymentMethod: "UPI",
+    totalPrice: "$120.00",
+    image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=80&h=80&fit=crop"
+  },
+  {
+    id: "3",
+    product: "Artisan Coffee Maker with Wood Finish",
+    customer: "Olivia Johnson",
+    qty: "1 Pcs",
+    status: "Delivered",
+    paymentMethod: "Cash on Delivery",
+    totalPrice: "$250.00",
+    image: "https://images.unsplash.com/photo-1517668808822-9ebb02f2a0e6?w=80&h=80&fit=crop"
+  },
+  {
+    id: "4",
+    product: "Wireless Noise Canceling Earbuds",
+    customer: "Daniel Lee",
+    qty: "2 Pcs",
+    status: "Shipped",
+    paymentMethod: "UPI",
+    totalPrice: "$200.00",
+    image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=80&h=80&fit=crop"
+  },
+  {
+    id: "5",
+    product: "Minimalist Glass Coffee Table",
+    customer: "Sophia Garcia",
+    qty: "1 Pcs",
+    status: "Delivered",
+    paymentMethod: "Cash on Delivery",
+    totalPrice: "$450.00",
+    image: "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=80&h=80&fit=crop"
   }
-  
-  return (
-    <Badge className={`${variants[status] || "bg-gray-100 text-gray-700"} border-none font-medium`}>
-      {status}
-    </Badge>
-  )
-}
+]
 
-// --- Main Page ---
+const LATEST_PRODUCTS = [
+  { name: "Smart Home Camera", sub: "8.49k users", price: "$180.00", image: "https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?w=80&h=80&fit=crop" },
+  { name: "Bluetooth Soundbar", sub: "8.49k users", price: "$200.00", image: "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=80&h=80&fit=crop" },
+  { name: "Ergonomic Office Chair", sub: "8.49k users", price: "$350.00", image: "https://images.unsplash.com/photo-1580481072645-022f9a6d83d0?w=80&h=80&fit=crop" },
+]
 
-export default function ShopNowDashboard() {
+export default function ReplicatedAdminDashboard() {
+  const [timeRange, setTimeRange] = useState("Last 30 Days")
+  const [rowsPerPage, setRowsPerPage] = useState("5")
+
   return (
     <DashboardLayout>
-      <div className="space-y-8 pb-8">
-        <div className="flex flex-col gap-2">
-          <h1 className="text-3xl font-bold tracking-tight">ShopNow Dashboard</h1>
-          <p className="text-muted-foreground">Welcome back! Here&apos;s what&apos;s happening with your store today.</p>
-        </div>
-
-
-        {/* Top-Level KPIs */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-          {KPI_DATA.map((kpi, i) => (
-            <KPICard key={i} {...kpi} />
-          ))}
-        </div>
-
-        {/* Middle Section */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-          {/* Sales Metrics */}
-          <Card className="col-span-4">
-            <CardHeader>
-              <CardTitle>Sales Metrics</CardTitle>
-              <CardDescription>Monthly performance and key sales indicators.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Orders Today</p>
-                  <p className="text-2xl font-bold">142</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Net Profit</p>
-                  <p className="text-2xl font-bold">Ksh 1,550,000</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Active Discounts</p>
-                  <p className="text-2xl font-bold">12</p>
-                </div>
-                <div className="space-y-1">
-                  <p className="text-sm text-muted-foreground">Avg. Order Value</p>
-                  <p className="text-2xl font-bold">Ksh 11,200</p>
+      <div className="space-y-6 pb-12 font-sans bg-slate-50/50 dark:bg-slate-950/50 p-2 md:p-6 rounded-2xl">
+        
+        {/* --- Top Row: 3 KPI Sparkline Cards --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Card 1: Total Sales */}
+          <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Sales</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">Shadon Space</p>
+                <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white mt-1">$98,452.76</h3>
+                <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pt-1">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>+32.8%</span>
+                  <span className="text-slate-400 font-normal">vs last month</span>
                 </div>
               </div>
-              <div className="h-[200px] w-full">
+              <div className="h-16 w-32">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={SALES_DATA}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                    <XAxis 
-                      dataKey="name" 
-                      axisLine={false} 
-                      tickLine={false} 
-                      tick={{ fill: '#94a3b8', fontSize: 12 }}
-                    />
-                    <YAxis 
-                      hide 
-                    />
-                    <Tooltip 
-                      cursor={{ fill: '#f1f5f9' }}
-                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                    />
-                    <Bar 
-                      dataKey="total" 
-                      fill="#3b82f6" 
-                      radius={[4, 4, 0, 0]} 
-                      barSize={40}
-                    />
-                  </BarChart>
+                  <AreaChart data={TOP_SPARKLINE_1}>
+                    <defs>
+                      <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#000000" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#000000" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Tooltip cursor={false} content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-slate-900 text-white text-[10px] py-1 px-2 rounded shadow">
+                            Sales {payload[0].value}
+                          </div>
+                        )
+                      }
+                      return null;
+                    }} />
+                    <Area type="monotone" dataKey="val" stroke="#000000" strokeWidth={2} fill="url(#grad1)" />
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          {/* Revenue Target */}
-          <Card className="col-span-3">
-            <CardHeader>
-              <CardTitle>Revenue Target</CardTitle>
-              <CardDescription>Current month progress.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center justify-between">
-              <CircularProgress value={78} label="Total Profit" />
-              <div className="w-full space-y-4 mt-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Target</span>
-                  <span className="font-medium">Ksh 10,000,000</span>
+          {/* Card 2: Monthly Sales */}
+          <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Monthly Sales</p>
+                <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white pt-2">$36,890</h3>
+                <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pt-1">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>+32.8%</span>
+                  <span className="text-slate-400 font-normal">vs last month</span>
                 </div>
-                <Progress value={78} className="h-2" />
-                <p className="text-xs text-center text-muted-foreground">
-                  You are <span className="text-foreground font-medium">Ksh 2,450,000</span> away from your monthly goal.
-                </p>
+              </div>
+              <div className="h-16 w-32">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={TOP_SPARKLINE_2}>
+                    <defs>
+                      <linearGradient id="grad2" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <Area type="monotone" dataKey="val" stroke="#10b981" strokeWidth={2} fill="url(#grad2)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 3: Revenue Growth */}
+          <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
+            <CardContent className="p-5 flex items-center justify-between">
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Revenue Growth</p>
+                <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white pt-2">+24%</h3>
+                <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pt-1">
+                  <TrendingUp className="w-3.5 h-3.5" />
+                  <span>+32.8%</span>
+                  <span className="text-slate-400 font-normal">vs last month</span>
+                </div>
+              </div>
+              <div className="h-16 w-28">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={TOP_BAR_SPARKLINE}>
+                    <Bar dataKey="growth" fill="#000000" radius={[3, 3, 0, 0]} barSize={8} />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-          {/* Recent Transactions */}
-          <Card className="col-span-4">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <div>
-                <CardTitle>Recent Transactions</CardTitle>
-                <CardDescription>Latest financial activity on your platform.</CardDescription>
+        {/* --- Middle Grid 1: Analytics Row --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          
+          {/* Card 1: Customer Segmentation */}
+          <Card className="lg:col-span-3 shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 flex flex-col justify-between">
+            <CardHeader className="p-5 pb-0 flex flex-row items-center justify-between space-y-0">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-slate-500" />
+                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Customer Segmentation</CardTitle>
               </div>
-              <Button variant="outline" size="sm">View All</Button>
+              <Button variant="ghost" size="icon" className="h-6 w-6">
+                <MoreHorizontal className="w-4 h-4 text-slate-400" />
+              </Button>
             </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                {RECENT_TRANSACTIONS.map((tx) => (
-                  <div key={tx.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                      <div className="h-9 w-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center">
-                        <tx.methodIcon className="h-5 w-5 text-slate-600 dark:text-slate-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{tx.type}</p>
-                        <p className="text-xs text-muted-foreground">{tx.date}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <StatusBadge status={tx.status} />
-                      <p className="text-sm font-bold w-20 text-right">{tx.amount}</p>
-                    </div>
+            <CardContent className="p-5">
+              <div className="relative h-44 w-full flex items-center justify-center my-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={SEGMENTATION_DATA}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={75}
+                      paddingAngle={3}
+                      dataKey="value"
+                      stroke="none"
+                    >
+                      {SEGMENTATION_DATA.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip content={({ active, payload }) => {
+                      if (active && payload && payload.length) {
+                        const data = payload[0].payload;
+                        return (
+                          <div className="bg-slate-900 text-white text-xs p-2 rounded shadow">
+                            <span className="font-semibold">{data.name}: </span>{data.value} ({data.growth})
+                          </div>
+                        )
+                      }
+                      return null;
+                    }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-xl font-bold text-slate-900 dark:text-white">3,420</span>
+                </div>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white" />
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Startup</span>
                   </div>
-                ))}
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 dark:text-white">2,310</span>
+                    <span className="text-emerald-600 font-medium">+32.8%</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Enterprise</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 dark:text-white">800</span>
+                    <span className="text-emerald-600 font-medium">+32.8%</span>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Individuals</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 dark:text-white">310</span>
+                    <span className="text-rose-500 font-medium">-17%</span>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Popular Products & Sales Plan */}
-          <div className="col-span-3 space-y-4">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle>Popular Products</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  {POPULAR_PRODUCTS.map((product, i) => (
-                    <div key={i} className="flex items-center gap-3">
-                      <Avatar className="h-10 w-10 rounded-md">
-                        <AvatarImage src={product.image} />
-                        <AvatarFallback>{product.name[0]}</AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{product.name}</p>
-                        <p className="text-xs text-muted-foreground">{product.sales} sales</p>
-                      </div>
-                      <p className="text-sm font-bold">{product.price}</p>
-                    </div>
-                  ))}
+          {/* Card 2: Order Overview */}
+          <Card className="lg:col-span-6 shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
+            <CardHeader className="p-5 pb-0 flex flex-row items-center justify-between space-y-0">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-slate-500" />
+                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Order Overview</CardTitle>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full flex items-center gap-0.5">
+                  <TrendingUp className="w-3 h-3" /> 170%
+                </span>
+                <Select value={timeRange} onValueChange={setTimeRange}>
+                  <SelectTrigger className="h-8 text-xs border-slate-200 rounded-lg w-[110px]">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Last 30 Days">Last 30 Days</SelectItem>
+                    <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
+                    <SelectItem value="Last Year">Last Year</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardHeader>
+            <CardContent className="p-5">
+              <div className="flex items-center gap-6 mb-4 text-xs">
+                <div>
+                  <p className="text-slate-400">Total orders</p>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">$22,560</p>
                 </div>
+                <div>
+                  <p className="text-slate-400">Orders</p>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">1,540</p>
+                </div>
+              </div>
+              <div className="h-60 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={ORDER_OVERVIEW_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="orderGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#000000" stopOpacity={0.1}/>
+                        <stop offset="95%" stopColor="#000000" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                    <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(val) => `${val / 1000}K`} />
+                    <Tooltip content={({ active, payload, label }) => {
+                      if (active && payload && payload.length) {
+                        return (
+                          <div className="bg-slate-900 text-white text-xs p-2 rounded shadow space-y-1">
+                            <p className="font-semibold text-slate-400">{label}</p>
+                            <p>Total Sales: ${payload[0].value}</p>
+                            <p>Orders: {payload[0].payload.orders}</p>
+                          </div>
+                        )
+                      }
+                      return null;
+                    }} />
+                    <Area type="monotone" dataKey="total" stroke="#000000" strokeWidth={2.5} fill="url(#orderGrad)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Card 3: User Activity */}
+          <Card className="lg:col-span-3 shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 flex flex-col justify-between">
+            <CardHeader className="p-5 pb-0 flex flex-row items-center justify-between space-y-0">
+              <div className="flex items-center gap-2">
+                <Activity className="w-4 h-4 text-slate-500" />
+                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">User Activity</CardTitle>
+              </div>
+              <Button variant="ghost" size="icon" className="h-6 w-6">
+                <MoreHorizontal className="w-4 h-4 text-slate-400" />
+              </Button>
+            </CardHeader>
+            <CardContent className="p-5">
+              <div className="h-44 w-full my-2">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={USER_ACTIVITY_DATA} barGap={4}>
+                    <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                    <Tooltip cursor={{ fill: 'transparent' }} />
+                    <Bar dataKey="active" fill="#000000" radius={[2, 2, 0, 0]} barSize={6} />
+                    <Bar dataKey="checkout" fill="#cbd5e1" radius={[2, 2, 0, 0]} barSize={6} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
+                <div>
+                  <p className="text-slate-400">Is Tracking</p>
+                  <p className="font-bold text-slate-900 dark:text-white text-sm">678,900</p>
+                </div>
+                <div>
+                  <p className="text-slate-400">Checkout</p>
+                  <p className="font-bold text-slate-900 dark:text-white text-sm">312,420</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* --- Middle Grid 2: 4 Small Metrics Row --- */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          {/* Stat 1 */}
+          <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Total Orders</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5"><MoreHorizontal className="w-3 h-3 text-slate-400" /></Button>
+            </div>
+            <h4 className="text-xl font-bold text-slate-900 dark:text-white">1920</h4>
+            <div className="flex items-center justify-between mt-2 text-xs">
+              <span className="text-emerald-600 font-medium flex items-center gap-0.5"><TrendingUp className="w-3 h-3"/> +32.8%</span>
+              <span className="text-slate-400">vs last month</span>
+            </div>
+          </Card>
+
+          {/* Stat 2 */}
+          <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Orders Shipped</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5"><MoreHorizontal className="w-3 h-3 text-slate-400" /></Button>
+            </div>
+            <h4 className="text-xl font-bold text-slate-900 dark:text-white">1785</h4>
+            <div className="flex items-center justify-between mt-2 text-xs">
+              <span className="text-rose-500 font-medium flex items-center gap-0.5"><TrendingDown className="w-3 h-3"/> 2.5%</span>
+              <span className="text-slate-400">vs last month</span>
+            </div>
+          </Card>
+
+          {/* Stat 3 */}
+          <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Revenue Generated</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5"><MoreHorizontal className="w-3 h-3 text-slate-400" /></Button>
+            </div>
+            <h4 className="text-xl font-bold text-slate-900 dark:text-white">$88,900</h4>
+            <div className="flex items-center justify-between mt-2 text-xs">
+              <span className="text-emerald-600 font-medium flex items-center gap-0.5"><TrendingUp className="w-3 h-3"/> +32.8%</span>
+              <span className="text-slate-400">vs last month</span>
+            </div>
+          </Card>
+
+          {/* Stat 4 */}
+          <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4">
+            <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
+              <span>Customer Satisfaction</span>
+              <Button variant="ghost" size="icon" className="h-5 w-5"><MoreHorizontal className="w-3 h-3 text-slate-400" /></Button>
+            </div>
+            <h4 className="text-xl font-bold text-slate-900 dark:text-white">4.9 / 5.0</h4>
+            <div className="flex items-center justify-between mt-2 text-xs">
+              <span className="text-emerald-600 font-medium flex items-center gap-0.5"><TrendingUp className="w-3 h-3"/> +32.8%</span>
+              <span className="text-slate-400">vs last month</span>
+            </div>
+          </Card>
+        </div>
+
+        {/* --- Bottom Row: Table & Side Widgets --- */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          
+          {/* Main Table: Recent Sales Orders */}
+          <Card className="lg:col-span-8 shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
+            <CardHeader className="p-5 pb-3 flex flex-row items-center justify-between space-y-0">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-slate-500" />
+                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Recent Sales Orders</CardTitle>
+              </div>
+              <Button variant="ghost" className="text-xs text-slate-500 font-normal h-8">View all orders</Button>
+            </CardHeader>
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader className="bg-slate-50/50 dark:bg-slate-900/50">
+                  <TableRow className="border-slate-100 dark:border-slate-800">
+                    <TableHead className="text-xs font-semibold text-slate-500 pl-5">Product</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Customer</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Qty</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Status</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500">Payment Method</TableHead>
+                    <TableHead className="text-xs font-semibold text-slate-500 pr-5 text-right">Total Price</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {RECENT_SALES_ORDERS.map((order) => (
+                    <TableRow key={order.id} className="border-slate-100 dark:border-slate-800 hover:bg-slate-50/60 dark:hover:bg-slate-900/60">
+                      <TableCell className="pl-5 py-3">
+                        <div className="flex items-center gap-3">
+                          <img src={order.image} alt={order.product} className="w-9 h-9 rounded-lg object-cover border border-slate-200 dark:border-slate-800" />
+                          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 max-w-[180px] truncate">{order.product}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600 dark:text-slate-300 font-medium">{order.customer}</TableCell>
+                      <TableCell className="text-xs text-slate-500">{order.qty}</TableCell>
+                      <TableCell>
+                        <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full ${
+                          order.status === "Pending" ? "bg-amber-50 text-amber-600 dark:bg-amber-950/40" :
+                          order.status === "Shipped" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40" :
+                          "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40"
+                        }`}>
+                          {order.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                        <div className="flex items-center gap-1.5">
+                          <CreditCard className="w-3.5 h-3.5 text-slate-400" />
+                          <span>{order.paymentMethod}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="pr-5 py-3 text-right text-xs font-bold text-slate-900 dark:text-white">{order.totalPrice}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              
+              {/* Pagination controls matching video */}
+              <div className="flex items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500">
+                <div className="flex items-center gap-2">
+                  <span>Show</span>
+                  <Select value={rowsPerPage} onValueChange={setRowsPerPage}>
+                    <SelectTrigger className="h-7 w-14 text-xs border-slate-200">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="5">5</SelectItem>
+                      <SelectItem value="10">10</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <span>per page</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span>1-4 of 4</span>
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="icon" className="h-7 w-7" disabled><ChevronLeft className="w-3.5 h-3.5"/></Button>
+                    <Button variant="outline" size="icon" className="h-7 w-7 bg-slate-900 text-white border-slate-900">1</Button>
+                    <Button variant="outline" size="icon" className="h-7 w-7"><ChevronRight className="w-3.5 h-3.5"/></Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Side Column: Latest Products & Total Assets */}
+          <div className="lg:col-span-4 space-y-5">
+            {/* Latest Products Card */}
+            <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
+              <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-slate-500" />
+                  <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Latest Products</CardTitle>
+                </div>
+                <Button variant="ghost" size="icon" className="h-6 w-6"><MoreHorizontal className="w-4 h-4 text-slate-400" /></Button>
+              </CardHeader>
+              <CardContent className="p-4 pt-1 space-y-3">
+                {LATEST_PRODUCTS.map((prod, i) => (
+                  <div key={i} className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5 last:border-0 last:pb-0">
+                    <div className="flex items-center gap-3">
+                      <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-lg object-cover border border-slate-200 dark:border-slate-800" />
+                      <div>
+                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{prod.name}</p>
+                        <p className="text-[10px] text-slate-400">{prod.sub}</p>
+                      </div>
+                    </div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white">{prod.price}</span>
+                  </div>
+                ))}
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="pb-2">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-sm font-medium">Sales Plan</CardTitle>
-                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">+12.5%</Badge>
+            {/* Total Assets & Promo Card */}
+            <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-5 space-y-4">
+              <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
+                <DollarSign className="w-4 h-4 text-slate-500" />
+                <span>Total Assets</span>
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">$478,230.90</h3>
+                <p className="text-xs text-emerald-600 font-medium mt-0.5">+15.7% +$65,000 <span className="text-slate-400 font-normal">vs last month</span></p>
+              </div>
+              
+              {/* Asset progress bar */}
+              <div className="space-y-2">
+                <p className="text-[11px] font-semibold text-slate-400">Distribution</p>
+                <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
+                  <div className="h-full bg-slate-900 dark:bg-white w-[65%]" />
+                  <div className="h-full bg-slate-400 w-[25%]" />
+                  <div className="h-full bg-slate-200 dark:bg-slate-700 w-[10%]" />
                 </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-end justify-between gap-4">
-                  <div className="space-y-1">
-                    <p className="text-2xl font-bold">84%</p>
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-tight">Cohort Performance</p>
+                <div className="space-y-1.5 pt-1 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white" /> Product Sales
+                    </span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">$312,500.45 (65%)</span>
                   </div>
-                  <div className="flex-1">
-                    <Sparkline data={SPARKLINE_DATA} />
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-400" /> Service Revenue
+                    </span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">$125,000.25 (25%)</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700" /> Other Income
+                    </span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">$40,730.20 (09%)</span>
                   </div>
                 </div>
-              </CardContent>
+              </div>
             </Card>
+
+            {/* Dark Mode Promo Banner Card */}
+            <Card className="shadow-sm border-slate-900 bg-slate-900 text-white rounded-xl p-5 relative overflow-hidden">
+              <div className="relative z-10 space-y-3">
+                <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">Dark Mode Aesthetics</span>
+                <div className="flex items-center gap-3">
+                  <Laptop className="w-10 h-10 text-slate-300" />
+                  <p className="text-xs text-slate-300">A laptop on desk with minimal desk setup</p>
+                </div>
+                <Button size="sm" className="bg-white text-slate-900 hover:bg-slate-100 font-semibold rounded-lg text-xs">Get Premium</Button>
+              </div>
+            </Card>
+          </div>
+
+        </div>
+
+        {/* Footer info matching video */}
+        <div className="flex items-center justify-between text-xs text-slate-400 pt-6 border-t border-slate-200/60 dark:border-slate-800">
+          <p>© 2026 by shadcnboard, creating a better web for you.</p>
+          <div className="flex items-center gap-4">
+            <a href="#" className="hover:underline">About Us</a>
+            <a href="#" className="hover:underline">Blog</a>
+            <a href="#" className="hover:underline">License</a>
           </div>
         </div>
 
-        {/* Lower Section: Recent Orders */}
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
-              <CardTitle>Recent Orders</CardTitle>
-              <CardDescription>Monitor and manage latest customer orders.</CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">Export CSV</Button>
-              <Button size="sm">Add Order</Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[100px]">Order ID</TableHead>
-                  <TableHead>Customer</TableHead>
-                  <TableHead>Product</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Shipping</TableHead>
-                  <TableHead className="text-right"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {RECENT_ORDERS.map((order) => (
-                  <TableRow key={order.id}>
-                    <TableCell className="font-medium">{order.id}</TableCell>
-                    <TableCell>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{order.customer}</span>
-                        <span className="text-xs text-muted-foreground">{order.email}</span>
-                      </div>
-                    </TableCell>
-                    <TableCell>{order.product}</TableCell>
-                    <TableCell>{order.amount}</TableCell>
-                    <TableCell>
-                      <StatusBadge status={order.status} />
-                    </TableCell>
-                    <TableCell>{order.date}</TableCell>
-                    <TableCell>{order.method}</TableCell>
-                    <TableCell className="text-right">
-                      <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            <div className="flex items-center justify-between mt-4">
-              <p className="text-sm text-muted-foreground">Showing 5 of 124 orders</p>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="icon-sm" disabled>
-                  <ChevronLeft className="h-4 w-4" />
-                </Button>
-                <Button variant="outline" size="sm" className="bg-primary text-primary-foreground">1</Button>
-                <Button variant="outline" size="sm">2</Button>
-                <Button variant="outline" size="sm">3</Button>
-                <Button variant="outline" size="icon-sm">
-                  <ChevronRight className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Bottom Sidebar/Widget Area */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {/* Orders Widget */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Order Logistics</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="new">
-                <TabsList className="grid w-full grid-cols-4 mb-4">
-                  <TabsTrigger value="new">New</TabsTrigger>
-                  <TabsTrigger value="pending">Pending</TabsTrigger>
-                  <TabsTrigger value="shipping">Shipping</TabsTrigger>
-                  <TabsTrigger value="reviews" className="bg-primary/5 text-primary">Reviews</TabsTrigger>
-                </TabsList>
-                <TabsContent value="reviews" className="space-y-4">
-                  <div className="p-3 border rounded-xl bg-indigo-500/5 border-indigo-500/10">
-                    <div className="flex justify-between mb-2">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-indigo-700">Audit Queue</span>
-                      <Badge className="bg-amber-100 text-amber-700 text-[9px] h-4">Pending</Badge>
-                    </div>
-                    <div className="space-y-1">
-                       <p className="text-xs font-bold truncate">MRI Scanner Voluson E10</p>
-                       <p className="text-[10px] text-muted-foreground">Submitted by GE Healthcare</p>
-                    </div>
-                    <div className="mt-3 pt-3 border-t border-indigo-500/10 flex justify-between items-center">
-                      <span className="text-[10px] font-black text-indigo-600 uppercase tracking-widest">Medical Class C</span>
-                      <Button size="xs" className="rounded-lg h-7 px-3 bg-indigo-600" asChild>
-                        <Link href="/dashboard/catalog/products?status=pending_review">Audit</Link>
-                      </Button>
-                    </div>
-                  </div>
-                </TabsContent>
-                <TabsContent value="new" className="space-y-4">
-                  <div className="p-3 border rounded-lg bg-slate-50 dark:bg-slate-900/50">
-                    <div className="flex justify-between mb-2">
-                      <span className="text-xs font-bold uppercase text-blue-600">ORD-7394</span>
-                      <span className="text-[10px] text-muted-foreground">2 mins ago</span>
-                    </div>
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <div className="size-2 rounded-full bg-emerald-500" />
-                        <p className="text-xs text-muted-foreground"><span className="text-foreground font-medium">Sender:</span> Global Logistics Hub</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="size-2 rounded-full bg-blue-500" />
-                        <p className="text-xs text-muted-foreground"><span className="text-foreground font-medium">Receiver:</span> Sarah Jenkins, NY</p>
-                      </div>
-                    </div>
-                    <div className="mt-3 pt-3 border-t flex justify-between items-center">
-                      <span className="text-xs font-medium">$420.00</span>
-                      <Button size="xs">Process</Button>
-                    </div>
-                  </div>
-                </TabsContent>
-                <TabsContent value="pending">
-                   <p className="text-xs text-center py-8 text-muted-foreground">No pending orders to show.</p>
-                </TabsContent>
-                <TabsContent value="shipping">
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between text-xs">
-                      <span>ORD-7385</span>
-                      <span className="text-blue-500">In Transit</span>
-                    </div>
-                    <Progress value={65} className="h-1.5" />
-                    <div className="flex justify-between text-[10px] text-muted-foreground">
-                      <span>Chicago, IL</span>
-                      <span>Denver, CO</span>
-                    </div>
-                  </div>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* Top Products by Sales */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Top Products (Sales)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="h-8 text-[10px] uppercase">Product</TableHead>
-                    <TableHead className="h-8 text-[10px] uppercase">Category</TableHead>
-                    <TableHead className="h-8 text-[10px] uppercase text-right">Revenue</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">Dental X-Ray Scanner</TableCell>
-                    <TableCell className="py-2 text-xs text-muted-foreground">Imaging</TableCell>
-                    <TableCell className="py-2 text-xs font-bold text-right">Ksh 5,650,000</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">Anaesthesia Machine</TableCell>
-                    <TableCell className="py-2 text-xs text-muted-foreground">Surgical</TableCell>
-                    <TableCell className="py-2 text-xs font-bold text-right">Ksh 4,760,000</TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">Surgical Scalpels Kit</TableCell>
-                    <TableCell className="py-2 text-xs text-muted-foreground">Surgical</TableCell>
-                    <TableCell className="py-2 text-xs font-bold text-right">Ksh 1,550,000</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-
-          {/* Top Products by Volume */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle>Top Products (Volume)</CardTitle>
-            </CardHeader>
-            <CardContent>
-               <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent">
-                    <TableHead className="h-8 text-[10px] uppercase">Product</TableHead>
-                    <TableHead className="h-8 text-[10px] uppercase">Units</TableHead>
-                    <TableHead className="h-8 text-[10px] uppercase text-right">Growth</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">Disposable Syringes (Box)</TableCell>
-                    <TableCell className="py-2 text-xs">1,240</TableCell>
-                    <TableCell className="py-2 text-xs text-emerald-500 font-bold text-right flex items-center justify-end gap-1">
-                      <ArrowUpRight className="size-3" /> 24%
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">Surgical Gloves (Box)</TableCell>
-                    <TableCell className="py-2 text-xs">850</TableCell>
-                    <TableCell className="py-2 text-xs text-rose-500 font-bold text-right flex items-center justify-end gap-1">
-                      <ArrowDownRight className="size-3" /> 5%
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableCell className="py-2 text-xs font-medium">Sterile Gauze Bandages</TableCell>
-                    <TableCell className="py-2 text-xs">640</TableCell>
-                    <TableCell className="py-2 text-xs text-emerald-500 font-bold text-right flex items-center justify-end gap-1">
-                      <ArrowUpRight className="size-3" /> 12%
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </div>
       </div>
     </DashboardLayout>
   )

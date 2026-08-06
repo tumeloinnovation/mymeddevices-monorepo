@@ -157,7 +157,8 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
     variants: Mapped[List["ProductVariant"]] = relationship(
         "ProductVariant",
         back_populates="product",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
+        lazy="selectin"
     )
     brand_relation: Mapped[Optional["Brand"]] = relationship(
         "Brand",
@@ -167,6 +168,12 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
         "Tag",
         secondary="product_tags",
         back_populates="products",
+        lazy="selectin"
+    )
+    reviews: Mapped[List["Review"]] = relationship(
+        "Review",
+        back_populates="product",
+        cascade="all, delete-orphan",
         lazy="selectin"
     )
 

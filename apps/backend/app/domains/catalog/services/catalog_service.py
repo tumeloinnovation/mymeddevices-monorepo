@@ -187,6 +187,16 @@ class CatalogService:
         """Get a single product owned by the vendor."""
         return await self._get_vendor_product(vendor_id, product_id)
 
+    async def get_product_by_sku(self, sku: str) -> Product | None:
+        """Get a product by SKU (admin use for bulk import)."""
+        result = await self.db.execute(
+            select(Product).where(
+                Product.sku == sku,
+                Product.is_deleted == False
+            )
+        )
+        return result.scalar_one_or_none()
+
     async def delete_product(self, vendor_id: str, product_id: str) -> None:
         """Delete a draft product. Only drafts can be deleted."""
         product = await self._get_vendor_product(vendor_id, product_id)
@@ -510,7 +520,8 @@ class CatalogService:
         result = await self.db.execute(
             select(Product).options(
                 selectinload(Product.images),
-                selectinload(Product.category)
+                selectinload(Product.category),
+                selectinload(Product.variants)
             ).where(
                 Product.slug == slug,
                 Product.status == "published",
@@ -530,7 +541,8 @@ class CatalogService:
         result = await self.db.execute(
             select(Product).options(
                 selectinload(Product.images),
-                selectinload(Product.category)
+                selectinload(Product.category),
+                selectinload(Product.variants)
             ).where(
                 Product.id == product.id
             )

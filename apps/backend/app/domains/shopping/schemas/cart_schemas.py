@@ -51,10 +51,14 @@ class CartItemResponse(BaseModel):
         from_attributes = True
 
 
+from app.domains.auth.schemas.auth_schemas import UserResponse
+
+
 class CartResponse(BaseModel):
     """Cart response with items."""
     id: uuid.UUID
     user_id: Optional[uuid.UUID] = None
+    user: Optional[UserResponse] = None
     session_id: Optional[str] = None
     cart_token: Optional[str] = None
     cart_type: str

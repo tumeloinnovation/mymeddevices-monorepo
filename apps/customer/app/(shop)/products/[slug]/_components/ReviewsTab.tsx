@@ -1,15 +1,31 @@
 'use client'
 
-import React, { useState } from 'react'
-import { User, Star, MessageSquare } from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { User, Star, MessageSquare, Edit, Trash2 } from 'lucide-react'
 import WriteReviewModal from '@/components/common/WriteReviewModal'
+import EditReviewModal from '@/components/common/EditReviewModal'
 import { LoginModal } from '@/components/auth/LoginModal'
 import { useAuthStore } from '@/lib/store/useAuthStore'
-import type { Review } from '@/lib/data/types'
+import { customerService } from '@/lib/services/customer-service'
+import { toast } from 'sonner'
+import Link from 'next/link'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+type Review = {
+  id: string
+  customer_id?: string
+  rating: number
+  comment: string | null
+  is_verified_purchase: boolean
+  created_at: string
+  reviewer_name: string
+}
 
 type Props = {
-  productId: number | string
-  reviews: Review[]
+  productSlug: string
+  productId?: string
+  productName?: string
 }
 
 function Stars({ rating }: { rating: number }) {
@@ -22,40 +38,125 @@ function Stars({ rating }: { rating: number }) {
   )
 }
 
-export default function ReviewsTab({ productId, reviews }: Props) {
-  const { isAuthenticated } = useAuthStore();
+export default function ReviewsTab({ productSlug, productId, productName }: Props) {
+  const { user, isAuthenticated } = useAuthStore()
   const [open, setOpen] = useState(false)
   const [loginOpen, setLoginOpen] = useState(false)
+  const [editingReview, setEditingReview] = useState<Review | null>(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
   const [filterStar, setFilterStar] = useState<number | null>(null)
   const [sortBy, setSortBy] = useState<'recent' | 'top'>('recent')
   const [visible, setVisible] = useState(5)
+  const [actualProductId, setActualProductId] = useState<string>(productId || '')
+
+  const [reviews, setReviews] = useState<Review[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Resolve UUID if only slug was provided
+  useEffect(() => {
+    if (productId) {
+      setActualProductId(productId)
+      return
+    }
+    if (productSlug) {
+      fetch(`${API_URL}/api/v1/storefront/products/${productSlug}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.data?.id) {
+            setActualProductId(String(data.data.id))
+          }
+        })
+        .catch(() => {})
+    }
+  }, [productId, productSlug])
+
+  // Fetch reviews from API
+  const fetchReviews = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const response = await fetch(`${API_URL}/api/v1/storefront/products/${productSlug}/reviews`)
+      if (!response.ok) {
+        throw new Error('Failed to load reviews')
+      }
+      const result = await response.json()
+      setReviews(result.data || [])
+    } catch (err: any) {
+      setError(err.message)
+      console.error('Failed to fetch reviews:', err)
+    } finally {
+      setLoading(false)
+    }
+  }, [productSlug])
+
+  useEffect(() => {
+    fetchReviews()
+  }, [fetchReviews])
 
   const handleWriteReview = () => {
     if (!isAuthenticated) {
-      setLoginOpen(true);
+      setLoginOpen(true)
     } else {
-      setOpen(true);
+      setOpen(true)
+    }
+  }
+
+  const handleDeleteReview = async (reviewId: string) => {
+    if (!confirm('Are you sure you want to delete your review?')) return
+    try {
+      await customerService.deleteReview(reviewId)
+      toast.success('Review deleted successfully')
+      fetchReviews()
+    } catch (error: any) {
+      toast.error(error?.detail || error?.message || 'Failed to delete review')
     }
   }
 
   const sorted = [...reviews].sort((a, b) =>
     sortBy === 'recent'
-      ? new Date(b.date_created).getTime() - new Date(a.date_created).getTime()
+      ? new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       : b.rating - a.rating
-  );
+  )
 
   const filteredReviews = filterStar
     ? sorted.filter((r) => r.rating === filterStar)
-    : sorted;
+    : sorted
 
   const avg =
     Math.round(
       (reviews.reduce((s, r) => s + r.rating, 0) / (reviews.length || 1)) * 10
-    ) / 10 || 0;
+    ) / 10 || 0
 
   const counts = [5, 4, 3, 2, 1].map(
     (st) => reviews.filter((l) => l.rating === st).length
-  );
+  )
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 bg-white dark:bg-card rounded-md border dark:border-border">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12 bg-white dark:bg-card rounded-md border dark:border-border">
+        <MessageSquare className="mx-auto h-12 w-12 text-gray-400 dark:text-muted-foreground" />
+        <h3 className="mt-2 text-sm font-medium text-gray-900 dark:text-foreground">Failed to load reviews</h3>
+        <p className="mt-1 text-sm text-gray-500 dark:text-muted-foreground">
+          {error}
+        </p>
+        <button
+          onClick={fetchReviews}
+          className="mt-4 px-4 py-2 text-sm font-medium rounded-md text-white bg-primary hover:bg-primary/90"
+        >
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   if (reviews.length === 0) {
     return (
@@ -73,7 +174,12 @@ export default function ReviewsTab({ productId, reviews }: Props) {
             Write a review
           </button>
         </div>
-        <WriteReviewModal open={open} onClose={() => setOpen(false)} productId={productId} />
+        <WriteReviewModal
+          open={open}
+          onClose={() => setOpen(false)}
+          productId={actualProductId}
+          onSuccess={fetchReviews}
+        />
         <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
       </div>
     )
@@ -132,7 +238,7 @@ export default function ReviewsTab({ productId, reviews }: Props) {
 
             <div className="flex items-center gap-3">
               <div className="text-sm text-gray-600 dark:text-muted-foreground">
-                Showing {Math.min(visible, filteredReviews.length)} of {reviews.length}
+                Showing {Math.min(visible, filteredReviews.length)} of {filteredReviews.length}
               </div>
               <button onClick={handleWriteReview} className="px-3 py-2 bg-primary text-white rounded text-sm hover:bg-primary/90 transition">
                 Write a review
@@ -141,51 +247,111 @@ export default function ReviewsTab({ productId, reviews }: Props) {
           </div>
 
           <div className="space-y-4">
-            {filteredReviews.slice(0, visible).map((r, i) => (
-              <article key={i} className="p-4 border dark:border-border rounded-md bg-white dark:bg-card transition-colors">
-                <header className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="rounded-full bg-gray-100 dark:bg-muted/30 p-2">
-                      <User className="h-5 w-5 text-gray-600 dark:text-muted-foreground" />
-                    </div>
-                    <div>
-                      <div className="font-medium flex items-center gap-2 text-gray-900 dark:text-foreground">
-                        {r.reviewer || 'Anonymous'}
-                        {(r.verified || (r as any).is_verified_purchase) && (
-                          <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 px-2 py-0.5 rounded font-medium flex items-center gap-1">
-                            <Star className="h-3 w-3 fill-current" />
-                            Verified Purchase
-                          </span>
-                        )}
+            {filteredReviews.slice(0, visible).map((review) => {
+              const isMyReview = isAuthenticated && user && review.customer_id && (review.customer_id === (user as any).customer_profile_id || review.customer_id === user.id)
+
+              return (
+                <article key={review.id} className="p-4 border dark:border-border rounded-md bg-white dark:bg-card transition-colors">
+                  <header className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-full bg-gray-100 dark:bg-muted/30 p-2">
+                        <User className="h-5 w-5 text-gray-600 dark:text-muted-foreground" />
                       </div>
-                      <div className="text-sm text-gray-500 dark:text-muted-foreground">
-                        {new Date(r.date_created || (r as any).created_at).toLocaleDateString()}
+                      <div>
+                        <div className="font-medium flex items-center gap-2 text-gray-900 dark:text-foreground">
+                          {review.reviewer_name || 'Anonymous'}
+                          {review.is_verified_purchase && (
+                            <span className="text-xs bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-400 px-2 py-0.5 rounded font-medium flex items-center gap-1">
+                              <Star className="h-3 w-3 fill-current" />
+                              Verified Purchase
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-500 dark:text-muted-foreground">
+                          {new Date(review.created_at).toLocaleDateString()}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                  <Stars rating={r.rating} />
-                </header>
-                <div className="mt-3 text-gray-700 dark:text-foreground" dangerouslySetInnerHTML={{ __html: r.review || r.comment || '' }} />
-              </article>
-            ))}
+
+                    <div className="flex items-center gap-3">
+                      <Stars rating={review.rating} />
+                      {isMyReview && (
+                        <div className="flex items-center gap-1 ml-2">
+                          <button
+                            onClick={() => {
+                              setEditingReview(review)
+                              setEditModalOpen(true)
+                            }}
+                            className="p-1 text-gray-500 hover:text-primary transition"
+                            title="Edit your review"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteReview(review.id)}
+                            className="p-1 text-gray-500 hover:text-red-600 transition"
+                            title="Delete your review"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </header>
+                  {review.comment && (
+                    <p className="mt-3 text-gray-700 dark:text-foreground whitespace-pre-line">{review.comment}</p>
+                  )}
+                </article>
+              )
+            })}
           </div>
 
-          <div className="mt-4 flex justify-center">
-            {visible < filteredReviews.length ? (
+          <div className="mt-6 flex flex-col items-center gap-3 border-t dark:border-border pt-4">
+            {visible < filteredReviews.length && (
               <button
                 onClick={() => setVisible((v) => v + 5)}
                 className="px-4 py-2 border dark:border-border rounded text-sm text-gray-700 dark:text-foreground hover:bg-gray-50 dark:hover:bg-muted/20 transition"
               >
-                Load more
+                Load more reviews
               </button>
-            ) : (
-              <div className="text-sm text-gray-500 dark:text-muted-foreground">No more reviews</div>
             )}
+
+            <Link
+              href={`/products/${productSlug}/reviews`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold text-primary hover:underline flex items-center gap-1.5"
+            >
+              <span>Open all reviews on dedicated review page &rarr;</span>
+            </Link>
           </div>
         </div>
       </div>
 
-      <WriteReviewModal open={open} onClose={() => setOpen(false)} productId={productId} />
+      <WriteReviewModal
+        open={open}
+        onClose={() => setOpen(false)}
+        productId={actualProductId}
+        onSuccess={fetchReviews}
+      />
+
+      {editingReview && (
+        <EditReviewModal
+          open={editModalOpen}
+          onClose={() => setEditModalOpen(false)}
+          review={{
+            id: editingReview.id,
+            rating: editingReview.rating,
+            comment: editingReview.comment ?? null,
+            product_name: productName,
+          }}
+          onSuccess={() => {
+            setEditModalOpen(false)
+            fetchReviews()
+          }}
+        />
+      )}
+
       <LoginModal open={loginOpen} onOpenChange={setLoginOpen} />
     </div>
   )

@@ -1,7 +1,7 @@
 import uuid
 from typing import Optional, List, Tuple, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, case
 from sqlalchemy.orm import selectinload
 
 from app.core.logging import logger
@@ -39,6 +39,13 @@ class CheckoutService:
             )
             if user_id:
                 existing_order_stmt = existing_order_stmt.where(Order.user_id == user_id)
+            elif guest_token:
+                # Fix 5.1: Prevent guest PII leak by enforcing guest_token matching on guest idempotency checks
+                existing_order_stmt = existing_order_stmt.where(Order.guest_token == guest_token)
+            else:
+                # If neither user_id nor guest_token is present, do not return cached guest order
+                existing_order_stmt = existing_order_stmt.where(Order.user_id.is_(None), Order.guest_token.is_(None))
+
             existing_order_result = await self.db.execute(existing_order_stmt)
             existing_order = existing_order_result.scalar_one_or_none()
 
@@ -46,167 +53,184 @@ class CheckoutService:
                 logger.info(f"Found existing order with idempotency key {idempotency_key}, returning existing order")
                 return existing_order
 
-        # 1. Fetch cart with items and products
-        stmt = select(Cart).where(Cart.id == cart_id).options(
-            selectinload(Cart.items).selectinload(CartItem.product)
-        )
-        result = await self.db.execute(stmt)
-        cart = result.scalar_one_or_none()
+        # Enclose database updates in a try-except block
+        try:
+            # 1. Fetch cart with items and products
+            stmt = select(Cart).where(Cart.id == cart_id).options(
+                selectinload(Cart.items).selectinload(CartItem.product)
+            )
+            result = await self.db.execute(stmt)
+            cart = result.scalar_one_or_none()
 
-        if not cart:
-            logger.error(f"Cart not found: {cart_id}")
-            raise ValueError("Cart not found")
-        if not cart.is_active:
-            logger.error(f"Cart is no longer active: {cart_id}")
-            raise ValueError("Cart is no longer active")
-        if not cart.items:
-            logger.error(f"Cannot checkout an empty cart: {cart_id}")
-            raise ValueError("Cannot checkout an empty cart")
+            if not cart:
+                logger.error(f"Cart not found: {cart_id}")
+                raise ValueError("Cart not found")
+            if not cart.is_active:
+                logger.error(f"Cart is no longer active: {cart_id}")
+                raise ValueError("Cart is no longer active")
+            if not cart.items:
+                logger.error(f"Cannot checkout an empty cart: {cart_id}")
+                raise ValueError("Cannot checkout an empty cart")
 
-        # 1.5 Check stock availability
-        for item in cart.items:
-            if item.product.stock_quantity < item.quantity:
-                logger.warning(f"Insufficient stock for product {item.product.id}: has {item.product.stock_quantity}, requested {item.quantity}")
-                raise ValueError(f"Insufficient stock for product: {item.product.name}")
+            # 2. Calculate final totals (snapshot)
+            calc_service = CartCalculationService(self.db)
+            totals = await calc_service.calculate_totals(cart_id, shipping_address)
 
-        # 2. Calculate final totals (snapshot)
-        calc_service = CartCalculationService(self.db)
-        totals = await calc_service.calculate_totals(cart_id, shipping_address)
+            # Get next sequential order number
+            max_order_num_stmt = select(func.max(Order.order_number))
+            max_order_num_result = await self.db.execute(max_order_num_stmt)
+            max_order_num = max_order_num_result.scalar() or 100000
+            next_order_num = max_order_num + 1
 
-        # Get next sequential order number
-        max_order_num_stmt = select(func.max(Order.order_number))
-        max_order_num_result = await self.db.execute(max_order_num_stmt)
-        max_order_num = max_order_num_result.scalar() or 100000
-        next_order_num = max_order_num + 1
+            # Auto-assign nearest active driver if company rider delivery
+            assigned_driver_id = None
+            if totals.get("logistics_type") == "company_rider":
+                driver_stmt = select(User).where(User.role == "driver", User.is_active == True)
+                driver_result = await self.db.execute(driver_stmt)
+                drivers = driver_result.scalars().all()
+                if drivers:
+                    assigned_driver_id = drivers[0].id
 
-        # Auto-assign nearest active driver if company rider delivery
-        assigned_driver_id = None
-        if totals.get("logistics_type") == "company_rider":
-            driver_stmt = select(User).where(User.role == "driver", User.is_active == True)
-            driver_result = await self.db.execute(driver_stmt)
-            drivers = driver_result.scalars().all()
-            if drivers:
-                assigned_driver_id = drivers[0].id
-
-        # Update shipping address with calculated logistics metadata & fees breakdown
-        updated_shipping_address = dict(shipping_address) if shipping_address else {}
-        updated_shipping_address["logistics_type"] = totals.get("logistics_type", "courier")
-        updated_shipping_address["calculated_distance_km"] = totals.get("calculated_distance_km", 0.0)
-        updated_shipping_address["route_coordinates"] = totals.get("route_coordinates", [])
-        updated_shipping_address["shipping_amount"] = totals.get("shipping_amount", 0.0)
-        updated_shipping_address["packaging_fee"] = totals.get("packaging_fee", 100.0)
-        updated_shipping_address["services_fee"] = totals.get("services_fee", 50.0)
-        updated_shipping_address["discount_amount"] = totals.get("discount_amount", 0.0)
-        updated_shipping_address["subtotal"] = totals.get("subtotal", 0.0)
-        
-        # Payment method metadata
-        pm = updated_shipping_address.get("payment_method", "cod")
-        updated_shipping_address["payment_method"] = pm
-        updated_shipping_address["payment_method_title"] = (
-            "M-Pesa Express" if pm == "mpesa" else "Cash on Delivery"
-        )
-
-        if assigned_driver_id:
-            updated_shipping_address["assigned_driver_id"] = str(assigned_driver_id)
-
-        # 3. Create Order record
-        order = Order(
-            id=uuid.uuid4(),
-            order_number=next_order_num,
-            user_id=user_id,
-            guest_token=guest_token,
-            status=OrderStatus.PENDING,
-            total_amount=totals["total"],
-            currency="KES",
-            shipping_address=updated_shipping_address,
-            notes=notes,
-            idempotency_key=idempotency_key or str(uuid.uuid4())
-        )
-        self.db.add(order)
-
-        # 4. Group cart items by vendor for SubOrder creation
-        vendor_items_map = {}
-        for item in cart.items:
-            if not item.product or not item.product.vendor_id:
-                raise ValueError(f"Product or vendor information missing for item {item.product_id}")
-
-            vendor_id = item.product.vendor_id
-            if vendor_id not in vendor_items_map:
-                vendor_items_map[vendor_id] = []
-            vendor_items_map[vendor_id].append(item)
-
-        # 5. Create SubOrders and OrderItem records
-        sub_order_map = {}  # Maps vendor_id to SubOrder
-        for vendor_id, items in vendor_items_map.items():
-            # Calculate vendor subtotal
-            vendor_subtotal = sum(
-                round(item.product.price) * item.quantity
-                for item in items
+            # Update shipping address with calculated logistics metadata & fees breakdown
+            updated_shipping_address = dict(shipping_address) if shipping_address else {}
+            updated_shipping_address["logistics_type"] = totals.get("logistics_type", "courier")
+            updated_shipping_address["calculated_distance_km"] = totals.get("calculated_distance_km", 0.0)
+            updated_shipping_address["route_coordinates"] = totals.get("route_coordinates", [])
+            updated_shipping_address["shipping_amount"] = totals.get("shipping_amount", 0.0)
+            updated_shipping_address["packaging_fee"] = totals.get("packaging_fee", 100.0)
+            updated_shipping_address["services_fee"] = totals.get("services_fee", 50.0)
+            updated_shipping_address["discount_amount"] = totals.get("discount_amount", 0.0)
+            updated_shipping_address["subtotal"] = totals.get("subtotal", 0.0)
+            
+            # Payment method metadata
+            pm = updated_shipping_address.get("payment_method", "cod")
+            updated_shipping_address["payment_method"] = pm
+            updated_shipping_address["payment_method_title"] = (
+                "M-Pesa Express" if pm == "mpesa" else "Cash on Delivery"
             )
 
-            # Create SubOrder
-            sub_order = SubOrder(
+            if assigned_driver_id:
+                updated_shipping_address["assigned_driver_id"] = str(assigned_driver_id)
+
+            # 3. Create Order record (Fix 3.2: Precision handling for total amount)
+            total_amt = round(float(totals["total"]), 2)
+            order = Order(
                 id=uuid.uuid4(),
-                parent_order_id=order.id,
-                vendor_id=vendor_id,
-                subtotal_amount=vendor_subtotal,
-                status=SubOrderStatus.PENDING
+                order_number=next_order_num,
+                user_id=user_id,
+                guest_token=guest_token,
+                status=OrderStatus.PENDING,
+                total_amount=total_amt,
+                currency="KES",
+                shipping_address=updated_shipping_address,
+                notes=notes,
+                idempotency_key=idempotency_key or str(uuid.uuid4())
             )
-            self.db.add(sub_order)
-            sub_order_map[vendor_id] = sub_order
+            self.db.add(order)
 
-            # Create OrderItems for this vendor (deduct stock, snapshot price)
-            for item in items:
-                # Deduct stock
-                item.product.stock_quantity -= item.quantity
-                if item.product.stock_quantity <= 0:
-                    item.product.stock_quantity = 0
-                    item.product.stock_status = "outofstock"
+            # 4. Group cart items by vendor for SubOrder creation
+            vendor_items_map = {}
+            for item in cart.items:
+                if not item.product or not item.product.vendor_id:
+                    raise ValueError(f"Product or vendor information missing for item {item.product_id}")
 
-                order_item = OrderItem(
-                    id=uuid.uuid4(),
-                    order_id=order.id,
-                    sub_order_id=sub_order.id,
-                    product_id=item.product_id,
-                    vendor_id=item.product.vendor_id,
-                    quantity=item.quantity,
-                    unit_price=round(item.product.price),  # Snapshot price
-                    subtotal=round(item.product.price * item.quantity)
+                vendor_id = item.product.vendor_id
+                if vendor_id not in vendor_items_map:
+                    vendor_items_map[vendor_id] = []
+                vendor_items_map[vendor_id].append(item)
+
+            # 5. Create SubOrders and OrderItem records
+            sub_order_map = {}  # Maps vendor_id to SubOrder
+            for vendor_id, items in vendor_items_map.items():
+                # Calculate vendor subtotal with precise rounding
+                vendor_subtotal = sum(
+                    round(float(item.product.price), 2) * item.quantity
+                    for item in items
                 )
-                self.db.add(order_item)
 
-        # 5. Deactivate cart
-        cart.is_active = False
-        
-        # 6. Create Outbox Event
-        outbox_event = OutboxEvent(
-            id=uuid.uuid4(),
-            aggregate_type="Order",
-            aggregate_id=str(order.id),
-            event_type="OrderCreated",
-            payload={
-                "order_id": str(order.id),
-                "user_id": str(order.user_id) if order.user_id else None,
-                "guest_token": order.guest_token,
-                "total_amount": float(order.total_amount),
-            },
-            status=OutboxStatus.PENDING
-        )
-        self.db.add(outbox_event)
+                # Create SubOrder
+                sub_order = SubOrder(
+                    id=uuid.uuid4(),
+                    parent_order_id=order.id,
+                    vendor_id=vendor_id,
+                    subtotal_amount=vendor_subtotal,
+                    status=SubOrderStatus.PENDING
+                )
+                self.db.add(sub_order)
+                sub_order_map[vendor_id] = sub_order
 
-        # 7. Create Order Timeline Event
-        timeline_event = OrderTimelineEvent(
-            id=uuid.uuid4(),
-            order_id=order.id,
-            status=OrderStatus.PENDING.value,
-            message="Order placed successfully",
-            created_by=user_id
-        )
-        self.db.add(timeline_event)
+                # Create OrderItems for this vendor (Fix 1.1: Atomic stock deduction)
+                for item in items:
+                    # Perform atomic stock reduction at database level to prevent race conditions
+                    stock_stmt = (
+                        update(Product)
+                        .where(
+                            Product.id == item.product_id,
+                            Product.stock_quantity >= item.quantity
+                        )
+                        .values(
+                            stock_quantity=Product.stock_quantity - item.quantity,
+                            stock_status=case(
+                                (Product.stock_quantity - item.quantity <= 0, "outofstock"),
+                                else_=Product.stock_status
+                            )
+                        )
+                    )
+                    stock_res = await self.db.execute(stock_stmt)
+                    if stock_res.rowcount == 0:
+                        raise ValueError(f"Insufficient stock available for product: {item.product.name}")
 
-        # Commit happens ONCE at the end now
-        await self.db.commit()
-        
+                    unit_p = round(float(item.product.price), 2)
+                    item_subtotal = round(unit_p * item.quantity, 2)
+
+                    order_item = OrderItem(
+                        id=uuid.uuid4(),
+                        order_id=order.id,
+                        sub_order_id=sub_order.id,
+                        product_id=item.product_id,
+                        vendor_id=item.product.vendor_id,
+                        quantity=item.quantity,
+                        unit_price=unit_p,
+                        subtotal=item_subtotal
+                    )
+                    self.db.add(order_item)
+
+            # 6. Deactivate cart
+            cart.is_active = False
+            
+            # 7. Create Outbox Event
+            outbox_event = OutboxEvent(
+                id=uuid.uuid4(),
+                aggregate_type="Order",
+                aggregate_id=str(order.id),
+                event_type="OrderCreated",
+                payload={
+                    "order_id": str(order.id),
+                    "user_id": str(order.user_id) if order.user_id else None,
+                    "guest_token": order.guest_token,
+                    "total_amount": float(order.total_amount),
+                },
+                status=OutboxStatus.PENDING
+            )
+            self.db.add(outbox_event)
+
+            # 8. Create Order Timeline Event
+            timeline_event = OrderTimelineEvent(
+                id=uuid.uuid4(),
+                order_id=order.id,
+                status=OrderStatus.PENDING.value,
+                message="Order placed successfully",
+                created_by=user_id
+            )
+            self.db.add(timeline_event)
+
+            # Commit the transaction safely
+            await self.db.commit()
+        except Exception as err:
+            await self.db.rollback()
+            logger.error(f"Failed to create order from cart {cart_id}: {err}")
+            raise
+
         # Send vendor email notifications
         try:
             from app.domains.vendor.models.vendor_profile import VendorProfile
@@ -535,29 +559,31 @@ class OrderService:
             order_result = await self.db.execute(order_stmt)
             current_status = order_result.scalar_one_or_none()
 
-            if current_status and new_status != current_status.value:
-                # Update order
-                update_stmt = update(Order).where(Order.id == order_id).values(status=new_status)
-                await self.db.execute(update_stmt)
+            if current_status:
+                curr_val = current_status.value if hasattr(current_status, 'value') else str(current_status)
+                if new_status != curr_val:
+                    # Update order
+                    update_stmt = update(Order).where(Order.id == order_id).values(status=new_status)
+                    await self.db.execute(update_stmt)
 
-                # Create timeline and outbox events
-                timeline = OrderTimelineEvent(
-                    id=uuid.uuid4(),
-                    order_id=order_id,
-                    status=new_status,
-                    message=f"Order status automatically rolled up to {new_status}"
-                )
-                self.db.add(timeline)
+                    # Create timeline and outbox events
+                    timeline = OrderTimelineEvent(
+                        id=uuid.uuid4(),
+                        order_id=order_id,
+                        status=new_status,
+                        message=f"Order status automatically rolled up to {new_status}"
+                    )
+                    self.db.add(timeline)
 
-                outbox = OutboxEvent(
-                    id=uuid.uuid4(),
-                    aggregate_type="Order",
-                    aggregate_id=str(order_id),
-                    event_type=f"Order{new_status.capitalize()}",
-                    payload={"order_id": str(order_id), "status": new_status, "auto_rolled_up": True},
-                    status=OutboxStatus.PENDING
-                )
-                self.db.add(outbox)
+                    outbox = OutboxEvent(
+                        id=uuid.uuid4(),
+                        aggregate_type="Order",
+                        aggregate_id=str(order_id),
+                        event_type=f"Order{new_status.capitalize()}",
+                        payload={"order_id": str(order_id), "status": new_status, "auto_rolled_up": True},
+                        status=OutboxStatus.PENDING
+                    )
+                    self.db.add(outbox)
 
     async def _rollup_status_from_sub_order(self, sub_order: SubOrder):
         """Roll up status changes from sub-order to parent order."""
@@ -587,10 +613,12 @@ class OrderService:
             order_result = await self.db.execute(order_stmt)
             current_status = order_result.scalar_one_or_none()
 
-            if current_status and new_status != current_status.value:
-                # Update order
-                update_stmt = update(Order).where(Order.id == sub_order.parent_order_id).values(status=new_status)
-                await self.db.execute(update_stmt)
+            if current_status:
+                curr_val = current_status.value if hasattr(current_status, 'value') else str(current_status)
+                if new_status != curr_val:
+                    # Update order
+                    update_stmt = update(Order).where(Order.id == sub_order.parent_order_id).values(status=new_status)
+                    await self.db.execute(update_stmt)
 
                 # Create timeline event
                 timeline = OrderTimelineEvent(

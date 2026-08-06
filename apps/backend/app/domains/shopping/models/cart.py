@@ -69,6 +69,11 @@ class Cart(Base, IDMixin, AuditMixin):
     )  # 'persistent' (customer) or 'guest'
 
     # Relationships
+    user: Mapped[Optional["User"]] = relationship(
+        "User",
+        lazy="selectin"
+    )
+
     items: Mapped[List["CartItem"]] = relationship(
         "CartItem",
         back_populates="cart",

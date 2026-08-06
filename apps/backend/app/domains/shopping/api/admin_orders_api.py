@@ -95,11 +95,11 @@ async def vendor_list_orders(
     # We need the vendor profile ID for this user
     from app.domains.vendor.models.vendor_profile import VendorProfile
     from sqlalchemy import select
-    
+
     stmt = select(VendorProfile).where(VendorProfile.user_id == current_user.id)
     result = await db.execute(stmt)
     vendor_profile = result.scalar_one_or_none()
-    
+
     if not vendor_profile:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vendor profile not found")
 
@@ -123,3 +123,19 @@ async def vendor_list_orders(
             secured_orders.append(order_dto)
 
     return success_response({"orders": secured_orders, "total": total})
+
+
+@router.get("/{order_id}", response_model=ApiSuccessResponse[OrderResponse])
+async def admin_get_order_details(
+    order_id: uuid.UUID,
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    db: AsyncSession = Depends(get_db)
+):
+    """Admin gets full order details including internal notes."""
+    service = OrderService(db)
+    order = await service.get_order(order_id)
+
+    if not order:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    return success_response(order)

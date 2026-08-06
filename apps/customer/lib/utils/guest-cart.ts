@@ -55,26 +55,27 @@ export function generateGuestCartToken(): string {
  * Get the current guest cart token from localStorage
  * Returns null if no token exists or if token has expired
  */
+/**
+ * Get the current guest cart token from the store
+ * Returns null if no token exists or if token has expired
+ */
 export function getGuestCartToken(): string | null {
   if (typeof window === 'undefined') {
     return null;
   }
 
   try {
-    const token = localStorage.getItem(GUEST_CART_TOKEN_KEY);
+    const store = useCartStore.getState();
+    const token = store.cartToken;
     if (!token) {
       return null;
     }
 
     // Check if token has expired
-    const expiry = localStorage.getItem(GUEST_CART_EXPIRY_KEY);
-    if (expiry) {
-      const expiryDate = parseInt(expiry, 10);
-      if (Date.now() > expiryDate) {
-        // Token expired, clear it
-        clearGuestCartToken();
-        return null;
-      }
+    const expiry = store.guestCartExpiry;
+    if (expiry && Date.now() > expiry) {
+      clearGuestCartToken();
+      return null;
     }
 
     return token;
@@ -85,7 +86,7 @@ export function getGuestCartToken(): string | null {
 }
 
 /**
- * Set a guest cart token in localStorage
+ * Set a guest cart token in the store
  */
 export function setGuestCartToken(token: string): void {
   if (typeof window === 'undefined') {
@@ -94,15 +95,18 @@ export function setGuestCartToken(token: string): void {
 
   try {
     const expiry = Date.now() + CART_TOKEN_DURATION;
-    localStorage.setItem(GUEST_CART_TOKEN_KEY, token);
-    localStorage.setItem(GUEST_CART_EXPIRY_KEY, String(expiry));
+    useCartStore.getState().setCartToken(token, expiry);
+
+    // Clean up legacy localStorage keys if present
+    localStorage.removeItem(GUEST_CART_TOKEN_KEY);
+    localStorage.removeItem(GUEST_CART_EXPIRY_KEY);
   } catch (error) {
     console.error('Failed to set guest cart token:', error);
   }
 }
 
 /**
- * Clear the guest cart token from localStorage
+ * Clear the guest cart token from the store
  */
 export function clearGuestCartToken(): void {
   if (typeof window === 'undefined') {
@@ -110,6 +114,9 @@ export function clearGuestCartToken(): void {
   }
 
   try {
+    useCartStore.getState().clearCartToken();
+
+    // Clean up legacy localStorage keys if present
     localStorage.removeItem(GUEST_CART_TOKEN_KEY);
     localStorage.removeItem(GUEST_CART_EXPIRY_KEY);
   } catch (error) {
@@ -302,55 +309,27 @@ export async function mergeGuestCartOnLogin(
   mergeMethod: MergeMethod = 'merge',
   options?: MergeOptions
 ): Promise<void> {
-  const guestToken = getGuestCartToken();
+  const cartStore = useCartStore.getState();
+  const guestToken = cartStore.cartToken;
 
   if (!guestToken) {
-    // No guest cart to merge
+    options?.onSuccess?.();
     return;
   }
 
-  const cartStore = useCartStore.getState();
-
-  // Optionally skip if guest cart is empty
   if (options?.skipIfEmpty && cartStore.items.length === 0) {
     console.log('Guest cart is empty, skipping merge');
-    clearGuestCartToken();
     cartStore.clearCartToken();
     options?.onSuccess?.();
     return;
   }
 
   try {
-    // Call the merge API
-    const result = await cartService.mergeGuestCart(guestToken, mergeMethod);
-
-    // Sync the merged cart to get updated state
-    await cartStore.syncWithBackend({ force: true });
-
-    // Clear guest token after successful merge
-    clearGuestCartToken();
-    cartStore.clearCartToken();
-
-    console.log('Cart merged successfully:', result);
-
-    // Call success callback if provided
+    await cartStore.mergeCart(mergeMethod);
     options?.onSuccess?.();
   } catch (error: any) {
     console.error('Failed to merge guest cart:', error);
-    // If guest cart doesn't exist on backend, just clear local token and proceed
-    // This happens when user never added items as guest, or cart expired
-    const errorMessage = error?.message || error?.toString() || '';
-    if (errorMessage.includes('not found') || errorMessage.includes('expired')) {
-      console.log('Guest cart not found or expired, clearing local token and proceeding');
-      clearGuestCartToken();
-      cartStore.clearCartToken();
-      options?.onSuccess?.();
-      return;
-    }
-
-    // Call error callback if provided
     options?.onError?.(error as Error);
-    // Re-throw error so caller can handle it
     throw error;
   }
 }

@@ -18,6 +18,7 @@ from app.domains.customers.api.customer_api import router as customer_router
 from app.domains.vendor.api.vendor_api import router as vendor_router
 from app.domains.vendor.api.vendor_analytics_api import router as vendor_analytics_router
 from app.domains.vendor.api.vendor_earnings_api import router as vendor_earnings_router
+from app.domains.vendor.api.vendor_reviews_api import router as vendor_reviews_router
 from app.domains.catalog.api.catalog_api import router as catalog_router
 from app.domains.catalog.api.storefront_api import router as storefront_router
 from app.domains.shopping.api.cart_api import router as cart_router
@@ -34,8 +35,11 @@ from app.domains.payments.api import payments_router as mpesa_payments_router
 from app.domains.payments.api.simple_payments_api import router as simple_payments_router
 from app.domains.shopping.api.admin_orders_api import router as admin_orders_router
 from app.domains.shopping.api.vendor_orders_api import router as vendor_orders_router
+from app.domains.shopping.api.banner_api import router as admin_banners_router
+from app.domains.shopping.api.banner_api import public_router as public_banners_router
 from app.domains.admin.api.system_api import router as system_router
 from app.domains.admin.api.users_management_api import router as users_management_router
+from app.domains.admin.api.reviews_moderation_api import router as admin_reviews_router
 from app.domains.recommendations.api.recommendations_api import router as recommendations_router
 from app.domains.tickets.api.tickets_api import router as tickets_router
 from app.domains.returns.api.returns_api import router as returns_router
@@ -157,6 +161,7 @@ app.include_router(customer_router, prefix="/api/v1/customers")
 app.include_router(vendor_router, prefix="/api/v1")
 app.include_router(vendor_analytics_router, prefix="/api/v1")
 app.include_router(vendor_earnings_router, prefix="/api/v1")
+app.include_router(vendor_reviews_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1/catalog")
 app.include_router(storefront_router, prefix="/api/v1/storefront")
 app.include_router(cart_router, prefix="/api/v1/shopping")
@@ -175,10 +180,13 @@ app.include_router(returns_router, prefix="/api/v1")
 app.include_router(payment_methods_router, prefix="/api/v1")
 app.include_router(admin_orders_router, prefix="/api/v1")
 app.include_router(vendor_orders_router, prefix="/api/v1")
+app.include_router(admin_banners_router, prefix="/api/v1")
+app.include_router(public_banners_router, prefix="/api/v1/shopping")
 app.include_router(mpesa_payments_router, prefix="/api/v1")
 app.include_router(simple_payments_router, prefix="/api/v1")
 app.include_router(system_router, prefix="/api/v1/admin")
 app.include_router(users_management_router, prefix="/api/v1/admin")
+app.include_router(admin_reviews_router, prefix="/api/v1")
 
 # Serve uploaded static files
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)

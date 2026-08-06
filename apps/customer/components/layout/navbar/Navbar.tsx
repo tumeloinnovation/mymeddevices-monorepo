@@ -18,6 +18,9 @@ import { TopBar } from './TopBar';
 import { LoginModal } from '@/components/auth/LoginModal';
 import { useAuthStore } from '@mymeddevices/shared-core';
 
+import { BannerCarousel } from '@mymeddevices/shared-ui';
+import { BannerPlacement } from '@mymeddevices/shared-core';
+
 export const Navbar: FC = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -65,6 +68,9 @@ export const Navbar: FC = () => {
       className={`w-full sticky top-0 z-40 bg-background transition-shadow ${isScrolled ? 'shadow-md' : ''
         }`}
     >
+      {/* Top Announcement Bar — Rendered above the TopBar social links section */}
+      <BannerCarousel placement={BannerPlacement.HEADER_BAR} />
+
       <TopBar theme={theme} setTheme={setTheme} />
 
       <MainBar isMenuOpen={isMenuOpen} toggleMenu={() => setIsMenuOpen((prev) => !prev)} />

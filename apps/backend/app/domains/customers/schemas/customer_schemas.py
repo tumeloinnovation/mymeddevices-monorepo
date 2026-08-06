@@ -215,10 +215,40 @@ class ReviewResponse(ReviewBase):
     id: uuid.UUID
     customer_id: uuid.UUID
     is_verified_purchase: bool
-    is_approved: bool
+    contains_profanity: bool
+    flagged_words: Optional[List[str]] = None
+    moderation_status: str
+    moderation_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     product: Optional[StorefrontProductResponse] = None
 
     class Config:
         from_attributes = True
+
+
+# Public storefront review response (hides customer identity for privacy)
+class PublicReviewResponse(BaseModel):
+    id: uuid.UUID
+    customer_id: Optional[uuid.UUID] = None
+    rating: int
+    comment: Optional[str] = None
+    is_verified_purchase: bool
+    created_at: datetime
+    # Customer info anonymized
+    reviewer_name: Optional[str] = None  # Will be derived from customer
+
+    class Config:
+        from_attributes = True
+
+
+class ReviewModerationRequest(BaseModel):
+    moderation_status: str = Field(..., description="New moderation status: visible, hidden, removed")
+    reason: Optional[str] = Field(None, description="Reason for moderation action")
+
+
+class VendorReviewResponse(ReviewResponse):
+    """Extended review response for vendors showing customer details"""
+    customer_email: Optional[str] = None
+    customer_name: Optional[str] = None
+    product_name: Optional[str] = None

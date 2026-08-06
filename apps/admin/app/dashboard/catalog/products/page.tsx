@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect, Suspense, useCallback, useRef, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Download, Trash2, XCircle, Loader2, Package, TrendingUp } from "lucide-react";
+import { Plus, Download, Trash2, XCircle, Loader2, Package, TrendingUp, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Product } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -25,6 +26,7 @@ import {
 } from "./_hooks/use-products-query";
 import { ProductsFilters } from "./_components/products-filters";
 import { ProductsTable } from "./_components/products-table";
+import { ProductsBulkImportModal } from "./_components/products-bulk-import-modal";
 
 function useDebounce<T>(value: T, delay: number): T {
   const [debounced, setDebounced] = useState(value);
@@ -81,6 +83,7 @@ function StatCard({
 }
 
 function ProductsPageInner() {
+  const queryClient = useQueryClient();
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialMounted = useRef(false);
@@ -106,6 +109,7 @@ function ProductsPageInner() {
 
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [rejectTarget, setRejectTarget] = useState<Product | null>(null);
+  const [importModalOpen, setImportModalOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
 
@@ -223,6 +227,11 @@ function ProductsPageInner() {
     );
   }, [rejectTarget, rejectionReason, mutations.reject]);
 
+  const handleImportComplete = useCallback((created: number, updated: number) => {
+    // Invalidate and refetch products after import
+    queryClient.invalidateQueries({ queryKey: ["admin", "products"] });
+  }, []);
+
   const handleBulkAction = useCallback(
     async (ids: string[], action: "verify" | "publish" | "archive" | "unarchive" | "delete") => {
       const mutationMap = {
@@ -289,6 +298,10 @@ function ProductsPageInner() {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setImportModalOpen(true)}>
+              <Upload className="h-4 w-4 mr-1.5" />
+              Import
+            </Button>
             <Button size="sm" variant="outline">
               <Download className="h-4 w-4 mr-1.5" />
               Export
@@ -458,6 +471,13 @@ function ProductsPageInner() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Bulk Import Modal */}
+        <ProductsBulkImportModal
+          open={importModalOpen}
+          onOpenChange={setImportModalOpen}
+          onComplete={handleImportComplete}
+        />
       </div>
     </DashboardLayout>
   );

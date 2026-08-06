@@ -1,54 +1,58 @@
-import React from 'react'
-import { ShieldCheck, Truck, CreditCard, CheckCircle } from 'lucide-react'
+import { Truck, ShieldCheck, Award, HeadphonesIcon } from 'lucide-react'
 
 export default function ProductTrustSignals() {
-    return (
-        <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900 rounded-lg p-5 mt-6 space-y-4">
-            <h3 className="font-semibold text-gray-900 dark:text-gray-100 mb-3">Why Buy From MyMedDevices Kenya?</h3>
+  const signals = [
+    {
+      icon: Truck,
+      title: 'Free Delivery',
+      description: 'Free shipping on orders over KES 50,000',
+      color: 'bg-blue-50 dark:bg-blue-950/30',
+      iconColor: 'text-blue-600 dark:text-blue-400',
+    },
+    {
+      icon: ShieldCheck,
+      title: '2-Year Warranty',
+      description: 'Comprehensive warranty coverage included',
+      color: 'bg-green-50 dark:bg-green-950/30',
+      iconColor: 'text-green-600 dark:text-green-400',
+    },
+    {
+      icon: Award,
+      title: 'Certified Authentic',
+      description: '100% genuine medical equipment',
+      color: 'bg-purple-50 dark:bg-purple-950/30',
+      iconColor: 'text-purple-600 dark:text-purple-400',
+    },
+    {
+      icon: HeadphonesIcon,
+      title: '24/7 Support',
+      description: 'Expert support available anytime',
+      color: 'bg-amber-50 dark:bg-amber-950/30',
+      iconColor: 'text-amber-600 dark:text-amber-400',
+    },
+  ]
 
-            {/* Regulatory Compliance */}
-            <div className="flex items-start gap-3">
-                <div className="bg-green-100 dark:bg-green-900 p-2 rounded-full mt-0.5">
-                    <ShieldCheck className="w-5 h-5 text-green-600 dark:text-green-400" />
-                </div>
-                <div>
-                    <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">PPB Regulations Compliant</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                        Verified medical device distributor approved by the Pharmacy and Poisons Board of Kenya.
-                    </p>
-                </div>
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {signals.map((signal) => {
+        const Icon = signal.icon
+        return (
+          <div
+            key={signal.title}
+            className={`${signal.color} border border-gray-200 dark:border-border rounded-lg p-4 flex flex-col items-center text-center`}
+          >
+            <div className={`${signal.iconColor} mb-2`}>
+              <Icon className="h-6 w-6" strokeWidth={2} />
             </div>
-
-            {/* Logistics */}
-            <div className="flex items-start gap-3">
-                <div className="bg-blue-100 dark:bg-blue-900 p-2 rounded-full mt-0.5">
-                    <Truck className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                    <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">Counrty-wide Delivery</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                        Same-day delivery within Nairobi. Express shipping to Mombasa, Kisumu, Eldoret, and all 47 counties via trusted partners (G4S/Wells Fargo).
-                    </p>
-                </div>
-            </div>
-
-            {/* Payment */}
-            <div className="flex items-start gap-3">
-                <div className="bg-purple-100 dark:bg-purple-900 p-2 rounded-full mt-0.5">
-                    <CreditCard className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <div>
-                    <h4 className="font-medium text-sm text-gray-900 dark:text-gray-100">Secure Local Payments</h4>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-0.5">
-                        We accept M-Pesa Business (Paybill/Till) and Bank Transfers. Secure and instant transaction verification.
-                    </p>
-                </div>
-            </div>
-
-            <div className="pt-2 mt-2 border-t border-blue-100 dark:border-blue-900/50 flex flex-wrap gap-4 text-xs text-gray-500">
-                <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Official Warranty</span>
-                <span className="flex items-center gap-1"><CheckCircle className="w-3 h-3" /> Installation Support</span>
-            </div>
-        </div>
-    )
+            <h3 className="font-semibold text-sm text-gray-900 dark:text-gray-100 mb-1">
+              {signal.title}
+            </h3>
+            <p className="text-xs text-gray-600 dark:text-gray-400">
+              {signal.description}
+            </p>
+          </div>
+        )
+      })}
+    </div>
+  )
 }

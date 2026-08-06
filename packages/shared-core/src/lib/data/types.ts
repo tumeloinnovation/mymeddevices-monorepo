@@ -41,6 +41,7 @@ export interface Product {
   downloadable?: boolean;
   model_number?: string;
   specifications?: Record<string, any>;
+  variants?: ProductVariant[];
 }
 
 export interface ProductImage {
@@ -75,6 +76,16 @@ export interface Attribute {
   id: number;
   name: string;
   options: string[];
+}
+
+export interface ProductVariant {
+  id: string;
+  name: string;
+  sku?: string;
+  price: number;
+  stock_quantity: number;
+  attributes: Record<string, string>;
+  is_active: boolean;
 }
 
 export interface Dimensions {

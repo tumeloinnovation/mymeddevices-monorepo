@@ -72,6 +72,11 @@ class ProductCreate(BaseModel):
     brand: Optional[str] = Field(None, max_length=255)
     model_number: Optional[str] = Field(None, max_length=255)
     specifications: Optional[dict] = None
+    certifications: Optional[list] = None
+    kmpdb_registration_number: Optional[str] = Field(None, max_length=255)
+    ppb_classification: Optional[str] = Field(None, max_length=100)
+    ce_marking_or_fda_clearance: Optional[str] = Field(None, max_length=255)
+    warranty_info: Optional[str] = None
 
     # SEO
     permalink: Optional[str] = Field(None, max_length=500)
@@ -111,6 +116,11 @@ class ProductUpdate(BaseModel):
     brand: Optional[str] = Field(None, max_length=255)
     model_number: Optional[str] = Field(None, max_length=255)
     specifications: Optional[dict] = None
+    certifications: Optional[list] = None
+    kmpdb_registration_number: Optional[str] = Field(None, max_length=255)
+    ppb_classification: Optional[str] = Field(None, max_length=100)
+    ce_marking_or_fda_clearance: Optional[str] = Field(None, max_length=255)
+    warranty_info: Optional[str] = None
 
     # SEO
     meta_title: Optional[str] = Field(None, max_length=255)
@@ -121,6 +131,21 @@ class ProductUpdate(BaseModel):
 # ============================================================================
 # PRODUCT RESPONSES
 # ============================================================================
+
+class ProductVariantResponse(BaseModel):
+    """Product variant response"""
+    id: uuid.UUID
+    product_id: uuid.UUID
+    name: str
+    sku: Optional[str] = None
+    price_adjustment: Optional[float] = 0
+    stock_quantity: int = 0
+    attributes: Optional[dict] = None
+    is_active: bool = True
+
+    class Config:
+        from_attributes = True
+
 
 class ProductResponse(BaseModel):
     """Full product response for vendor dashboard (includes all fields)"""
@@ -170,6 +195,11 @@ class ProductResponse(BaseModel):
     brand: Optional[str] = None
     model_number: Optional[str] = None
     specifications: Optional[dict] = None
+    certifications: Optional[list] = None
+    kmpdb_registration_number: Optional[str] = None
+    ppb_classification: Optional[str] = None
+    ce_marking_or_fda_clearance: Optional[str] = None
+    warranty_info: Optional[str] = None
 
     # SEO
     permalink: Optional[str] = None
@@ -181,8 +211,9 @@ class ProductResponse(BaseModel):
     ai_generated_fields: Optional[dict] = None
     completeness_score: int
 
-    # Images
+    # Images & Variants
     images: List[ProductImageResponse] = []
+    variants: List[ProductVariantResponse] = []
 
     created_at: datetime
     updated_at: datetime
@@ -238,14 +269,20 @@ class StorefrontProductResponse(BaseModel):
     brand: Optional[str] = None
     model_number: Optional[str] = None
     specifications: Optional[dict] = None
+    certifications: Optional[list] = None
+    kmpdb_registration_number: Optional[str] = None
+    ppb_classification: Optional[str] = None
+    ce_marking_or_fda_clearance: Optional[str] = None
+    warranty_info: Optional[str] = None
 
     # SEO
     meta_title: Optional[str] = None
     meta_description: Optional[str] = None
     tags: Optional[List[str]] = None
 
-    # Images
+    # Images & Variants
     images: List[ProductImageResponse] = []
+    variants: List[ProductVariantResponse] = []
 
     created_at: datetime
 
@@ -307,3 +344,48 @@ class ProductCompletenessResponse(BaseModel):
     is_ready_to_verify: bool
     items: List[CompletenessItem]
     missing_required: List[str]  # Required fields that are missing
+
+
+# ============================================================================
+# BULK IMPORT SCHEMAS
+# ============================================================================
+
+class BulkImportRowError(BaseModel):
+    """Error details for a single row in bulk import"""
+    row: int = Field(..., description="Row number in CSV (1-indexed, header is row 0)")
+    sku: Optional[str] = Field(None, description="SKU from the row")
+    field: Optional[str] = Field(None, description="Field name that caused the error")
+    error: str = Field(..., description="Error message")
+    severity: str = Field(default="error", description="error or warning")
+
+
+class BulkImportResult(BaseModel):
+    """Result of bulk import operation"""
+    success: bool = Field(..., description="Overall success status")
+    total_rows: int = Field(..., description="Total number of data rows processed")
+    created_count: int = Field(default=0, description="Number of products successfully created")
+    updated_count: int = Field(default=0, description="Number of products successfully updated")
+    skipped_count: int = Field(default=0, description="Number of rows skipped")
+    errors: List[BulkImportRowError] = Field(default_factory=list, description="List of row-level errors")
+    warnings: List[BulkImportRowError] = Field(default_factory=list, description="List of row-level warnings")
+    created_products: List[str] = Field(default_factory=list, description="IDs of created products")
+    processing_time_seconds: float = Field(..., description="Total processing time in seconds")
+
+
+class BulkImportPreview(BaseModel):
+    """Preview of bulk import data before actual import"""
+    total_rows: int = Field(..., description="Total number of data rows")
+    valid_rows: int = Field(..., description="Number of rows that pass validation")
+    invalid_rows: int = Field(..., description="Number of rows with errors")
+    warnings_count: int = Field(default=0, description="Number of rows with warnings")
+    errors: List[BulkImportRowError] = Field(default_factory=list, description="Validation errors")
+    warnings: List[BulkImportRowError] = Field(default_factory=list, description="Validation warnings")
+    preview_data: List[dict] = Field(default_factory=list, description="Sample of valid rows (max 5)")
+
+
+class BulkImportOptions(BaseModel):
+    """Options for bulk import behavior"""
+    update_existing: bool = Field(False, description="Update products if SKU exists")
+    default_status: str = Field("draft", description="Default status for new products")
+    skip_duplicates: bool = Field(True, description="Skip rows with duplicate SKUs instead of erroring")
+    vendor_id: Optional[uuid.UUID] = Field(None, description="Default vendor ID (if not specified in CSV)")

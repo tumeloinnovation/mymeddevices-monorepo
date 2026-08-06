@@ -12,15 +12,17 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatCurrency } from '@/lib/utils/utils'
 import { PACKAGING_FEE, SERVICES_FEE } from '@/lib/config/fees'
-import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft, Package, TrendingUp } from 'lucide-react'
+import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft, Package, TrendingUp, Tag, X, Loader2 } from 'lucide-react'
 import { customerService } from '@/lib/services/customer-service'
+import { customerCouponsApi } from '@/lib/api/endpoints/coupons'
 import { useAuthStore } from '@/lib/store/useAuthStore'
 
 export default function CartPage() {
-  const { items, hydrated, getTotal, updateQuantity, removeItem, clear } = useCartStore()
+  const { items, hydrated, getTotal, updateQuantity, removeItem, clear, cart } = useCartStore()
   const { isAuthenticated } = useAuthStore()
   const [couponCode, setCouponCode] = useState('')
-  const [couponApplied, setCouponApplied] = useState(false)
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
+  const [appliedCoupon, setAppliedCoupon] = useState<any>(null)
   const [hasPrimaryAddress, setHasPrimaryAddress] = useState(false)
 
   useEffect(() => {
@@ -68,11 +70,36 @@ export default function CartPage() {
 
   const subtotal = getTotal()
   const shipping = subtotal >= 50000 ? 0 : 500
-  const total = subtotal + (hasPrimaryAddress ? shipping : 0) + PACKAGING_FEE + SERVICES_FEE
+  const discountAmount = appliedCoupon?.discount_amount || 0
+  const total = Math.max(0, subtotal + (hasPrimaryAddress ? shipping : 0) + PACKAGING_FEE + SERVICES_FEE - discountAmount)
 
-  const handleApplyCoupon = () => {
+  const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return
-    setCouponApplied(true)
+    setIsApplyingCoupon(true)
+    try {
+      const cartId = cart?.id || 'default-cart'
+      const res = await customerCouponsApi.applyCoupon(cartId, couponCode)
+      if (res && res.is_valid) {
+        setAppliedCoupon(res)
+      } else {
+        setAppliedCoupon(null)
+      }
+    } catch (err) {
+      setAppliedCoupon(null)
+    } finally {
+      setIsApplyingCoupon(false)
+    }
+  }
+
+  const handleRemoveCoupon = async () => {
+    try {
+      const cartId = cart?.id || 'default-cart'
+      await customerCouponsApi.removeCoupon(cartId)
+      setAppliedCoupon(null)
+      setCouponCode('')
+    } catch (err) {
+      // toast error handled by API
+    }
   }
 
   return (
@@ -105,7 +132,6 @@ export default function CartPage() {
                 {items.map((item) => {
                   const itemTotal = Number(item.price) * item.quantity
                   const itemId = item.id as string
-                  // Handle different image structures: catalog Product (images[].url), frontend Product (images[].src), or backend CartItem (image_url)
                   const imageSrc = item?.images?.[0]?.url || (item?.images?.[0] as any)?.src || (item as any).image_url || '/logos/logo-portrait.png'
                   return (
                     <div key={itemId} className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
@@ -183,21 +209,29 @@ export default function CartPage() {
               <CardTitle className="text-base">Coupon Code</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-2">
-                <Input
-                  placeholder="Enter coupon code"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  className="max-w-xs"
-                />
-                <Button variant="outline" onClick={handleApplyCoupon} disabled={!couponCode.trim()}>
-                  Apply
-                </Button>
-              </div>
-              {couponApplied && (
-                <p className="text-sm text-muted-foreground mt-2">
-                  Coupon functionality is available during checkout.
-                </p>
+              {appliedCoupon ? (
+                <div className="flex items-center justify-between bg-emerald-50 dark:bg-emerald-900/20 p-3 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                  <div className="flex items-center gap-2">
+                    <Tag className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="font-medium text-emerald-700 dark:text-emerald-300">{appliedCoupon.code}</span>
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400">(-Ksh {formatCurrency(appliedCoupon.discount_amount || 0)})</span>
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={handleRemoveCoupon} className="h-8 text-emerald-700 hover:text-emerald-800">
+                    <X className="w-4 h-4 mr-1" /> Remove
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Enter coupon code"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    className="max-w-xs"
+                  />
+                  <Button variant="outline" onClick={handleApplyCoupon} disabled={isApplyingCoupon || !couponCode.trim()}>
+                    {isApplyingCoupon ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Apply'}
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -251,6 +285,15 @@ export default function CartPage() {
                 <span className="text-muted-foreground">Services Fee</span>
                 <span className="font-medium">Ksh {formatCurrency(SERVICES_FEE)}</span>
               </div>
+              {appliedCoupon && (
+                <div className="flex justify-between text-emerald-600 font-medium">
+                  <span className="flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5" />
+                    Discount ({appliedCoupon.code})
+                  </span>
+                  <span>- Ksh {formatCurrency(discountAmount)}</span>
+                </div>
+              )}
               <Separator />
               <div className="flex justify-between text-base font-semibold">
                 <span>Total</span>

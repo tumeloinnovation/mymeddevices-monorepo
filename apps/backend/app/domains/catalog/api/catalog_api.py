@@ -28,6 +28,10 @@ from app.domains.catalog.schemas.product_schemas import (
     AIDescriptionRequest,
     AIAssistResponse,
     ProductCompletenessResponse,
+    BulkImportResult,
+    BulkImportPreview,
+    BulkImportOptions,
+    BulkImportRowError,
 )
 from app.domains.catalog.schemas.brand_schemas import (
     BrandCreate,
@@ -446,6 +450,337 @@ async def bulk_upload_products(
         "created_count": created_count,
         "errors": errors
     }
+
+
+# ============================================================================
+# ADMIN BULK IMPORT (Enhanced)
+# ============================================================================
+
+@router.post("/products/bulk-import/preview", response_model=BulkImportPreview, tags=["Admin Catalog"])
+async def bulk_import_preview(
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Preview bulk import data before actual import.
+    Validates CSV structure and data without creating products.
+    """
+    if not file.filename or not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+
+    service = CatalogService(db)
+    content = await file.read()
+
+    try:
+        text = content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid file encoding. Please use UTF-8.")
+
+    reader = csv.DictReader(io.StringIO(text))
+    errors = []
+    warnings = []
+    valid_count = 0
+    preview_data = []
+
+    # Required columns for validation
+    required_columns = ["name"]
+    optional_columns = [
+        "sku", "vendor_id", "category_id", "description", "short_description",
+        "base_price", "price", "cost_price", "currency", "stock_quantity",
+        "stock_status", "low_stock_threshold", "track_inventory", "weight_kg",
+        "brand", "model_number", "kmpdb_registration_number", "ppb_classification",
+        "ce_marking_or_fda_clearance", "warranty_info", "permalink", "meta_title",
+        "meta_description", "tags", "status"
+    ]
+
+    # Check for required columns
+    missing_columns = [col for col in required_columns if col not in reader.fieldnames or []]
+    if missing_columns:
+        errors.append(BulkImportRowError(
+            row=0,
+            error=f"Missing required columns: {', '.join(missing_columns)}",
+            severity="error"
+        ))
+
+    for i, row in enumerate(reader, start=1):
+        row_errors = []
+        row_warnings = []
+
+        # Validate required fields
+        if not row.get("name") or not row.get("name").strip():
+            row_errors.append("name is required")
+
+        # Validate vendor_id
+        vendor_id = row.get("vendor_id")
+        if vendor_id:
+            try:
+                uuid.UUID(vendor_id)
+            except ValueError:
+                row_errors.append("vendor_id must be a valid UUID")
+        else:
+            row_warnings.append("No vendor_id specified - product will not be associated with a vendor")
+
+        # Validate UUIDs for related entities
+        for field in ["category_id"]:
+            value = row.get(field)
+            if value:
+                try:
+                    uuid.UUID(value)
+                except ValueError:
+                    row_errors.append(f"{field} must be a valid UUID")
+
+        # Validate numeric fields
+        for field in ["base_price", "price", "cost_price", "weight_kg"]:
+            value = row.get(field)
+            if value and value.strip():
+                try:
+                    float(value)
+                except ValueError:
+                    row_errors.append(f"{field} must be a valid number")
+
+        # Validate integer fields
+        for field in ["stock_quantity", "low_stock_threshold"]:
+            value = row.get(field)
+            if value and value.strip():
+                try:
+                    int(value)
+                except ValueError:
+                    row_errors.append(f"{field} must be a valid integer")
+
+        # Validate boolean fields
+        for field in ["track_inventory"]:
+            value = row.get(field)
+            if value and value.strip():
+                if value.lower() not in ["true", "false", "1", "0", "yes", "no"]:
+                    row_warnings.append(f"{field} should be true/false or yes/no")
+
+        # Collect errors and warnings
+        if row_errors:
+            errors.append(BulkImportRowError(
+                row=i,
+                sku=row.get("sku"),
+                error="; ".join(row_errors),
+                severity="error"
+            ))
+
+        if row_warnings:
+            warnings.extend([
+                BulkImportRowError(
+                    row=i,
+                    sku=row.get("sku"),
+                    error=w,
+                    severity="warning"
+                )
+                for w in row_warnings
+            ])
+
+        if not row_errors:
+            valid_count += 1
+            if len(preview_data) < 5:
+                preview_data.append(dict(row))
+
+    return BulkImportPreview(
+        total_rows=i,
+        valid_rows=valid_count,
+        invalid_rows=len(errors),
+        warnings_count=len(warnings),
+        errors=errors,
+        warnings=warnings,
+        preview_data=preview_data
+    )
+
+
+@router.post("/products/bulk-import", response_model=BulkImportResult, tags=["Admin Catalog"])
+async def bulk_import_products(
+    current_user: Annotated[User, Depends(require_role("admin", "worker"))],
+    file: UploadFile = File(...),
+    options: BulkImportOptions = BulkImportOptions(),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Admin bulk import products from CSV.
+    Supports creating new products and optionally updating existing ones by SKU.
+    """
+    import time
+    start_time = time.time()
+
+    if not file.filename or not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="File must be a CSV")
+
+    service = CatalogService(db)
+    content = await file.read()
+
+    try:
+        text = content.decode('utf-8-sig')
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid file encoding. Please use UTF-8.")
+
+    reader = csv.DictReader(io.StringIO(text))
+    errors = []
+    warnings = []
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    created_products = []
+    seen_skus = set()
+
+    for i, row in enumerate(reader, start=1):
+        try:
+            # Skip if no name
+            name = row.get("name", "").strip()
+            if not name:
+                errors.append(BulkImportRowError(
+                    row=i,
+                    error="name is required",
+                    severity="error"
+                ))
+                continue
+
+            # Check for duplicate SKUs within the import
+            sku = row.get("sku", "").strip() if row.get("sku") else None
+            if sku and options.skip_duplicates:
+                if sku in seen_skus:
+                    skipped_count += 1
+                    warnings.append(BulkImportRowError(
+                        row=i,
+                        sku=sku,
+                        error="Duplicate SKU in import - skipped",
+                        severity="warning"
+                    ))
+                    continue
+                seen_skus.add(sku)
+
+            # Build product data from CSV row
+            product_data = {
+                "name": name,
+                "sku": sku,
+                "vendor_id": row.get("vendor_id") or options.vendor_id,
+                "category_id": row.get("category_id"),
+                "description": row.get("description") or None,
+                "short_description": row.get("short_description") or None,
+                "base_price": _parse_float(row.get("base_price")),
+                "price": _parse_float(row.get("price")),
+                "cost_price": _parse_float(row.get("cost_price")),
+                "currency": row.get("currency", "KES"),
+                "stock_quantity": _parse_int(row.get("stock_quantity")) or 0,
+                "stock_status": row.get("stock_status", "instock"),
+                "low_stock_threshold": _parse_int(row.get("low_stock_threshold")) or 5,
+                "track_inventory": _parse_bool(row.get("track_inventory", "true")),
+                "weight_kg": _parse_float(row.get("weight_kg")),
+                "brand": row.get("brand") or None,
+                "model_number": row.get("model_number") or None,
+                "kmpdb_registration_number": row.get("kmpdb_registration_number") or None,
+                "ppb_classification": row.get("ppb_classification") or None,
+                "ce_marking_or_fda_clearance": row.get("ce_marking_or_fda_clearance") or None,
+                "warranty_info": row.get("warranty_info") or None,
+                "permalink": row.get("permalink") or None,
+                "meta_title": row.get("meta_title") or None,
+                "meta_description": row.get("meta_description") or None,
+                "status": row.get("status", options.default_status),
+            }
+
+            # Parse tags (comma-separated)
+            tags_str = row.get("tags")
+            if tags_str:
+                product_data["tags"] = [t.strip() for t in tags_str.split(",") if t.strip()]
+
+            # Parse specifications (JSON string)
+            specs_str = row.get("specifications")
+            if specs_str:
+                try:
+                    import json
+                    product_data["specifications"] = json.loads(specs_str)
+                except json.JSONDecodeError:
+                    warnings.append(BulkImportRowError(
+                        row=i,
+                        sku=sku,
+                        error="Invalid JSON in specifications field - skipped",
+                        severity="warning"
+                    ))
+
+            # Validate vendor_id is present
+            vendor_id = product_data.get("vendor_id")
+            if not vendor_id:
+                errors.append(BulkImportRowError(
+                    row=i,
+                    sku=sku,
+                    error="vendor_id is required (not specified in row or options)",
+                    severity="error"
+                ))
+                continue
+
+            # Check if product with SKU exists (for update)
+            existing_product = None
+            if sku and options.update_existing:
+                existing_product = await service.get_product_by_sku(sku)
+
+            if existing_product and options.update_existing:
+                # Update existing product (use existing product's vendor_id)
+                await service.update_product(
+                    vendor_id=str(existing_product.vendor_id),
+                    product_id=str(existing_product.id),
+                    **{k: v for k, v in product_data.items() if v is not None and k != "vendor_id"}
+                )
+                updated_count += 1
+            else:
+                # Create new product
+                product = await service.create_product(
+                    vendor_id=str(vendor_id),
+                    **{k: v for k, v in product_data.items() if k != "vendor_id"}
+                )
+                created_count += 1
+                created_products.append(str(product.id))
+
+        except Exception as e:
+            errors.append(BulkImportRowError(
+                row=i,
+                sku=row.get("sku"),
+                error=str(e),
+                severity="error"
+            ))
+
+    processing_time = time.time() - start_time
+
+    return BulkImportResult(
+        success=len(errors) == 0 or (len(errors) < i and created_count > 0),
+        total_rows=i,
+        created_count=created_count,
+        updated_count=updated_count,
+        skipped_count=skipped_count,
+        errors=errors,
+        warnings=warnings,
+        created_products=created_products,
+        processing_time_seconds=round(processing_time, 2)
+    )
+
+
+def _parse_float(value: Optional[str]) -> Optional[float]:
+    """Helper to parse float from CSV string"""
+    if value is None or value.strip() == "":
+        return None
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def _parse_int(value: Optional[str]) -> Optional[int]:
+    """Helper to parse int from CSV string"""
+    if value is None or value.strip() == "":
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _parse_bool(value: Optional[str]) -> bool:
+    """Helper to parse boolean from CSV string"""
+    if not value:
+        return True
+    return value.lower() in ["true", "1", "yes"]
+
 
 @router.post("/products", response_model=ProductResponse, status_code=status.HTTP_201_CREATED, tags=["Vendor Catalog"])
 async def create_product(

@@ -216,5 +216,64 @@ export const catalogService = {
 
   async getStorefrontCategories(): Promise<CategoryTree[]> {
     return apiClient.get('/storefront/categories');
+  },
+
+  // Bulk Import (Admin only)
+  async bulkImportPreview(file: File): Promise<{
+    total_rows: number;
+    valid_rows: number;
+    invalid_rows: number;
+    warnings_count: number;
+    errors: Array<{ row: number; sku?: string; error: string; severity: string }>;
+    warnings: Array<{ row: number; sku?: string; error: string; severity: string }>;
+    preview_data: any[];
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    return apiClient.post('/catalog/products/bulk-import/preview', formData);
+  },
+
+  async bulkImport(file: File, options?: {
+    update_existing?: boolean;
+    default_status?: string;
+    skip_duplicates?: boolean;
+    vendor_id?: string;
+  }): Promise<{
+    success: boolean;
+    total_rows: number;
+    created_count: number;
+    updated_count: number;
+    skipped_count: number;
+    errors: Array<{ row: number; sku?: string; error: string; severity: string }>;
+    warnings: Array<{ row: number; sku?: string; error: string; severity: string }>;
+    created_products: string[];
+    processing_time_seconds: number;
+  }> {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    // Append options as query params
+    const params: Record<string, string> = {};
+    if (options?.update_existing !== undefined) params.update_existing = String(options.update_existing);
+    if (options?.default_status) params.default_status = options.default_status;
+    if (options?.skip_duplicates !== undefined) params.skip_duplicates = String(options.skip_duplicates);
+    if (options?.vendor_id) params.vendor_id = options.vendor_id;
+
+    return apiClient.post('/catalog/products/bulk-import', formData, { params });
+  },
+
+  downloadImportTemplate(): void {
+    const csvContent = [
+      'name,sku,vendor_id,category_id,description,short_description,base_price,price,cost_price,currency,stock_quantity,stock_status,low_stock_threshold,track_inventory,weight_kg,brand,model_number,kmpdb_registration_number,ppb_classification,ce_marking_or_fda_clearance,warranty_info,permalink,meta_title,meta_description,tags,status,specifications',
+      '"Sample Product","SKU-001","<vendor-uuid>","<category-uuid>","Product description goes here","Short description",1000.00,1200.00,800.00,"KES",50,"instock",10,true,1.5,"Brand Name","MODEL-123","KMPDB-REG-001","Class II","FDA-510k","1 year warranty","sample-product","Sample Product Meta Title","Sample product meta description","tag1,tag2,tag3","draft","{\\"key\\": \\"value\\"}"'
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'products-import-template.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
   }
 };

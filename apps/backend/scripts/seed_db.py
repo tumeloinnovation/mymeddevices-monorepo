@@ -9,6 +9,9 @@ from app.core.database import AsyncSessionLocal
 from app.core.security import get_password_hash
 from app.domains.auth.models.user import User
 from app.domains.vendor.models.vendor_profile import VendorProfile
+from app.domains.shopping.models.banner import Banner, BannerPlacement, BannerStatus
+from app.domains.shopping.models.coupon import Coupon, CouponRestriction
+from decimal import Decimal
 from sqlalchemy import select
 
 
@@ -114,6 +117,120 @@ async def seed():
                         existing_prof.approval_status = "approved"
                         existing_prof.approved_at = datetime.now(timezone.utc)
                         await db.commit()
+
+        # Seed Coupons
+        coupons_to_seed = [
+            {
+                "code": "MEDWELCOME",
+                "description": "10% off your first medical supply order",
+                "coupon_type": "percentage",
+                "discount_value": Decimal("10.00"),
+                "discount_scope": "cart",
+                "is_active": True,
+                "is_stackable": False,
+                "valid_from": datetime.now(timezone.utc),
+                "distribution_type": "public",
+                "min_order_value": Decimal("1000.00"),
+            },
+            {
+                "code": "SAVE5000",
+                "description": "KES 5,000 flat discount on purchases over KES 20,000",
+                "coupon_type": "fixed_amount",
+                "discount_value": Decimal("5000.00"),
+                "discount_scope": "cart",
+                "is_active": True,
+                "is_stackable": False,
+                "valid_from": datetime.now(timezone.utc),
+                "distribution_type": "public",
+                "min_order_value": Decimal("20000.00"),
+            },
+            {
+                "code": "HEALTH2026",
+                "description": "15% off hospital equipment and diagnostic devices",
+                "coupon_type": "percentage",
+                "discount_value": Decimal("15.00"),
+                "discount_scope": "cart",
+                "is_active": True,
+                "is_stackable": False,
+                "valid_from": datetime.now(timezone.utc),
+                "distribution_type": "public",
+                "min_order_value": Decimal("5000.00"),
+            },
+        ]
+
+        for c_data in coupons_to_seed:
+            min_val = c_data.pop("min_order_value", None)
+            res = await db.execute(select(Coupon).where(Coupon.code == c_data["code"]))
+            existing_c = res.scalar_one_or_none()
+            if not existing_c:
+                print(f"Creating coupon: {c_data['code']}")
+                coupon = Coupon(**c_data)
+                db.add(coupon)
+                await db.commit()
+                await db.refresh(coupon)
+                if min_val:
+                    restr = CouponRestriction(
+                        coupon_id=coupon.id,
+                        min_order_value=min_val
+                    )
+                    db.add(restr)
+                    await db.commit()
+
+        # Seed Banners
+        banners_to_seed = [
+            {
+                "title": "⚡ Free Delivery on orders over KES 50,000 across Kenya!",
+                "placement": BannerPlacement.HEADER_BAR,
+                "status": BannerStatus.ACTIVE,
+                "background_color": "#0284c7",
+                "text_color": "#ffffff",
+                "priority": 10,
+                "is_dismissible": True,
+                "show_close_button": True,
+            },
+            {
+                "title": "Certified Medical Equipment & Hospital Supplies",
+                "description": "Directly from verified manufacturers with full regulatory approval (KMPDB & PPB certified)",
+                "cta_text": "Browse All Devices",
+                "cta_link": "/products",
+                "cta_target": "_self",
+                "placement": BannerPlacement.HOMEPAGE_HERO,
+                "status": BannerStatus.ACTIVE,
+                "background_color": "#0f172a",
+                "text_color": "#38bdf8",
+                "priority": 10,
+                "is_dismissible": False,
+                "show_close_button": False,
+            },
+            {
+                "title": "Special Promotion: 10% OFF First Order",
+                "description": "Use coupon code MEDWELCOME at checkout for instant savings",
+                "cta_text": "Claim Offer",
+                "cta_link": "/products",
+                "cta_target": "_self",
+                "placement": BannerPlacement.HOMEPAGE_HERO,
+                "status": BannerStatus.ACTIVE,
+                "background_color": "#1e293b",
+                "text_color": "#ffffff",
+                "priority": 5,
+                "is_dismissible": False,
+                "show_close_button": False,
+            },
+        ]
+
+        for b_data in banners_to_seed:
+            res = await db.execute(
+                select(Banner).where(
+                    Banner.title == b_data["title"],
+                    Banner.placement == b_data["placement"]
+                )
+            )
+            existing_b = res.scalar_one_or_none()
+            if not existing_b:
+                print(f"Creating banner: {b_data['title']}")
+                banner = Banner(**b_data)
+                db.add(banner)
+                await db.commit()
 
 
 if __name__ == "__main__":
