@@ -7,8 +7,8 @@ import ProductGrid from "./ProductGrid";
 
 function buildCategoryTree(categories: Category[]): Category[] {
   if (!categories || !Array.isArray(categories)) return [];
-  const map = new Map<number | string, Category>();
-  const roots: Category[] = [];
+  const map = new Map<number | string, any>();
+  const roots: any[] = [];
   categories.forEach((cat) => {
     map.set(cat.id, { ...cat, children: [] });
   });
@@ -20,7 +20,7 @@ function buildCategoryTree(categories: Category[]): Category[] {
       roots.push(node);
     }
   });
-  return roots;
+  return roots as Category[];
 }
 import ShopHeader from "./ShopHeader";
 import ShopSidebar from "./ShopSidebar";

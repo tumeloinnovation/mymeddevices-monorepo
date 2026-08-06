@@ -91,8 +91,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     let categoryPages: MetadataRoute.Sitemap = []
 
     try {
-        const productsRes = await catalogService.getProducts({ limit: 100 })
-        productPages = (productsRes.data || []).map((product) => ({
+        const productsRes = await catalogService.getVendorProducts({ page_size: 100 })
+        const productsList = (productsRes as any).products || (productsRes as any).items || []
+        productPages = productsList.map((product: any) => ({
             url: `${SITE_URL}/products/${product.slug}`,
             lastModified: new Date(product.updated_at || product.created_at || Date.now()),
             changeFrequency: 'weekly',
@@ -100,7 +101,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         }))
 
         const categoriesRes = await catalogService.getCategories()
-        categoryPages = (categoriesRes || []).map((category) => ({
+        categoryPages = (categoriesRes || []).map((category: any) => ({
             url: `${SITE_URL}/categories/${category.slug}`,
             lastModified: new Date(),
             changeFrequency: 'weekly',
