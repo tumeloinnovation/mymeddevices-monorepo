@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Input } from '../../ui/input';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Lock } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 
 interface PasswordInputProps {
@@ -38,13 +38,17 @@ export function PasswordInput({
   return (
     <>
       <div className="relative">
+        <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
         <Input
           id={id}
           type={showPassword ? 'text' : 'password'}
           placeholder={placeholder}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className={cn('pr-10', className)}
+          className={cn(
+            'pl-10 pr-10 h-11 rounded-xl border-input/80 bg-background/50 focus-visible:ring-2 focus-visible:ring-[#e0752b]/30 focus-visible:border-[#e0752b] transition-all text-sm',
+            className
+          )}
           required={required}
           disabled={disabled}
           autoFocus={autoFocus}
@@ -52,7 +56,7 @@ export function PasswordInput({
         <button
           type="button"
           onClick={() => setShowPassword(!showPassword)}
-          className="absolute right-3 top-0 h-full flex items-center text-muted-foreground hover:text-foreground z-10"
+          className="absolute right-3.5 top-0 h-full flex items-center text-muted-foreground/70 hover:text-foreground transition-colors z-10"
           tabIndex={-1}
         >
           {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

@@ -1,4 +1,4 @@
-import { OrdersList } from '../../_components/OrdersList';
+import { OrdersList } from '../_components/OrdersList';
 import { Filter } from 'lucide-react';
 
 export default function ProcessingOrdersPage() {

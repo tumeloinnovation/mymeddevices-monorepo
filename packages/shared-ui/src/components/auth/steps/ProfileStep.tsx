@@ -1,13 +1,12 @@
 'use client';
 
-import { User, Phone, Building } from 'lucide-react';
+import { User, Phone, Building, ShieldCheck, ArrowRight } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { PasswordInput } from '../common/PasswordInput';
 import { VendorAddressAutocomplete } from '../common/VendorAddressAutocomplete';
 import { cn } from '../../../lib/utils';
-import { getButtonClass, getIconBgClass, getIconColor } from '../auth-theme';
 
 interface ProfileStepProps {
   firstName: string;
@@ -28,7 +27,6 @@ interface ProfileStepProps {
     valid: boolean;
     errors: string[];
   };
-  // Address for vendor registration (from Google Places autocomplete)
   vendorAddress?: {
     place_id: string;
     formatted_address?: string;
@@ -49,7 +47,6 @@ interface ProfileStepProps {
     country?: string;
     region?: string;
   }) => void;
-  // isRegistration flag for hiding header
   isRegistration?: boolean;
 }
 
@@ -74,84 +71,86 @@ export function ProfileStep({
   isRegistration = false,
 }: ProfileStepProps) {
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      {/* Icon and title - hidden for registration mode */}
+    <form onSubmit={onSubmit} className="space-y-4">
+      {/* Header section */}
       {!isRegistration && (
-        <div className="space-y-2 text-center">
-          <div className={cn('mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-4', getIconBgClass())}>
-            <User className={cn('w-6 h-6', getIconColor())} />
+        <div className="text-center space-y-1.5 mb-5">
+          <div className="mx-auto w-11 h-11 rounded-2xl bg-[#e0752b]/10 border border-[#e0752b]/20 flex items-center justify-center mb-2 shadow-xs">
+            <User className="w-5 h-5 text-[#e0752b]" />
           </div>
-          <h2 className="text-2xl font-semibold tracking-tight">
+          <h3 className="text-xl font-bold tracking-tight text-foreground">
             Complete Your Profile
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Tell us a bit more about yourself
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            Tell us a bit more about yourself to finalize setup
           </p>
         </div>
       )}
 
       {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-lg">
-          {error}
+        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Name fields */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-2">
-          <Label htmlFor="firstName">First Name</Label>
+      {/* Responsive Name fields */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="firstName" className="text-xs font-semibold text-foreground/90">First Name</Label>
           <Input
             id="firstName"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
             placeholder="John"
+            className="h-11 rounded-xl border-input/80 bg-background/50 focus-visible:ring-2 focus-visible:ring-[#e0752b]/30 focus-visible:border-[#e0752b] transition-all text-sm"
             required
             disabled={isLoading}
           />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="lastName">Last Name</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="lastName" className="text-xs font-semibold text-foreground/90">Last Name</Label>
           <Input
             id="lastName"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
             placeholder="Doe"
+            className="h-11 rounded-xl border-input/80 bg-background/50 focus-visible:ring-2 focus-visible:ring-[#e0752b]/30 focus-visible:border-[#e0752b] transition-all text-sm"
             required
             disabled={isLoading}
           />
         </div>
       </div>
 
-      {/* Phone */}
-      <div className="space-y-2">
-        <Label htmlFor="phone">Phone Number</Label>
+      {/* Phone Number Input */}
+      <div className="space-y-1.5">
+        <Label htmlFor="phone" className="text-xs font-semibold text-foreground/90">Phone Number</Label>
         <div className="relative">
-          <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
           <Input
             id="phone"
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="+254..."
-            className="pl-10"
+            placeholder="+254 700 000 000"
+            className="pl-10 h-11 rounded-xl border-input/80 bg-background/50 focus-visible:ring-2 focus-visible:ring-[#e0752b]/30 focus-visible:border-[#e0752b] transition-all text-sm"
             required
             disabled={isLoading}
           />
         </div>
       </div>
 
-      {/* Company name for vendors */}
+      {/* Vendor Company Name */}
       {isVendor && setCompanyName && (
-        <div className="space-y-2">
-          <Label htmlFor="company">Company Name</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="company" className="text-xs font-semibold text-foreground/90">Company / Store Name</Label>
           <div className="relative">
-            <Building className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
             <Input
               id="company"
               value={companyName}
               onChange={(e) => setCompanyName(e.target.value)}
-              placeholder="Business Name"
-              className="pl-10"
+              placeholder="e.g. Acme Medical Supplies"
+              className="pl-10 h-11 rounded-xl border-input/80 bg-background/50 focus-visible:ring-2 focus-visible:ring-[#0e599b]/30 focus-visible:border-[#0e599b] transition-all text-sm"
               required
               disabled={isLoading}
             />
@@ -159,29 +158,27 @@ export function ProfileStep({
         </div>
       )}
 
-      {/* Address field - required for vendor registration */}
+      {/* Vendor Address Input */}
       {isVendor && setVendorAddress && (
-        <VendorAddressAutocomplete
-          onPlaceSelected={setVendorAddress}
-          disabled={isLoading}
-        />
-      )}
-
-      {/* Selected address display for vendors */}
-      {isVendor && vendorAddress && (
-        <div className="p-3 bg-muted/50 rounded-md border">
-          <p className="text-sm font-medium">Selected Address:</p>
-          <p className="text-xs text-muted-foreground mt-1">{vendorAddress.formatted_address || vendorAddress.address}</p>
-          <p className="text-xs text-muted-foreground">
-            {vendorAddress.city && `${vendorAddress.city}, `}
-            {vendorAddress.country}
-          </p>
+        <div className="space-y-1.5">
+          <VendorAddressAutocomplete
+            onPlaceSelected={setVendorAddress}
+            disabled={isLoading}
+          />
         </div>
       )}
 
-      {/* Password */}
-      <div className="space-y-2">
-        <Label htmlFor="password">Create Password</Label>
+      {/* Selected Address Card */}
+      {isVendor && vendorAddress && (
+        <div className="p-3 bg-muted/40 rounded-xl border border-border/60 space-y-1">
+          <p className="text-xs font-semibold text-foreground">Verified Store Address:</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">{vendorAddress.formatted_address || vendorAddress.address}</p>
+        </div>
+      )}
+
+      {/* Password Creation */}
+      <div className="space-y-1.5">
+        <Label htmlFor="password" className="text-xs font-semibold text-foreground/90">Create Password</Label>
         <PasswordInput
           id="password"
           value={password}
@@ -194,13 +191,23 @@ export function ProfileStep({
         />
       </div>
 
-      {/* Submit button */}
+      {/* Submit Button */}
       <Button
         type="submit"
-        className={cn('w-full h-11', getButtonClass())}
+        className="w-full h-11 rounded-xl font-semibold text-sm shadow-md transition-all duration-200 active:scale-[0.98] bg-[#e0752b] hover:bg-[#c86221] text-white border-0 mt-2"
         disabled={isLoading}
       >
-        {isLoading ? 'Creating Account...' : 'Complete Registration'}
+        {isLoading ? (
+          <span className="flex items-center gap-2">
+            <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            Completing Account...
+          </span>
+        ) : (
+          <span className="flex items-center justify-center gap-2">
+            Complete Registration
+            <ArrowRight className="w-4 h-4" />
+          </span>
+        )}
       </Button>
     </form>
   );

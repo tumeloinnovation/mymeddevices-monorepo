@@ -107,6 +107,8 @@ export const CliniciansPicksSection: React.FC = () => {
               description="Highest rated products by healthcare professionals and customers"
               items={topRatedProducts.products || []}
               loading={showLoading || topRatedProducts.isLoading}
+              emptyTitle="No Top Rated Products"
+              emptyMessage="There are currently no top rated products listed in this section."
               layout="grid"
               gridClassName="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
             />
@@ -118,6 +120,8 @@ export const CliniciansPicksSection: React.FC = () => {
               description="Best deals on quality medical equipment and supplies"
               items={bestValueProducts.products || []}
               loading={showLoading || bestValueProducts.isLoading}
+              emptyTitle="No Best Value Deals"
+              emptyMessage="There are currently no best value or discounted items available."
               layout="grid"
               gridClassName="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
             />
@@ -129,6 +133,8 @@ export const CliniciansPicksSection: React.FC = () => {
               description="Most recommended products by medical practitioners"
               items={prescribedProducts.products || []}
               loading={showLoading || prescribedProducts.isLoading}
+              emptyTitle="No Prescribed Products Found"
+              emptyMessage="There are currently no clinician-recommended products available."
               layout="grid"
               gridClassName="grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
             />

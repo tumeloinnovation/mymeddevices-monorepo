@@ -1,10 +1,9 @@
 'use client';
 
-import { Lock } from 'lucide-react';
+import { Lock, ArrowRight } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Label } from '../../ui/label';
 import { PasswordInput } from '../common/PasswordInput';
-import { cn } from '../../../lib/utils';
 
 interface PasswordStepProps {
   password: string;
@@ -31,35 +30,35 @@ export function PasswordStep({
   onSubmit,
   isLoading = false,
   error = null,
-  submitLabel = 'Continue',
+  submitLabel = 'Reset Password',
   showConfirmPassword = true,
   passwordValidation,
-  description = 'Create a secure password for your account',
+  description = 'Set a new secure password for your account',
 }: PasswordStepProps) {
   const passwordsMatch = password && confirmPassword && password === confirmPassword;
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      {/* Icon and title */}
-      <div className="space-y-2 text-center">
-        <div className="mx-auto w-12 h-12 rounded-full bg-teal-100 flex items-center justify-center mb-4">
-          <Lock className="w-6 h-6 text-teal-600" />
+    <form onSubmit={onSubmit} className="space-y-5">
+      {/* Header section */}
+      <div className="text-center space-y-1.5 mb-5">
+        <div className="mx-auto w-12 h-12 rounded-2xl bg-[#e0752b]/10 border border-[#e0752b]/20 flex items-center justify-center mb-3 shadow-xs">
+          <Lock className="w-6 h-6 text-[#e0752b]" />
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          {showConfirmPassword ? 'Set Your Password' : 'Enter Your Password'}
-        </h2>
-        <p className="text-sm text-muted-foreground">{description}</p>
+        <h3 className="text-xl font-bold tracking-tight text-foreground">
+          {showConfirmPassword ? 'Set New Password' : 'Enter Password'}
+        </h3>
+        <p className="text-xs text-muted-foreground">{description}</p>
       </div>
 
       {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-lg">
-          {error}
+        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Password */}
-      <div className="space-y-2">
-        <Label htmlFor="password">
+      {/* Password Input */}
+      <div className="space-y-1.5">
+        <Label htmlFor="password" className="text-xs font-semibold text-foreground/90">
           {showConfirmPassword ? 'New Password' : 'Password'}
         </Label>
         <PasswordInput
@@ -75,10 +74,10 @@ export function PasswordStep({
         />
       </div>
 
-      {/* Confirm Password */}
+      {/* Confirm Password Input */}
       {showConfirmPassword && (
-        <div className="space-y-2">
-          <Label htmlFor="confirmPassword">Confirm Password</Label>
+        <div className="space-y-1.5">
+          <Label htmlFor="confirmPassword" className="text-xs font-semibold text-foreground/90">Confirm New Password</Label>
           <PasswordInput
             id="confirmPassword"
             value={confirmPassword}
@@ -88,22 +87,32 @@ export function PasswordStep({
             disabled={isLoading}
           />
           {confirmPassword && !passwordsMatch && (
-            <p className="text-xs text-red-500">Passwords do not match</p>
+            <p className="text-xs text-destructive font-medium">Passwords do not match</p>
           )}
         </div>
       )}
 
-      {/* Submit button */}
+      {/* Submit Button */}
       <Button
         type="submit"
-        className="w-full h-11 bg-teal-600 hover:bg-teal-700 text-white font-semibold"
+        className="w-full h-11 rounded-xl font-semibold text-sm shadow-md transition-all duration-200 active:scale-[0.98] bg-[#e0752b] hover:bg-[#c86221] text-white border-0 mt-2"
         disabled={
           isLoading ||
           (passwordValidation && !passwordValidation.valid) ||
           (showConfirmPassword && (!passwordsMatch || !confirmPassword))
         }
       >
-        {isLoading ? 'Processing...' : submitLabel}
+        {isLoading ? (
+          <span className="flex items-center gap-2">
+            <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            Updating Password...
+          </span>
+        ) : (
+          <span className="flex items-center justify-center gap-2">
+            {submitLabel}
+            <ArrowRight className="w-4 h-4" />
+          </span>
+        )}
       </Button>
     </form>
   );

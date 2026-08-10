@@ -32,7 +32,8 @@ export default function VendorGuard({ children }: { children: React.ReactNode })
                 hasPassedGuardRef.current = false;
                 // Only redirect if not already on login page to prevent loops
                 if (pathname !== '/login') {
-                    router.replace('/login');
+                    const returnUrl = encodeURIComponent(pathname);
+                    router.replace(`/login?returnUrl=${returnUrl}`);
                 }
                 return;
             }
@@ -42,7 +43,7 @@ export default function VendorGuard({ children }: { children: React.ReactNode })
                 logger.log('🛡️ [VendorGuard] Access denied: role is not vendor, redirecting to /login', { role: user.role });
                 hasPassedGuardRef.current = false;
                 if (pathname !== '/login') {
-                    router.replace('/login');
+                    router.replace('/login?error=vendor_role_required');
                 }
                 return;
             }

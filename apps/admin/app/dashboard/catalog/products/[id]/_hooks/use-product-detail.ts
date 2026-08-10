@@ -46,6 +46,17 @@ export function useProductCategories() {
   });
 }
 
+export function useBrands() {
+  return useQuery({
+    queryKey: ["admin", "brands"],
+    queryFn: async () => {
+      const res = await catalogService.getBrands({ active_only: false, page_size: 100 });
+      return res.brands || [];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
 export function findVendorName(
   vendorId: string,
   vendors: { id: string; name: string; company_name?: string; store_name?: string }[]

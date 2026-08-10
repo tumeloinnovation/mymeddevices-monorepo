@@ -28,6 +28,7 @@ import {
   AlertTriangle,
   ClipboardList,
   Image,
+  ShieldCheck,
   TrendingUp,
   Users,
   DollarSign,
@@ -107,7 +108,6 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
         },
         { label: 'Order Issues', href: '/vendor/order-issues', icon: AlertTriangle },
         { label: 'Disputes', href: '/vendor/disputes', icon: ClipboardList },
-        { label: 'Shipping Settings', href: '/vendor/shipping-settings', icon: Truck },
       ],
     },
     {
@@ -144,6 +144,7 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
       icon: Settings,
       items: [
         { label: 'Store Profile', href: '/vendor/settings/profile', icon: Store },
+        { label: 'Security & Password', href: '/vendor/settings/security', icon: ShieldCheck },
         { label: 'Notifications', href: '/vendor/settings/notifications', icon: Bell },
         { label: 'Support Tickets', href: '/vendor/support/tickets', icon: LifeBuoy },
       ],

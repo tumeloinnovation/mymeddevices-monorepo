@@ -1,7 +1,6 @@
 import Loading from '@/app/loading';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { Toaster } from 'sonner';
 
 import FloatingWhatsAppButton from '@/components/common/FloatingWhatsAppButton';
 import { LayoutWrapper } from '@/components/layout/LayoutWrapper';
@@ -102,7 +101,6 @@ export default function RootLayout({
               </main>
             </Suspense>
           </ErrorBoundary>
-          <Toaster />
           <FloatingWhatsAppButton />
         </Providers>
       </body>

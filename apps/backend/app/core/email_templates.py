@@ -68,6 +68,50 @@ def vendor_approved_html(company_name: str, dashboard_url: Optional[str] = None)
     )
 
 
+def vendor_rejected_html(
+    company_name: str,
+    rejection_reason: str,
+    user_name: Optional[str] = None,
+    resubmit_url: Optional[str] = None,
+    support_email: Optional[str] = None,
+) -> str:
+    return render_email_template(
+        "vendor_rejected.html",
+        {
+            "title": "Vendor Account Application Status Update",
+            "company_name": company_name,
+            "rejection_reason": rejection_reason,
+            "user_name": user_name or "Vendor Partner",
+            "resubmit_url": resubmit_url or f"{settings.SITE_URL}/vendor/onboarding",
+            "preheader": f"Action required: Your vendor account application for {company_name} was not approved.",
+        },
+    )
+
+
+def vendor_suspended_html(
+    company_name: str,
+    suspension_reason: str,
+    user_name: Optional[str] = None,
+    support_url: Optional[str] = None,
+    support_email: Optional[str] = None,
+) -> str:
+    return render_email_template(
+        "vendor_suspended.html",
+        {
+            "title": "Vendor Account Suspension Notice",
+            "company_name": company_name,
+            "suspension_reason": suspension_reason,
+            "user_name": user_name or "Vendor Partner",
+            "support_url": support_url or f"{settings.SITE_URL}/vendor/support",
+            "support_email": support_email or "compliance@mymeddevices.com",
+            "preheader": f"Urgent: Your vendor account for {company_name} has been suspended.",
+        },
+    )
+
+
+
+
+
 def vendor_order_items_html(
     order_number: str,
     order_total: str,

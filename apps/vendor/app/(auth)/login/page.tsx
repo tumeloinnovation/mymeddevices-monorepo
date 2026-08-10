@@ -14,6 +14,7 @@ import {
   Loader2, Lock, Mail, Store,
   Package, ClipboardList, Building, Phone, KeyRound, ArrowLeft
 } from 'lucide-react';
+import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '@/components/ui/input-otp';
 import { ForgotPasswordForm } from "@mymeddevices/shared-admin";
 import { useAuth } from '@/lib/hooks/use-auth';
 import AddressAutocomplete from '@/components/maps/AddressAutocomplete';
@@ -94,11 +95,7 @@ function AuthFlow({
     // CRITICAL FIX: Check for refresh token to prevent redirect loop with stale auth state
     const hasRefreshToken = typeof window !== 'undefined' && localStorage.getItem('refresh_token');
     if (isAuthenticated && mode === 'login' && !loginJustCompleted && !error && !isLoading && hasRefreshToken) {
-      if (typeof window !== 'undefined') {
-        window.location.href = redirectPath;
-      } else {
-        router.push(redirectPath);
-      }
+      router.replace(redirectPath);
     }
   }, [isAuthenticated, redirectPath, router, mode, loginJustCompleted, error, isLoading]);
 
@@ -106,18 +103,11 @@ function AuthFlow({
     e.preventDefault();
     setError('');
     setIsLoading(true);
-
     try {
       await login({ email, password });
       // Set flag to prevent useEffect from racing with our redirect
       setLoginJustCompleted(true);
-      // Small delay to ensure state updates are processed
-      await new Promise(resolve => setTimeout(resolve, 100));
-      if (typeof window !== 'undefined') {
-        window.location.href = redirectPath;
-      } else {
-        router.push(redirectPath);
-      }
+      router.replace(redirectPath);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed. Please try again.';
       setError(message);
@@ -450,35 +440,60 @@ function AuthFlow({
     return (
       <Card className="border-none shadow-none bg-transparent ring-0">
         <CardContent className="p-0 border-none">
-          <form onSubmit={handleOtpSubmit} className="space-y-5">
+          <form onSubmit={handleOtpSubmit} className="space-y-6">
             {error && (
               <Alert variant="destructive" className="py-3 rounded-xl">
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
 
-            <div className="space-y-2">
-              <Label htmlFor="otpCode" className="text-sm font-medium">Verification Code</Label>
-              <div className="relative">
-                <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground/75" />
-                <Input
-                  id="otpCode"
-                  type="text"
-                  placeholder="123456"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value)}
-                  className="pl-11 h-12 rounded-xl border-input bg-background/50 focus-visible:ring-emerald-500/20 text-center tracking-widest font-mono text-lg font-bold"
-                  required
-                  disabled={isLoading}
-                />
+            <div className="space-y-4 text-center">
+              <div className="mx-auto w-12 h-12 rounded-full bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
+                <Mail className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
               </div>
+              <div>
+                <h3 className="text-lg font-semibold text-foreground">Check Your Email</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  We sent a 6-digit verification code to
+                </p>
+                <p className="text-sm font-semibold text-foreground mt-0.5">{regEmail}</p>
+              </div>
+            </div>
+
+            <div className="flex justify-center py-2">
+              <InputOTP
+                maxLength={6}
+                value={otpCode}
+                onChange={(value) => {
+                  setOtpCode(value);
+                  if (value.length === 6 && !isLoading) {
+                    // Trigger submit when all 6 digits are entered
+                    setTimeout(() => {
+                      const form = document.querySelector('form');
+                      form?.requestSubmit();
+                    }, 50);
+                  }
+                }}
+                disabled={isLoading}
+              >
+                <InputOTPGroup>
+                  <InputOTPSlot index={0} />
+                  <InputOTPSlot index={1} />
+                  <InputOTPSlot index={2} />
+                </InputOTPGroup>
+                <InputOTPSeparator />
+                <InputOTPGroup>
+                  <InputOTPSlot index={3} />
+                  <InputOTPSlot index={4} />
+                  <InputOTPSlot index={5} />
+                </InputOTPGroup>
+              </InputOTP>
             </div>
 
             <Button
               type="submit"
               className="w-full h-12 rounded-xl text-base font-semibold shadow-lg shadow-emerald-600/25 bg-emerald-600 hover:bg-emerald-700 text-white transition-all active:scale-[0.98]"
-              disabled={isLoading}
+              disabled={isLoading || otpCode.length !== 6}
             >
               {isLoading ? (
                 <>
@@ -492,11 +507,11 @@ function AuthFlow({
             
             <button
               type="button"
-              onClick={() => setMode('login')}
+              onClick={() => setMode('register')}
               className="w-full text-sm text-emerald-600 hover:text-emerald-700 font-semibold flex items-center justify-center gap-1.5"
               disabled={isLoading}
             >
-              <ArrowLeft className="h-4 w-4" /> Back to Sign In
+              <ArrowLeft className="h-4 w-4" /> Back to Email Registration
             </button>
           </form>
         </CardContent>
@@ -601,7 +616,7 @@ export default function LoginPage() {
 
   let title = 'Welcome back';
   let desc = 'Enter your credentials to access the vendor portal';
-  let icon = <Store className="h-7 w-7 text-white" />;
+  let icon: React.ReactNode = <Store className="h-7 w-7 text-white" />;
 
   if (mode === 'register') {
     title = 'Create Vendor Account';
@@ -611,6 +626,14 @@ export default function LoginPage() {
     title = 'Verify Email';
     desc = 'Enter the 6-digit OTP code sent to your registered email';
     icon = <KeyRound className="h-7 w-7 text-white" />;
+  } else if (mode === 'profile') {
+    title = 'Complete Vendor Profile';
+    desc = 'Provide your business & store details to submit your application';
+    icon = <Building className="h-7 w-7 text-white" />;
+  } else if (mode === 'success') {
+    title = '';
+    desc = '';
+    icon = <Package className="h-7 w-7 text-white" />;
   } else if (mode === 'forgot-password') {
     title = 'Forgot password?';
     desc = "Enter your email and we'll send you instructions to reset your password.";
@@ -699,7 +722,7 @@ export default function LoginPage() {
             </Link>
           </div>
 
-          {mode !== 'forgot-password' && (
+          {mode !== 'forgot-password' && mode !== 'success' && (
             <div className="text-center lg:text-left mb-8">
               <div className="hidden lg:inline-flex items-center justify-center w-14 h-14 bg-emerald-600 rounded-2xl mb-6 shadow-lg shadow-emerald-600/25 transition-transform duration-300">
                 {icon}

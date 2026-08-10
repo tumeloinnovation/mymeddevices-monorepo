@@ -136,31 +136,21 @@ export const categoryService = {
         limit: 50,
       });
 
-      if (productsResponse.items.length === 0) {
-        return null;
-      }
-
-      // Extract category info from first product
-      const firstProduct = productsResponse.items[0];
-      const categoryValue = firstProduct.category || this.extractCategoryFromProduct(firstProduct);
-
-      if (!categoryValue) {
-        return null;
-      }
-
+      // If no category found in db, construct fallback intent category object
+      const formattedName = this.formatCategoryName(slug);
       return {
-        id: categoryValue,
-        name: this.formatCategoryName(categoryValue),
+        id: slug,
+        name: formattedName,
         slug: slug,
-        description: `Browse our ${this.formatCategoryName(categoryValue)} collection`,
+        description: `Browse our ${formattedName} medical equipment and healthcare supplies.`,
         parent_id: '0',
         image_url: null,
-        product_count: productsResponse.total,
+        product_count: productsResponse.total || 0,
         parent: 0,
         display: 'default',
         image: null,
-        count: productsResponse.total,
-        products: productsResponse.items,
+        count: productsResponse.total || 0,
+        products: productsResponse.items || [],
       };
     } catch (error) {
       console.error(`Failed to fetch category ${slug}:`, error);

@@ -71,6 +71,7 @@ import {
   useProduct,
   useProductCompleteness,
   useProductCategories,
+  useBrands,
   useProductMutations,
   useImageMutations,
   useAIGenerate,
@@ -156,8 +157,12 @@ const productSchema = z.object({
   brand: z.string().default(""),
   model_number: z.string().default(""),
   price: z.coerce.number().optional(),
-  cost_price: z.coerce.number().optional(),
-  base_price: z.coerce.number().optional(),
+  regular_price: z.coerce.number().optional(),
+  sale_price: z.coerce.number().optional(),
+  wholesale_price: z.coerce.number().optional(),
+  vendor_payout: z.coerce.number().optional(),
+  markup_price: z.coerce.number().optional(),
+  commission_fee: z.coerce.number().optional(),
   stock_quantity: z.coerce.number().default(0),
   low_stock_threshold: z.coerce.number().default(5),
   track_inventory: z.boolean().default(true),
@@ -186,8 +191,12 @@ function productToFormValues(p: Product): ProductFormValues {
     brand: p.brand || "",
     model_number: p.model_number || "",
     price: p.price ?? undefined,
-    cost_price: p.cost_price ?? undefined,
-    base_price: p.base_price ?? undefined,
+    regular_price: p.regular_price ?? undefined,
+    sale_price: p.sale_price ?? undefined,
+    wholesale_price: p.wholesale_price ?? undefined,
+    vendor_payout: p.vendor_payout ?? undefined,
+    markup_price: p.markup_price ?? undefined,
+    commission_fee: p.commission_fee ?? undefined,
     stock_quantity: p.stock_quantity ?? 0,
     low_stock_threshold: p.low_stock_threshold ?? 5,
     track_inventory: p.track_inventory ?? true,
@@ -230,8 +239,12 @@ function formValuesToPayload(values: ProductFormValues): Partial<Product> {
     brand: values.brand || undefined,
     model_number: values.model_number || undefined,
     price: toOptionalNumber(values.price),
-    cost_price: toOptionalNumber(values.cost_price),
-    base_price: toOptionalNumber(values.base_price),
+    regular_price: toOptionalNumber(values.regular_price),
+    sale_price: toOptionalNumber(values.sale_price),
+    wholesale_price: toOptionalNumber(values.wholesale_price),
+    vendor_payout: toOptionalNumber(values.vendor_payout),
+    markup_price: toOptionalNumber(values.markup_price),
+    commission_fee: toOptionalNumber(values.commission_fee),
     currency: "KES",
     stock_quantity: values.stock_quantity !== undefined ? Number(values.stock_quantity) : 0,
     low_stock_threshold: values.low_stock_threshold !== undefined ? Number(values.low_stock_threshold) : 5,
@@ -272,8 +285,15 @@ export default function ProductDetailPage() {
   const { data: product, isLoading, error } = useProduct(productId);
   const { data: completeness } = useProductCompleteness(productId);
   const { data: categories = [] } = useProductCategories();
+  const { data: brands = [] } = useBrands();
   const { data: vendors = [] } = useVendorsOverview();
   const mutations = useProductMutations(productId);
+
+  const brandDisplayName = useMemo(() => {
+    if (!product?.brand) return undefined;
+    const match = brands.find((b) => b.id === product.brand || b.name === product.brand);
+    return match?.name || product.brand;
+  }, [product?.brand, brands]);
   const imageMutations = useImageMutations(productId);
   const aiGen = useAIGenerate(productId);
   const aiValidate = useAIValidate(productId);
@@ -367,17 +387,17 @@ export default function ProductDetailPage() {
 
   // Live Margins calculation
   const watchedPrice = form.watch("price") || 0;
-  const watchedBasePrice = form.watch("base_price") || 0;
-  const watchedCostPrice = form.watch("cost_price") || 0;
+  const watchedWholesalePrice = form.watch("wholesale_price") || 0;
+  const watchedVendorPayout = form.watch("vendor_payout") || 0;
 
-  const markupAmount = watchedPrice > watchedBasePrice ? watchedPrice - watchedBasePrice : 0;
-  const markupPercent = watchedBasePrice > 0 ? (markupAmount / watchedBasePrice) * 100 : 0;
+  const markupAmount = watchedPrice > watchedWholesalePrice ? watchedPrice - watchedWholesalePrice : 0;
+  const markupPercent = watchedWholesalePrice > 0 ? (markupAmount / watchedWholesalePrice) * 100 : 0;
 
-  const vendorMarginAmount = watchedBasePrice > watchedCostPrice ? watchedBasePrice - watchedCostPrice : 0;
-  const vendorMarginPercent = watchedBasePrice > 0 ? (vendorMarginAmount / watchedBasePrice) * 100 : 0;
+  const vendorMarginAmount = watchedWholesalePrice > watchedVendorPayout ? watchedWholesalePrice - watchedVendorPayout : 0;
+  const vendorMarginPercent = watchedWholesalePrice > 0 ? (vendorMarginAmount / watchedWholesalePrice) * 100 : 0;
 
-  const totalMarkupAmount = watchedPrice > watchedCostPrice ? watchedPrice - watchedCostPrice : 0;
-  const totalMarkupPercent = watchedCostPrice > 0 ? (totalMarkupAmount / watchedCostPrice) * 100 : 0;
+  const totalMarkupAmount = watchedPrice > watchedVendorPayout ? watchedPrice - watchedVendorPayout : 0;
+  const totalMarkupPercent = watchedVendorPayout > 0 ? (totalMarkupAmount / watchedVendorPayout) * 100 : 0;
 
   // SEO progress calculations
   const watchedMetaTitle = form.watch("meta_title") || "";
@@ -747,7 +767,7 @@ export default function ProductDetailPage() {
                       <Field
                         label="Brand (Manufacturer)"
                         editing={isEditing}
-                        view={<BrandView name={product.brand} />}
+                        view={<BrandView name={brandDisplayName} />}
                       >
                         <Input
                           {...form.register("brand")}
@@ -852,13 +872,13 @@ export default function ProductDetailPage() {
                           />
                         </Field>
                         <Field
-                          label="Base wholesale Price (KES)"
+                          label="Wholesale Price (KES)"
                           editing={isEditing}
-                          view={<PriceView value={product.base_price} currency={product.currency} />}
+                          view={<PriceView value={product.wholesale_price} currency={product.currency} />}
                         >
                           <Input
                             type="number"
-                            {...form.register("base_price")}
+                            {...form.register("wholesale_price")}
                             className="h-10 text-sm focus-visible:ring-primary"
                           />
                         </Field>
@@ -866,12 +886,12 @@ export default function ProductDetailPage() {
 
                       <div className="grid grid-cols-2 gap-4">
                         <Field
-                          label="Vendor Cost Price (KES)"
+                          label="Vendor Payout (KES)"
                           editing={isEditing}
                           view={
-                            product.cost_price ? (
+                            product.vendor_payout ? (
                               <p className="text-base font-bold text-foreground">
-                                {formatCurrency(product.cost_price, product.currency)}
+                                {formatCurrency(product.vendor_payout, product.currency)}
                               </p>
                             ) : (
                               <TextView>—</TextView>
@@ -880,7 +900,7 @@ export default function ProductDetailPage() {
                         >
                           <Input
                             type="number"
-                            {...form.register("cost_price")}
+                            {...form.register("vendor_payout")}
                             className="h-10 text-sm focus-visible:ring-primary"
                           />
                         </Field>

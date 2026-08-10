@@ -11,16 +11,17 @@ import { useAuthStore, useCheckoutAuthStore } from '@mymeddevices/shared-core';
 import { toast } from 'sonner';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import { cn, srOnly } from '../../lib/utils';
-import { AuthHeader } from './common/AuthHeader';
 import { ProgressIndicator, Step } from './common/ProgressIndicator';
 import { EmailStep } from './steps/EmailStep';
 import { OTPStep } from './steps/OTPStep';
 import { ProfileStep } from './steps/ProfileStep';
 import { LoginStep } from './steps/LoginStep';
+import { PasswordStep } from './steps/PasswordStep';
 import { validatePassword } from '../../lib/utils/password-validator';
 import { getButtonClass } from './auth-theme';
 
-type AuthMode = 'login' | 'register';
+type AuthMode = 'login' | 'register' | 'forgot-password';
+type ForgotPasswordStep = 'email' | 'otp' | 'password' | 'success';
 type AuthContext = 'modal' | 'checkout';
 type RegistrationStep = 'email' | 'otp' | 'profile' | 'success' | 'complete';
 type LoginStep = 'email' | 'login';
@@ -337,11 +338,84 @@ export function CustomerAuthModal({
     setError(null);
   };
 
-  // Forgot password handler
+  // Forgot Password flow state
+  const [forgotPasswordStep, setForgotPasswordStep] = useState<ForgotPasswordStep>('email');
+
+  // Forgot password step 1: Send OTP code
+  const handleForgotPasswordEmailSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await authStore.forgotPassword(email.trim());
+      setForgotPasswordStep('otp');
+      toast.success('Verification code sent to your email');
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to send reset code.';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Forgot password step 2: Verify OTP format and proceed
+  const handleForgotPasswordOTPSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!otp || otp.length !== 6) {
+      setError('Please enter a valid 6-digit code');
+      return;
+    }
+
+    setForgotPasswordStep('password');
+  };
+
+  // Forgot password step 3: Reset password
+  const handleForgotPasswordResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+
+    if (!passwordValidation.valid) {
+      setError(passwordValidation.errors.join('. '));
+      setIsLoading(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      await authStore.resetPassword(otp, password, email.trim());
+      setForgotPasswordStep('success');
+      toast.success('Password reset successfully!');
+      setTimeout(() => {
+        setInternalMode('login');
+        setForgotPasswordStep('email');
+        setPassword('');
+        setConfirmPassword('');
+        setOtp('');
+      }, 1800);
+    } catch (err: any) {
+      const msg = err?.response?.data?.detail || err?.message || 'Failed to reset password. Code may be invalid or expired.';
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Forgot password trigger from login screen
   const handleForgotPassword = () => {
-    // For now, just close modal and navigate to reset-password page
-    onOpenChange(false);
-    window.location.href = '/reset-password';
+    setInternalMode('forgot-password');
+    setForgotPasswordStep('email');
+    setError(null);
   };
 
   // Loading state while hydrating
@@ -383,7 +457,7 @@ export function CustomerAuthModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md p-0 overflow-hidden border-none shadow-2xl">
+      <DialogContent className="w-[92vw] max-w-[440px] sm:max-w-[460px] p-0 overflow-hidden border border-border/60 shadow-2xl rounded-3xl bg-background">
         <DialogTitle className={srOnly()}>
           {headerContent.title}
         </DialogTitle>
@@ -391,43 +465,38 @@ export function CustomerAuthModal({
           {headerContent.description}
         </DialogDescription>
 
-        <div className="flex flex-col h-full max-h-[90vh]">
-          {/* Header */}
-          <AuthHeader
-            title={headerContent.title}
-            description={headerContent.description}
-            showLogo={context === 'modal'}
-          />
-
+        <div className="flex flex-col h-full max-h-[85vh] sm:max-h-[90vh]">
           {/* Progress indicator for checkout */}
           {context === 'checkout' && mode === 'register' && (
-            <div className="px-8 pt-6">
+            <div className="px-6 sm:px-8 pt-6">
               <ProgressIndicator steps={updateProgressSteps()} />
             </div>
           )}
 
           {/* Content Area */}
-          <div className="flex-1 overflow-y-auto p-8 bg-background">
+          <div className="flex-1 overflow-y-auto p-5 sm:p-7 bg-background">
             {/* Mode switcher for modal context */}
-            {context === 'modal' && registrationStep === 'email' && loginStep === 'email' && (
-              <div className="flex p-1 bg-muted rounded-xl mb-6">
+            {context === 'modal' && (mode === 'login' || (mode === 'register' && registrationStep === 'email')) && (
+              <div className="flex p-1 bg-muted/60 dark:bg-muted/30 rounded-2xl border border-border/40 mb-5">
                 <button
+                  type="button"
                   onClick={switchToLogin}
                   className={cn(
-                    'flex-1 py-2 text-sm font-medium rounded-lg transition-all',
+                    'flex-1 py-2.5 text-xs font-bold rounded-xl transition-all duration-200',
                     mode === 'login'
-                      ? 'bg-background shadow-sm text-orange-600'
+                      ? 'bg-[#e0752b] shadow-xs text-white font-bold'
                       : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   Login
                 </button>
                 <button
+                  type="button"
                   onClick={switchToRegister}
                   className={cn(
-                    'flex-1 py-2 text-sm font-medium rounded-lg transition-all',
+                    'flex-1 py-2.5 text-xs font-bold rounded-xl transition-all duration-200',
                     mode === 'register'
-                      ? 'bg-background shadow-sm text-orange-600'
+                      ? 'bg-[#e0752b] shadow-xs text-white font-bold'
                       : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
@@ -438,39 +507,18 @@ export function CustomerAuthModal({
 
             {/* Login Mode */}
             {mode === 'login' && (
-              <>
-                {loginStep === 'email' && (
-                  <EmailStep
-                    email={email}
-                    setEmail={setEmail}
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      setLoginStep('login');
-                    }}
-                    isLoading={isLoading}
-                    error={error}
-                    submitLabel="Continue"
-                    description="Enter your email to continue"
-                    showUserTypeToggle={false}
-                    showLoginLink={false}
-                    showGuestOption={false}
-                  />
-                )}
-                {loginStep === 'login' && (
-                  <LoginStep
-                    email={email}
-                    setEmail={setEmail}
-                    password={password}
-                    setPassword={setPassword}
-                    onSubmit={handleLogin}
-                    isLoading={isLoading}
-                    error={error}
-                    onForgotPassword={handleForgotPassword}
-                    showForgotPassword={true}
-                    submitLabel="Login to Account"
-                  />
-                )}
-              </>
+              <LoginStep
+                email={email}
+                setEmail={setEmail}
+                password={password}
+                setPassword={setPassword}
+                onSubmit={handleLogin}
+                isLoading={isLoading}
+                error={error}
+                onForgotPassword={handleForgotPassword}
+                showForgotPassword={true}
+                submitLabel="Login to Account"
+              />
             )}
 
             {/* Register Mode */}
@@ -562,6 +610,81 @@ export function CustomerAuthModal({
                         {context === 'checkout'
                           ? 'Redirecting you to checkout...'
                           : 'Welcome to MyMedDevices!'}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* Forgot Password Mode */}
+            {mode === 'forgot-password' && (
+              <>
+                {forgotPasswordStep === 'email' && (
+                  <div className="space-y-4">
+                    <EmailStep
+                      email={email}
+                      setEmail={setEmail}
+                      onSubmit={handleForgotPasswordEmailSubmit}
+                      isLoading={isLoading}
+                      error={error}
+                      submitLabel="Send Reset Code"
+                      description="Enter your registered email address to receive a verification code"
+                      showUserTypeToggle={false}
+                      showLoginLink={false}
+                      showGuestOption={false}
+                    />
+                    <button
+                      type="button"
+                      onClick={switchToLogin}
+                      className="w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors pt-2"
+                    >
+                      ← Back to Login
+                    </button>
+                  </div>
+                )}
+
+                {forgotPasswordStep === 'otp' && (
+                  <OTPStep
+                    email={email}
+                    otp={otp}
+                    setOtp={setOtp}
+                    onSubmit={handleForgotPasswordOTPSubmit}
+                    onResend={async () => {
+                      await authStore.forgotPassword(email.trim());
+                      toast.success('Verification code resent!');
+                    }}
+                    onChangeEmail={() => setForgotPasswordStep('email')}
+                    isLoading={isLoading}
+                    error={error}
+                  />
+                )}
+
+                {forgotPasswordStep === 'password' && (
+                  <PasswordStep
+                    password={password}
+                    setPassword={setPassword}
+                    confirmPassword={confirmPassword}
+                    setConfirmPassword={setConfirmPassword}
+                    onSubmit={handleForgotPasswordResetSubmit}
+                    isLoading={isLoading}
+                    error={error}
+                    submitLabel="Reset Password"
+                    showConfirmPassword={true}
+                    passwordValidation={passwordValidation}
+                    description="Enter and confirm your new password below"
+                  />
+                )}
+
+                {forgotPasswordStep === 'success' && (
+                  <div className="text-center py-8 space-y-4">
+                    <div className="mx-auto w-16 h-16 bg-emerald-100 dark:bg-emerald-950/40 rounded-full flex items-center justify-center">
+                      <CheckCircle2 className="w-10 h-10 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold tracking-tight">Password Reset!</h3>
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        Your password has been updated successfully. Returning to login...
                       </p>
                     </div>
                   </div>

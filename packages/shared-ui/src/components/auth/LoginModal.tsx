@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { InputOTP, InputOTPGroup, InputOTPSeparator, InputOTPSlot } from '../ui/input-otp';
 import { useAuthStore } from '@mymeddevices/shared-core';
 import { SetEmailModal } from './SetEmailModal';
 import { toast } from 'sonner';
@@ -377,14 +378,34 @@ export function LoginModal({ open, onOpenChange }: LoginModalProps) {
                                                 We sent a code to <span className="text-foreground font-medium">{registerEmail}</span>
                                             </p>
                                             <div className="space-y-4 pt-2">
-                                                <Input
-                                                    type="text"
-                                                    placeholder="Enter 6-digit code"
-                                                    value={otp}
-                                                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                                    className="h-12 text-center text-2xl tracking-[0.5em] font-bold"
-                                                    required
-                                                />
+                                                <div className="flex justify-center py-2">
+                                                    <InputOTP
+                                                        maxLength={6}
+                                                        value={otp}
+                                                        onChange={(val) => {
+                                                            setOtp(val);
+                                                            if (val.length === 6 && !isLoading) {
+                                                                setTimeout(() => {
+                                                                    const form = document.querySelector('form');
+                                                                    form?.requestSubmit();
+                                                                }, 50);
+                                                            }
+                                                        }}
+                                                        disabled={isLoading}
+                                                    >
+                                                        <InputOTPGroup>
+                                                            <InputOTPSlot index={0} />
+                                                            <InputOTPSlot index={1} />
+                                                            <InputOTPSlot index={2} />
+                                                        </InputOTPGroup>
+                                                        <InputOTPSeparator />
+                                                        <InputOTPGroup>
+                                                            <InputOTPSlot index={3} />
+                                                            <InputOTPSlot index={4} />
+                                                            <InputOTPSlot index={5} />
+                                                        </InputOTPGroup>
+                                                    </InputOTP>
+                                                </div>
                                                 <Button type="submit" className="w-full h-11 font-semibold" disabled={isLoading || otp.length !== 6}>
                                                     {isLoading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Verify Code'}
                                                 </Button>

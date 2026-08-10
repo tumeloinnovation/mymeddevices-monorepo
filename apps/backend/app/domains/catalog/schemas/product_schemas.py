@@ -54,6 +54,8 @@ class ProductCreate(BaseModel):
 
     # Pricing
     base_price: Optional[float] = Field(None, ge=0)
+    markup_price: Optional[float] = Field(None, ge=0)
+    commission_fee: Optional[float] = Field(None, ge=0)
     price: Optional[float] = Field(None, ge=0)
     cost_price: Optional[float] = Field(None, ge=0)
     currency: str = "KES"
@@ -95,6 +97,8 @@ class ProductUpdate(BaseModel):
 
     # Pricing
     base_price: Optional[float] = Field(None, ge=0)
+    markup_price: Optional[float] = Field(None, ge=0)
+    commission_fee: Optional[float] = Field(None, ge=0)
     price: Optional[float] = Field(None, ge=0)
     cost_price: Optional[float] = Field(None, ge=0)
     currency: Optional[str] = None

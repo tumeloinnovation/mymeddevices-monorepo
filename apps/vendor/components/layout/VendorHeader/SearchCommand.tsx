@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Package, ShoppingCart, Users, Command } from 'lucide-react';
+import { Search, Package, ShoppingCart, Users, Command, ShieldCheck } from 'lucide-react';
 import {
   CommandDialog,
   CommandEmpty,
@@ -73,6 +73,10 @@ export function SearchCommand() {
               <Users className="mr-2 h-4 w-4" />
               <span>Profile</span>
               <CommandShortcut>⌘P</CommandShortcut>
+            </CommandItem>
+            <CommandItem onSelect={() => runCommand(() => router.push('/vendor/settings/security'))}>
+              <ShieldCheck className="mr-2 h-4 w-4" />
+              <span>Security & Password</span>
             </CommandItem>
             <CommandItem onSelect={() => runCommand(() => router.push('/vendor/settings/notifications'))}>
               <Command className="mr-2 h-4 w-4" />

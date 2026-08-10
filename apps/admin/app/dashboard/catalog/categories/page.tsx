@@ -405,7 +405,7 @@ export default function CategoriesPage() {
       ) : (
         <div className="border rounded-lg overflow-hidden">
           {/* Header */}
-          <div className="h-[34px] bg-muted/30 border-b flex items-center px-4">
+          <div className="h-[36px] bg-background border-b flex items-center px-4">
             <div className="w-6" />
             <div className="flex-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               Category
@@ -543,7 +543,7 @@ export default function CategoriesPage() {
             </div>
 
             {/* Footer */}
-            <div className="p-5 border-t flex items-center justify-end gap-3 bg-muted/20">
+            <div className="p-5 border-t flex items-center justify-end gap-3 bg-background">
               <Button
                 type="button"
                 variant="ghost"
@@ -618,8 +618,8 @@ function FilterChip({
       onClick={onClick}
       className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${
         active
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted/50 text-muted-foreground hover:bg-muted"
+          ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+          : "border border-border/60 bg-background text-muted-foreground hover:bg-accent hover:text-accent-foreground"
       }`}
     >
       {children}
@@ -651,7 +651,7 @@ function CategoryRow({
 
   return (
     <div
-      className={`h-[36px] border-b last:border-0 flex items-center hover:bg-muted/30 transition-colors ${
+      className={`h-[36px] border-b last:border-0 flex items-center hover:bg-accent/40 transition-colors ${
         !category.is_active ? "opacity-50" : ""
       }`}
     >
@@ -663,7 +663,7 @@ function CategoryRow({
         {hasChildren ? (
           <button
             onClick={onToggleExpanded}
-            className="p-0.5 hover:bg-muted rounded text-muted-foreground hover:text-foreground transition-colors"
+            className="p-0.5 hover:bg-accent rounded text-muted-foreground hover:text-foreground transition-colors"
           >
             {isExpanded ? (
               <ChevronDown className="h-3.5 w-3.5" />
@@ -680,7 +680,7 @@ function CategoryRow({
       <div className="flex-1 flex items-center gap-2 min-w-0">
         <div
           className={`h-5 w-5 rounded flex items-center justify-center shrink-0 ${
-            category.is_active ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+            category.is_active ? "bg-primary/10 text-primary" : "border border-border/60 text-muted-foreground"
           }`}
         >
           {level === 0 ? (
@@ -730,7 +730,7 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
         isActive
           ? "bg-success/15 text-success border border-success/20"
-          : "bg-muted text-muted-foreground"
+          : "border border-border/60 text-muted-foreground"
       }`}
     >
       {isActive ? "Active" : "Inactive"}
@@ -779,11 +779,11 @@ function RowActions({
 function TreeSkeleton() {
   return (
     <div className="border rounded-lg overflow-hidden">
-      <div className="h-[34px] bg-muted/30 border-b" />
+      <div className="h-[36px] bg-background border-b" />
       {Array.from({ length: 10 }).map((_, i) => (
         <div
           key={i}
-          className="h-[36px] border-b last:border-0 animate-pulse bg-muted/20"
+          className="h-[36px] border-b last:border-0 animate-pulse bg-accent/20"
           style={{ paddingLeft: `${(i % 3) * 20 + 12}px` }}
         />
       ))}

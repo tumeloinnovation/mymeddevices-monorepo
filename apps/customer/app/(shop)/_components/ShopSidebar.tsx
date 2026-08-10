@@ -41,8 +41,13 @@ export default function ShopSidebar({ categories, categoriesLoading }: ShopSideb
 
   return (
     <aside className="space-y-8">
-      {/* Category Section */}
+      {/* Price Range Filter */}
       <div>
+        <PriceRangeFilter />
+      </div>
+
+      {/* Category Section */}
+      <div className="pt-8 border-t border-border">
         <h3 className="text-sm font-semibold mb-4 text-foreground">Categories</h3>
         {categoriesLoading ? (
           <LoadingState
@@ -76,12 +81,6 @@ export default function ShopSidebar({ categories, categoriesLoading }: ShopSideb
             ))}
           </div>
         )}
-      </div>
-
-      {/* Price Range Filter */}
-      <div className="pt-8 border-t border-border">
-        {/* These components will also use the context hook internally */}
-        <PriceRangeFilter />
       </div>
 
       {/* Other Filters */}

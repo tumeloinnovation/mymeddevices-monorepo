@@ -1,4 +1,4 @@
-import { OrdersList } from '../../_components/OrdersList';
+import { OrdersList } from '../_components/OrdersList';
 import { Clock } from 'lucide-react';
 
 export default function PendingOrdersPage() {

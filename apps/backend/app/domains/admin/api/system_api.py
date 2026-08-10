@@ -118,3 +118,43 @@ async def update_shipping_settings(settings_in: dict, db: AsyncSession = Depends
     )
     return success_response(settings_in)
 
+
+@router.get("/auth-settings", dependencies=[Depends(require_role("admin"))])
+async def get_auth_settings(db: AsyncSession = Depends(get_db)):
+    """
+    Get current security and token expiration settings.
+    """
+    auth_settings = await SystemSettingService.get_setting(db, "auth_settings")
+    if not auth_settings:
+        auth_settings = {
+            "refresh_token_expire_days": settings.REFRESH_TOKEN_EXPIRE_DAYS,
+            "access_token_expire_minutes": settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+            "auto_reload_on_expiry_trigger": False,
+        }
+    return success_response(auth_settings)
+
+
+@router.put("/auth-settings", dependencies=[Depends(require_role("admin"))])
+async def update_auth_settings(settings_in: dict, db: AsyncSession = Depends(get_db)):
+    """
+    Update authentication & token expiration settings.
+    Expected format: {"refresh_token_expire_days": 30, "access_token_expire_minutes": 30, "auto_reload_on_expiry_trigger": false}
+    """
+    if "refresh_token_expire_days" in settings_in:
+        try:
+            settings_in["refresh_token_expire_days"] = int(settings_in["refresh_token_expire_days"])
+        except (ValueError, TypeError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="refresh_token_expire_days must be an integer"
+            )
+
+    await SystemSettingService.set_setting(
+        db,
+        "auth_settings",
+        settings_in,
+        "Authentication & Security Settings: refresh_token_expire_days, access_token_expire_minutes, auto_reload_on_expiry_trigger"
+    )
+    return success_response(settings_in)
+
+

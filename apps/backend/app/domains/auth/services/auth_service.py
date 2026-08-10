@@ -372,8 +372,16 @@ class AuthService:
             )
             user = result.scalar_one()
 
-        # Determine token expiry based on remember_me preference
-        token_expiry_days = 30 if remember_me else security_settings.REFRESH_TOKEN_EXPIRE_DAYS
+        # Determine token expiry based on remember_me preference or dynamic SystemSetting
+        if remember_me:
+            token_expiry_days = 30
+        else:
+            from app.domains.admin.services import SystemSettingService
+            auth_settings = await SystemSettingService.get_setting(self.db, "auth_settings")
+            if auth_settings and isinstance(auth_settings, dict) and "refresh_token_expire_days" in auth_settings:
+                token_expiry_days = int(auth_settings["refresh_token_expire_days"])
+            else:
+                token_expiry_days = security_settings.REFRESH_TOKEN_EXPIRE_DAYS
 
         # Create new Refresh Token (token rotation)
         refresh_token_str = secrets.token_urlsafe(32)

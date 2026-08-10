@@ -9,6 +9,8 @@ from app.domains.auth.models.user import User
 from app.core.logging import logger
 from app.domains.vendor.repositories.vendor_repository import VendorProfileRepository
 from app.core.mail import send_email
+from app.core.config import settings
+
 
 class VendorService:
     """Service for managing vendor profiles and approvals"""
@@ -227,16 +229,20 @@ class VendorService:
         result = await self.db.execute(select(User).where(User.id == profile.user_id))
         user = result.scalar_one_or_none()
         if user:
-            from app.core.email_templates import vendor_notification_html
-            html = vendor_notification_html(
-                "Vendor Account Rejected",
-                f"Your vendor account application for <strong>{profile.company_name}</strong> was not approved.",
-                detail=f"Reason: {reason}",
+            from app.core.email_templates import vendor_rejected_html
+            user_name = f"{user.first_name} {user.last_name}".strip() if (user.first_name or user.last_name) else "Vendor Partner"
+            company = profile.company_name or profile.store_name or "your company"
+            html = vendor_rejected_html(
+                company_name=company,
+                rejection_reason=reason,
+                user_name=user_name,
+                resubmit_url=f"{settings.SITE_URL}/vendor/onboarding",
+                support_email="compliance@mymeddevices.com",
             )
             await send_email(
                 user.email,
-                "Your Vendor Account has been Rejected",
-                f"Your vendor account application for {profile.company_name} was rejected. Reason: {reason}",
+                f"Action Required: Vendor Account Application Update for {company}",
+                f"Your vendor account application for {company} was not approved. Reason: {reason}",
                 html,
             )
         else:
@@ -270,16 +276,20 @@ class VendorService:
         result = await self.db.execute(select(User).where(User.id == profile.user_id))
         user = result.scalar_one_or_none()
         if user:
-            from app.core.email_templates import vendor_notification_html
-            html = vendor_notification_html(
-                "Vendor Account Suspended",
-                f"Your vendor account for <strong>{profile.company_name}</strong> has been suspended.",
-                detail=f"Reason: {reason}",
+            from app.core.email_templates import vendor_suspended_html
+            user_name = f"{user.first_name} {user.last_name}".strip() if (user.first_name or user.last_name) else "Vendor Partner"
+            company = profile.company_name or profile.store_name or "your company"
+            html = vendor_suspended_html(
+                company_name=company,
+                suspension_reason=reason,
+                user_name=user_name,
+                support_url=f"{settings.SITE_URL}/vendor/support",
+                support_email="compliance@mymeddevices.com",
             )
             await send_email(
                 user.email,
-                "Your Vendor Account has been Suspended",
-                f"Your vendor account for {profile.company_name} has been suspended. Reason: {reason}",
+                f"Urgent: Vendor Account Suspension Notice for {company}",
+                f"Your vendor account for {company} has been suspended. Reason: {reason}",
                 html,
             )
         else:

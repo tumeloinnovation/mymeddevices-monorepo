@@ -47,6 +47,8 @@ const getSortParams = (
   }
 };
 
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+
 interface ShopPageProps {
   products: Product[];
   categories: Category[];
@@ -63,24 +65,42 @@ export default function ShopPage({
   isLoading = false,
 }: ShopPageProps) {
   const { filters, setFilter, clearFilters } = useShopFilters();
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Sync URL search parameters (min_price, max_price, category, etc.)
+  const minPriceParam = searchParams.get("min_price");
+  const maxPriceParam = searchParams.get("max_price");
+  const categoryParam = searchParams.get("category");
+
+  const effectiveMinPrice = minPriceParam !== null ? parseFloat(minPriceParam) : filters.priceRange[0];
+  const effectiveMaxPrice = maxPriceParam !== null ? parseFloat(maxPriceParam) : filters.priceRange[1];
+  const effectiveCategory = categoryParam || filters.selectedCategory || initialSelectedCategory;
+
+  const handleResetFilters = useCallback(() => {
+    clearFilters();
+    if (searchParams.toString()) {
+      router.push(pathname);
+    }
+  }, [clearFilters, searchParams, router, pathname]);
 
   // Build category tree
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
 
   // Find selected category data
   const selectedCategoryData = useMemo(() => {
-    const cat = filters.selectedCategory ?? initialSelectedCategory;
-    if (!cat) return null;
-    return categories.find((c) => c.slug === cat) ?? null;
-  }, [filters.selectedCategory, initialSelectedCategory, categories]);
+    if (!effectiveCategory) return null;
+    return categories.find((c) => c.slug === effectiveCategory) ?? null;
+  }, [effectiveCategory, categories]);
 
   // Apply all filters client-side
   const { orderby, order } = getSortParams(filters.sortOrder);
   const filteredProducts = useMemo(() => {
     const filtered = filterProducts(products, {
-      category: filters.selectedCategory ?? initialSelectedCategory,
-      min_price: filters.priceRange[0],
-      max_price: filters.priceRange[1],
+      category: effectiveCategory,
+      min_price: effectiveMinPrice,
+      max_price: effectiveMaxPrice,
       on_sale: filters.onSaleOnly || undefined,
       stock_status:
         filters.stockStatus === "any" ? undefined : filters.stockStatus,
@@ -88,7 +108,7 @@ export default function ShopPage({
       status: "publish",
     });
     return sortProducts(filtered, orderby, order);
-  }, [products, filters, initialSelectedCategory, orderby, order]);
+  }, [products, filters, effectiveCategory, effectiveMinPrice, effectiveMaxPrice, orderby, order]);
 
   return (
     <div className="min-h-[calc(100vh-120px)] py-6">
@@ -106,27 +126,6 @@ export default function ShopPage({
           </>
         ) : (
           <>
-            {/* Category header */}
-            {selectedCategoryData ? (
-              <div className="mb-8 p-6 sm:p-8 rounded-lg bg-card border border-border">
-                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
-                  {selectedCategoryData.name}
-                </h1>
-                {selectedCategoryData.description && (
-                  <div
-                    className="mt-3 text-base text-muted-foreground prose prose-sm dark:prose-invert max-w-none"
-                    dangerouslySetInnerHTML={{ __html: selectedCategoryData.description }}
-                  />
-                )}
-              </div>
-            ) : title ? (
-              <div className="mb-8">
-                <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-foreground">
-                  {title}
-                </h1>
-              </div>
-            ) : null}
-
             <div className="grid grid-cols-12 gap-6">
               {/* Sidebar */}
               <aside className="hidden md:block md:col-span-3">
@@ -140,12 +139,20 @@ export default function ShopPage({
                   sortOrder={filters.sortOrder}
                   onSortChange={(value) => setFilter("sortOrder", value)}
                   productCount={filteredProducts.length}
+                  selectedCategoryName={selectedCategoryData?.name}
+                  onClearCategory={() => {
+                    setFilter("selectedCategory", undefined);
+                    if (searchParams.get("category")) {
+                      router.push(pathname);
+                    }
+                  }}
                 />
                 <ProductGrid
                   products={filteredProducts}
                   hasMore={false}
                   loadMore={() => {}}
                   isLoading={false}
+                  onClearFilters={handleResetFilters}
                 />
               </main>
             </div>

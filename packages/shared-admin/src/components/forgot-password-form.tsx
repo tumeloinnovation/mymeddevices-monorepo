@@ -212,12 +212,6 @@ export function ForgotPasswordForm({ theme = "admin", onBackToLogin }: ForgotPas
             </Link>
           )}
         </div>
-
-        <div className="mt-12 text-center">
-          <p className="text-xs text-slate-450 leading-relaxed">
-            &copy; {new Date().getFullYear()} MyMedDevices. All rights reserved.
-          </p>
-        </div>
       </div>
     </div>
   )

@@ -1,7 +1,6 @@
 import Loading from '@/app/loading';
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
-import { Toaster } from 'sonner';
 import Providers from '@/providers';
 import './globals.css';
 
@@ -31,7 +30,6 @@ export default function RootLayout({
               {children}
             </main>
           </Suspense>
-          <Toaster />
         </Providers>
       </body>
     </html>

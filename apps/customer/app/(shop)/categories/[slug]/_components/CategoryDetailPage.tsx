@@ -14,9 +14,10 @@ const CategoryDetailPage: React.FC<CategoryDetailPageProps> = ({ slug }) => {
   const { data: category, isLoading: categoryLoading, isError: categoryError } = useCategoryBySlug(slug);
   const { data: products, isLoading: productsLoading, isError: productsError } = useCategoryProducts(slug);
 
-  // Redirect to 404 if category doesn't exist (client-side handling)
+  // Handle fallback if category slug is intent-based or custom
   useEffect(() => {
-    if (!categoryLoading && !category && !categoryError) {
+    // Only redirect if both loading finished, category is missing, AND error is present
+    if (!categoryLoading && !category && categoryError) {
       router.replace("/404");
     }
   }, [category, categoryLoading, categoryError, router]);

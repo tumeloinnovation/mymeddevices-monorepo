@@ -156,8 +156,8 @@ export const WhyUs = () => {
         <div className="relative flex items-center justify-center">
           <div className="relative h-72 w-full max-w-md overflow-hidden rounded-2xl shadow-xl ring-1 ring-border/20 md:h-96 lg:h-[420px]">
             <Image
-              src="/images/kenyan-family-care.png"
-              alt="An adult daughter in a Kenyan setting helping her elderly father check his blood pressure at home."
+              src="/images/hero-care-devices.jpg"
+              alt="Kenyan healthcare professional helping an elderly patient test a digital blood pressure monitor at home"
               fill
               sizes="(max-width: 640px) 100vw, (max-width: 1280px) 50vw, 420px"
               className="object-cover object-center"

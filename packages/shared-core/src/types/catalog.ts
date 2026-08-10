@@ -1,5 +1,16 @@
 export type ProductStatus = 'draft' | 'pending_review' | 'published' | 'archived';
 export type PPBClassification = 'Class A' | 'Class B' | 'Class C' | 'Class D' | 'Unclassified';
+export type StockStatus = 'instock' | 'outofstock' | 'onbackorder';
+
+export interface MedicalVariantAttributes {
+  folds?: 2 | 3 | 4 | 5 | number;
+  size?: string;
+  material?: string;
+  color?: string;
+  configuration?: string;
+  wheels?: boolean;
+  [key: string]: string | number | boolean | undefined;
+}
 
 export interface ProductImage {
   id: string;
@@ -23,9 +34,28 @@ export interface ProductVariant {
   name: string;
   sku?: string;
   price_adjustment?: number;
+  override_price?: number;
+  calculated_price?: number;
   stock_quantity: number;
-  attributes?: Record<string, any>;
+  attributes?: MedicalVariantAttributes;
+  image_url?: string;
+  is_default?: boolean;
   is_active: boolean;
+}
+
+export interface VariantAttributeOption {
+  label: string;
+  value: string | number;
+  variant_id: string;
+  is_available: boolean;
+  price_delta?: number;
+  calculated_price?: number;
+}
+
+export interface VariantAttributeGroup {
+  name: string;
+  key: keyof MedicalVariantAttributes;
+  options: VariantAttributeOption[];
 }
 
 export interface Product {
@@ -39,12 +69,15 @@ export interface Product {
   short_description?: string;
   sku?: string;
   price?: number;
-  cost_price?: number;
-  base_price?: number;
+  regular_price?: number;
+  sale_price?: number;
+  wholesale_price?: number;
+  vendor_payout?: number;
   markup_price?: number;
   commission_fee?: number;
   currency: string;
   stock_quantity: number;
+  stock_status?: StockStatus;
   low_stock_threshold: number;
   track_inventory: boolean;
   status: ProductStatus;
@@ -55,6 +88,7 @@ export interface Product {
   is_on_sale: boolean;
   popularity_score: number;
   view_count: number;
+  permalink?: string;
   weight_kg?: number;
   dimensions?: Record<string, any>;
   brand?: string;
@@ -76,6 +110,19 @@ export interface Product {
   updated_at: string;
 }
 
+export interface LegacyCSVRow {
+  id: string;
+  name: string;
+  sku?: string;
+  price?: string;
+  regular_price?: string;
+  sale_price?: string;
+  on_sale?: string;
+  in_stock?: string;
+  categories?: string;
+  permalink?: string;
+  image_url?: string;
+}
 
 export interface ProductCreate {
   name: string;

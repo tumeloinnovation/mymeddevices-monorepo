@@ -415,11 +415,15 @@ export function VendorAddressAutocomplete({
               return (
                 <button
                   key={placeId}
+                  type="button"
                   role="option"
                   aria-selected={index === selectedIndex}
-                  onClick={() => selectPlace(placeId, suggestion.placePrediction.text.text)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    selectPlace(placeId, suggestion.placePrediction.text.text);
+                  }}
                   className={cn(
-                    'w-full text-left px-3 py-2 rounded-sm cursor-pointer transition-colors text-sm',
+                    'w-full text-left px-3 py-2 rounded-lg cursor-pointer transition-colors text-sm',
                     index === selectedIndex
                       ? 'bg-accent text-accent-foreground'
                       : 'hover:bg-accent/50'

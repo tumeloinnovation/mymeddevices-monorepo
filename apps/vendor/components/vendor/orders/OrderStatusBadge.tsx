@@ -10,6 +10,10 @@ const statusConfig: Record<OrderStatus, { label: string; variant: 'default' | 's
         label: 'Pending',
         variant: 'outline',
     },
+    paid: {
+        label: 'Paid',
+        variant: 'secondary',
+    },
     processing: {
         label: 'Processing',
         variant: 'default',

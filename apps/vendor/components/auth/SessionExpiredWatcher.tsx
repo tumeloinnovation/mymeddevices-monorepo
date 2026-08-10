@@ -11,14 +11,7 @@ export function SessionExpiredWatcher() {
   const { login, forceLogout } = useAuth();
 
   useEffect(() => {
-    // Validate stored tokens on mount
-    const store = useAuthStore.getState();
-    const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
-    
-    if (store.isAuthenticated && !store.isDemo && !refreshToken) {
-      console.log('🔄 [SessionExpiredWatcher] Authenticated but no refresh token found, triggering session-expired event');
-      window.dispatchEvent(new CustomEvent('auth:session-expired'));
-    }
+    // Session expiration is handled gracefully upon API 401 response without hard reloading the window
   }, []);
 
   useEffect(() => {

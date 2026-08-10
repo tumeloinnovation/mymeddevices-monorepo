@@ -36,7 +36,7 @@ export function SidebarSection({
                 label={item.label}
                 badge={item.badge}
                 isCollapsed={isCollapsed}
-                children={item.children}
+                children={item.children as any}
                 activePattern={item.activePattern}
               />
             );

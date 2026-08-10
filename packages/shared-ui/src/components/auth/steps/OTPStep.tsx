@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Mail, ArrowLeft } from 'lucide-react';
+import { Mail, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Label } from '../../ui/label';
 import { cn } from '../../../lib/utils';
 import { OTPInput } from '../common/OTPInput';
-import { getIconBgClass, getIconColor, getButtonClass } from '../auth-theme';
 
 interface OTPStepProps {
   email: string;
@@ -47,30 +46,30 @@ export function OTPStep({
   };
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      {/* Icon and title */}
-      <div className="space-y-2 text-center">
-        <div className={cn('mx-auto', getIconBgClass(), 'mb-4')}>
-          <Mail className={cn('w-6 h-6', getIconColor())} />
+    <form onSubmit={onSubmit} className="space-y-5">
+      {/* Icon and Header */}
+      <div className="text-center space-y-1.5 mb-5">
+        <div className="mx-auto w-12 h-12 rounded-2xl bg-[#e0752b]/10 border border-[#e0752b]/20 flex items-center justify-center mb-3 shadow-xs">
+          <Mail className="w-6 h-6 text-[#e0752b]" />
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight">Check Your Email</h2>
-        <p className="text-sm text-muted-foreground">
-          We sent a code to{' '}
-          <span className="text-foreground font-medium">{email}</span>
+        <h3 className="text-xl font-bold tracking-tight text-foreground">Verify Your Email</h3>
+        <p className="text-xs text-muted-foreground max-w-[280px] mx-auto">
+          We sent a 6-digit code to{' '}
+          <span className="text-foreground font-semibold break-all">{email}</span>
         </p>
       </div>
 
       {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-lg">
-          {error}
+        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+          <span>{error}</span>
         </div>
       )}
 
-      {/* OTP input */}
+      {/* OTP Input section */}
       <div className="space-y-4">
         <div className="space-y-2">
-          <Label htmlFor="otp" className="text-center">
-            Verification Code
+          <Label htmlFor="otp" className="text-xs font-semibold text-center block text-foreground/90">
+            Enter 6-Digit Code
           </Label>
           <OTPInput
             value={otp}
@@ -79,7 +78,6 @@ export function OTPStep({
             disabled={isLoading}
             onComplete={(code) => {
               setOtp(code);
-              // Auto-submit after a brief delay to let the input update
               setTimeout(() => {
                 const form = document.querySelector('form');
                 if (form && !isLoading) {
@@ -92,18 +90,25 @@ export function OTPStep({
 
         <Button
           type="submit"
-          className={cn('w-full h-11', getButtonClass())}
+          className="w-full h-11 rounded-xl font-semibold text-sm shadow-md transition-all duration-200 active:scale-[0.98] bg-[#e0752b] hover:bg-[#c86221] text-white border-0"
           disabled={isLoading || otp.length !== length}
         >
-          {isLoading ? 'Verifying...' : 'Verify Code'}
+          {isLoading ? (
+            <span className="flex items-center gap-2">
+              <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+              Verifying Code...
+            </span>
+          ) : (
+            'Verify & Continue'
+          )}
         </Button>
 
-        <div className="flex items-center justify-between text-xs">
+        <div className="flex items-center justify-between text-xs pt-1 px-1">
           <button
             type="button"
             onClick={handleResend}
             disabled={resendCooldown > 0 || isLoading}
-            className={cn('hover:underline disabled:text-muted-foreground', getIconColor())}
+            className="text-xs font-semibold text-[#e0752b] hover:underline disabled:text-muted-foreground transition-colors"
           >
             {resendCooldown > 0
               ? `Resend code in ${resendCooldown}s`
@@ -112,9 +117,9 @@ export function OTPStep({
           <button
             type="button"
             onClick={onChangeEmail}
-            className="flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
-            <ArrowLeft className="h-3 w-3" /> Change Email
+            <ArrowLeft className="h-3.5 w-3.5" /> Edit Email
           </button>
         </div>
       </div>

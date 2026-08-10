@@ -30,7 +30,7 @@ import { useOrders } from '@/lib/api/hooks/useOrders';
 import type { VendorOrder, OrderStatus } from '@/lib/api/types';
 
 interface OrdersListProps {
-  statusFilter?: OrderStatus;
+  statusFilter?: OrderStatus | 'all';
   title: string;
   description?: string;
 }

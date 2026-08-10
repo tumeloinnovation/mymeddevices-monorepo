@@ -18,6 +18,7 @@ interface ProductSectionProps {
   showLoadMore?: boolean;
   renderItem?: (item: Product) => React.ReactNode;
   emptyMessage?: string;
+  emptyTitle?: string;
   loading?: boolean;
   error?: Error | null;
   layout?: 'scroll' | 'grid';
@@ -31,6 +32,7 @@ export const ProductSection: FC<ProductSectionProps> = ({
   gridClassName = "",
   renderItem,
   emptyMessage = "No products found.",
+  emptyTitle = "No Products Available",
   loading = false,
   error = null,
   layout = 'scroll',
@@ -107,9 +109,12 @@ export const ProductSection: FC<ProductSectionProps> = ({
           ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
-          <PackageSearch className="w-12 h-12 text-muted-foreground/50 mb-3" />
-          <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+        <div className="flex flex-col items-center justify-center py-12 px-4 text-center rounded-xl border border-dashed border-border bg-muted/10 my-2">
+          <div className="w-12 h-12 rounded-full bg-muted/30 flex items-center justify-center mb-3">
+            <PackageSearch className="w-6 h-6 text-muted-foreground" />
+          </div>
+          <h3 className="text-base font-semibold text-foreground mb-1">{emptyTitle}</h3>
+          <p className="text-sm text-muted-foreground max-w-md">{emptyMessage}</p>
         </div>
       ) : (
         <div

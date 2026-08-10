@@ -22,10 +22,12 @@ export const PriceRangeFilter: React.FC = () => {
 
   return (
     <div>
-      {/* Label */}
-      <label className="text-sm font-semibold mb-4 text-foreground border-b border-border pb-2 block">
-        Price Range
-      </label>
+      {/* Header Label aligned with ShopHeader */}
+      <div className="pt-3 pb-2 mb-3">
+        <h3 className="text-xl font-bold tracking-tight text-foreground">
+          Price Range
+        </h3>
+      </div>
 
       {/* Chart */}
       <div className="w-full h-20 mb-4">

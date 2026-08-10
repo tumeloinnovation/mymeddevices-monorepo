@@ -1,12 +1,12 @@
 'use client';
 
-import { Lock, Mail } from 'lucide-react';
+import { Lock, Mail, ArrowRight } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Label } from '../../ui/label';
 import { PasswordInput } from '../common/PasswordInput';
 import { cn } from '../../../lib/utils';
-import { getButtonClass, getIconBgClass, getIconColor } from '../auth-theme';
+import { getButtonClass } from '../auth-theme';
 
 interface LoginStepProps {
   email: string;
@@ -31,41 +31,43 @@ export function LoginStep({
   error = null,
   onForgotPassword,
   showForgotPassword = true,
-  submitLabel = 'Login',
+  submitLabel = 'Login to Account',
 }: LoginStepProps) {
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      {/* Icon and title */}
-      <div className="space-y-2 text-center">
-        <div className={cn('mx-auto w-12 h-12 rounded-full flex items-center justify-center mb-4', getIconBgClass())}>
-          <Lock className={cn('w-6 h-6', getIconColor())} />
+    <form onSubmit={onSubmit} className="space-y-5">
+      {/* Header section with brand icon */}
+      <div className="text-center space-y-1.5 mb-5">
+        <div className="mx-auto w-11 h-11 rounded-2xl bg-[#e0752b]/10 border border-[#e0752b]/20 flex items-center justify-center mb-3 shadow-xs transition-transform duration-200 hover:scale-105">
+          <Lock className="w-5 h-5 text-[#e0752b]" />
         </div>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Welcome Back
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Enter your credentials to access your account
+        <h3 className="text-xl font-bold tracking-tight text-foreground">
+          Welcome back
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Enter your credentials to access your account & orders
         </p>
       </div>
 
       {error && (
-        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-sm rounded-lg">
-          {error}
+        <div className="p-3 bg-destructive/10 border border-destructive/20 text-destructive text-xs rounded-xl flex items-center gap-2 animate-in fade-in slide-in-from-top-1">
+          <span>{error}</span>
         </div>
       )}
 
-      {/* Email */}
-      <div className="space-y-2">
-        <Label htmlFor="login-email">Email Address</Label>
+      {/* Email Input */}
+      <div className="space-y-1.5">
+        <Label htmlFor="login-email" className="text-xs font-semibold text-foreground/90">
+          Email Address
+        </Label>
         <div className="relative">
-          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/70" />
           <Input
             id="login-email"
             type="email"
             placeholder="you@example.com"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="pl-10 h-11"
+            className="pl-10 h-11 rounded-xl border-input/80 bg-background/50 focus-visible:ring-2 focus-visible:ring-[#e0752b]/30 focus-visible:border-[#e0752b] transition-all text-sm"
             required
             disabled={isLoading}
             autoFocus
@@ -73,17 +75,19 @@ export function LoginStep({
         </div>
       </div>
 
-      {/* Password */}
-      <div className="space-y-2">
+      {/* Password Input */}
+      <div className="space-y-1.5">
         <div className="flex justify-between items-center">
-          <Label htmlFor="login-password">Password</Label>
+          <Label htmlFor="login-password" className="text-xs font-semibold text-foreground/90">
+            Password
+          </Label>
           {showForgotPassword && onForgotPassword && (
             <button
               type="button"
               onClick={onForgotPassword}
-              className={cn('text-xs hover:underline', getIconColor())}
+              className="text-xs font-medium text-[#e0752b] hover:underline transition-colors"
             >
-              Forgot Password?
+              Forgot password?
             </button>
           )}
         </div>
@@ -97,13 +101,23 @@ export function LoginStep({
         />
       </div>
 
-      {/* Submit button */}
+      {/* Submit Button */}
       <Button
         type="submit"
-        className={cn('w-full h-11', getButtonClass())}
+        className="w-full h-11 rounded-xl font-semibold text-sm shadow-md transition-all duration-200 active:scale-[0.98] bg-[#e0752b] hover:bg-[#c86221] text-white border-0"
         disabled={isLoading}
       >
-        {isLoading ? 'Logging in...' : submitLabel}
+        {isLoading ? (
+          <span className="flex items-center gap-2">
+            <span className="h-4 w-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+            Logging in...
+          </span>
+        ) : (
+          <span className="flex items-center justify-center gap-2">
+            {submitLabel}
+            <ArrowRight className="w-4 h-4" />
+          </span>
+        )}
       </Button>
     </form>
   );

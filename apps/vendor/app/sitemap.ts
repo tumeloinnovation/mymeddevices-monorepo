@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next'
-import { catalogService } from '@mymeddevices/core/services/catalog-service'
+import { catalogService } from '@mymeddevices/shared-core'
 
 const SITE_URL = 'https://mymeddevices.com'
 

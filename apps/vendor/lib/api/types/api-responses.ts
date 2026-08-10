@@ -113,7 +113,7 @@ export interface VendorOrder {
   due_date?: string;
 }
 
-export type OrderStatus = 'pending' | 'processing' | 'packed' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
+export type OrderStatus = 'pending' | 'paid' | 'processing' | 'packed' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
 
 export interface VendorOrderDetail extends VendorOrder {
   shipping_address: Address;

@@ -237,8 +237,9 @@ async def approve_vendor_admin(
 
         return success_response(format_vendor_profile_response(profile, user))
     except ValueError as e:
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in str(e).lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status_code,
             detail=str(e)
         )
 
@@ -274,8 +275,9 @@ async def reject_vendor_admin(
 
         return success_response(format_vendor_profile_response(profile, user))
     except ValueError as e:
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in str(e).lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status_code,
             detail=str(e)
         )
 
@@ -311,8 +313,9 @@ async def suspend_vendor_admin(
 
         return success_response(format_vendor_profile_response(profile, user))
     except ValueError as e:
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in str(e).lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status_code,
             detail=str(e)
         )
 
@@ -340,8 +343,9 @@ async def reactivate_vendor_admin(
 
         return success_response(format_vendor_profile_response(profile, user))
     except ValueError as e:
+        status_code = status.HTTP_404_NOT_FOUND if "not found" in str(e).lower() else status.HTTP_400_BAD_REQUEST
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=status_code,
             detail=str(e)
         )
 

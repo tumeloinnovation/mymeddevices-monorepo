@@ -65,8 +65,8 @@ export function BadgeView({
 }) {
   return (
     <Badge
-      variant="secondary"
-      className={`h-7 px-2.5 rounded-lg text-xs font-medium bg-muted ${className}`}
+      variant="outline"
+      className={`h-7 px-2.5 rounded-lg text-xs font-semibold border-primary/20 text-primary bg-primary/5 ${className}`}
     >
       {children ?? "Uncategorized"}
     </Badge>
@@ -74,7 +74,7 @@ export function BadgeView({
 }
 
 export function BrandView({ name }: { name?: string | null }) {
-  if (!name) return <TextView>\u2014</TextView>;
+  if (!name) return <TextView>—</TextView>;
   return (
     <p className="text-sm font-semibold flex items-center gap-1.5">
       <Building2 className="h-3.5 w-3.5 text-muted-foreground" />

@@ -38,6 +38,8 @@ export default function HomePageClient() {
             description="Be the first to explore our latest medical technology and equipment."
             items={newArrivals}
             loading={newArrivalsLoading}
+            emptyTitle="No New Arrivals"
+            emptyMessage="We haven't added any new products recently. Check back soon for the latest medical devices and technology!"
             layout="scroll"
           />
         </section>

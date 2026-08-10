@@ -96,13 +96,15 @@ class CatalogService:
         base_slug = generate_slug(name)
         slug = await self._ensure_unique_slug(base_slug)
 
-        # Calculate pricing if base_price is provided
-        if "base_price" in kwargs and kwargs["base_price"] is not None:
-            base_price = kwargs["base_price"]
-            markup, commission, price = self._calculate_pricing(base_price)
-            kwargs["markup_price"] = markup
-            kwargs["commission_fee"] = commission
-            kwargs["price"] = price
+        # Calculate pricing if base_price, vendor_payout, or price is provided
+        base_val = kwargs.get("base_price") or kwargs.get("vendor_payout")
+        if base_val is not None and ("price" not in kwargs or kwargs["price"] is None):
+            markup, commission, calculated_price = self._calculate_pricing(base_val)
+            kwargs["markup_price"] = kwargs.get("markup_price") or markup
+            kwargs["commission_fee"] = kwargs.get("commission_fee") or commission
+            kwargs["price"] = calculated_price
+            kwargs["currency"] = kwargs.get("currency") or catalog_settings.DEFAULT_CURRENCY
+        elif "price" in kwargs and kwargs["price"] is not None:
             kwargs["currency"] = kwargs.get("currency") or catalog_settings.DEFAULT_CURRENCY
 
         product = Product(
@@ -141,13 +143,13 @@ class CatalogService:
             if sku_check.scalar_one_or_none():
                 raise ValueError(f"Product with SKU '{kwargs['sku']}' already exists.")
 
-        # Recalculate pricing if base_price is updated
-        if "base_price" in kwargs and kwargs["base_price"] is not None:
-            base_price = kwargs["base_price"]
-            markup, commission, price = self._calculate_pricing(base_price)
-            kwargs["markup_price"] = markup
-            kwargs["commission_fee"] = commission
-            kwargs["price"] = price
+        # Recalculate pricing if base_price or vendor_payout is updated without explicit price
+        base_val = kwargs.get("base_price") or kwargs.get("vendor_payout")
+        if base_val is not None and ("price" not in kwargs or kwargs["price"] is None):
+            markup, commission, calculated_price = self._calculate_pricing(base_val)
+            kwargs["markup_price"] = kwargs.get("markup_price") or markup
+            kwargs["commission_fee"] = kwargs.get("commission_fee") or commission
+            kwargs["price"] = calculated_price
 
         for key, value in kwargs.items():
             if value is not None and hasattr(product, key):

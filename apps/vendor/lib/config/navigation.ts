@@ -23,6 +23,7 @@ import {
   RotateCcw,
   ClipboardList,
   AlertTriangle,
+  ShieldCheck,
   Clock,
   CheckCircle2,
 } from 'lucide-react';
@@ -122,10 +123,8 @@ export const vendorNavSections: NavSection[] = [
   {
     section: "Settings",
     items: [
-      { href: "/vendor/shipping-settings", icon: Truck, label: "Shipping Settings" },
-      { href: "/vendor/order-templates", icon: ClipboardList, label: "Order Templates" },
-      { href: "/vendor/delivery-zones", icon: Package, label: "Delivery Zones" },
       { href: "/vendor/settings/profile", icon: Store, label: "Store Profile" },
+      { href: "/vendor/settings/security", icon: ShieldCheck, label: "Security & Password" },
       { href: "/vendor/settings/notifications", icon: Bell, label: "Notifications" },
       { href: "/vendor/support/tickets", icon: LifeBuoy, label: "Support Tickets" },
     ]
