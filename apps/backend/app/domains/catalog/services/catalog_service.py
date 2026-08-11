@@ -1,5 +1,6 @@
 import re
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, Tuple, Any
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,9 @@ from sqlalchemy import select, func, or_, and_
 from sqlalchemy.orm import selectinload
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.product_image import ProductImage
+from app.domains.catalog.models.product_variant import ProductVariant
+from app.domains.catalog.models.bundle_item import BundleItem
+from app.domains.catalog.models.related_product import RelatedProduct
 from app.domains.catalog.models.category import Category
 from app.domains.catalog.models.brand import Brand
 from app.domains.catalog.models.tag import Tag
@@ -400,6 +404,9 @@ class CatalogService:
         price_min: Optional[float] = None,
         price_max: Optional[float] = None,
         is_featured: Optional[bool] = None,
+        is_clinical_pick: Optional[bool] = None,
+        care_setting: Optional[str] = None,
+        condition: Optional[str] = None,
         is_on_sale: Optional[bool] = None,
         in_stock: Optional[bool] = None,
         sort_by: str = "newest",
@@ -417,6 +424,9 @@ class CatalogService:
                     price_min=price_min,
                     price_max=price_max,
                     is_featured=is_featured,
+                    is_clinical_pick=is_clinical_pick,
+                    care_setting=care_setting,
+                    condition=condition,
                     is_on_sale=is_on_sale,
                     in_stock=in_stock,
                     sort_by=sort_by,
@@ -458,6 +468,12 @@ class CatalogService:
             query = query.where(Product.price <= price_max)
         if is_featured is not None:
             query = query.where(Product.is_featured == is_featured)
+        if is_clinical_pick is not None:
+            query = query.where(Product.is_clinical_pick == is_clinical_pick)
+        if care_setting:
+            query = query.where(Product.tags.contains([care_setting]))
+        if condition:
+            query = query.where(Product.tags.contains([condition]))
         if is_on_sale is not None:
             query = query.where(Product.is_on_sale == is_on_sale)
         if in_stock is True:
@@ -1206,3 +1222,317 @@ class CatalogService:
         elif field == "seo":
             return bool(product.meta_title and product.meta_description)
         return False
+
+    # ========================================================================
+    # PRODUCT VARIANT OPERATIONS
+    # ========================================================================
+
+    async def _sync_variable_product_stock(self, product_id: uuid.UUID) -> None:
+        """Auto-sum active variant stock for variable products."""
+        product = await self.db.get(Product, product_id)
+        if not product or product.product_type != "variable":
+            return
+
+        result = await self.db.execute(
+            select(func.sum(ProductVariant.stock_quantity)).where(
+                ProductVariant.product_id == product_id,
+                ProductVariant.is_active == True
+            )
+        )
+        total_stock = result.scalar() or 0
+        product.stock_quantity = total_stock
+        product.stock_status = "instock" if total_stock > 0 else "outofstock"
+        await self.db.commit()
+
+    async def get_variants(self, product_id: uuid.UUID) -> List[ProductVariant]:
+        """Get all variants for a product ordered by sort_order."""
+        result = await self.db.execute(
+            select(ProductVariant)
+            .where(ProductVariant.product_id == product_id)
+            .order_by(ProductVariant.sort_order, ProductVariant.created_at)
+        )
+        return list(result.scalars().all())
+
+    async def create_variant(self, product_id: uuid.UUID, **kwargs) -> ProductVariant:
+        """Create a new product variant."""
+        product = await self.db.get(Product, product_id)
+        if not product:
+            raise ValueError("Product not found")
+
+        if product.product_type != "variable":
+            product.product_type = "variable"
+
+        # If marked default, unset other defaults
+        if kwargs.get("is_default"):
+            await self.db.execute(
+                select(ProductVariant)
+                .where(ProductVariant.product_id == product_id)
+            )
+            # update all existing variants is_default = False
+            from sqlalchemy import update
+            await self.db.execute(
+                update(ProductVariant)
+                .where(ProductVariant.product_id == product_id)
+                .values(is_default=False)
+            )
+
+        variant = ProductVariant(product_id=product_id, **kwargs)
+        self.db.add(variant)
+        await self.db.commit()
+        await self.db.refresh(variant)
+
+        await self._sync_variable_product_stock(product_id)
+        return variant
+
+    async def create_variant_matrix(
+        self,
+        product_id: uuid.UUID,
+        attribute_groups: dict[str, List[str]],
+        base_sku_prefix: Optional[str] = None,
+        default_stock: int = 0
+    ) -> List[ProductVariant]:
+        """Generate matrix combinations from attribute groups."""
+        product = await self.db.get(Product, product_id)
+        if not product:
+            raise ValueError("Product not found")
+
+        import itertools
+        keys = list(attribute_groups.keys())
+        value_lists = [attribute_groups[k] for k in keys]
+        combinations = list(itertools.product(*value_lists))
+
+        created_variants = []
+        sku_prefix = base_sku_prefix or product.sku or "VAR"
+
+        for idx, combo in enumerate(combinations):
+            attrs = {keys[i]: combo[i] for i in range(len(keys))}
+            name_parts = [f"{combo[i]}" for i in range(len(keys))]
+            variant_name = f"{product.name} - " + " / ".join(name_parts)
+            sku_suffix = "-".join([str(c).upper().replace(" ", "") for c in combo])
+            sku = f"{sku_prefix}-{sku_suffix}"
+
+            variant = ProductVariant(
+                product_id=product_id,
+                name=variant_name,
+                sku=sku,
+                stock_quantity=default_stock,
+                attributes=attrs,
+                is_active=True,
+                is_default=(idx == 0),
+                sort_order=idx
+            )
+            self.db.add(variant)
+            created_variants.append(variant)
+
+        product.product_type = "variable"
+        await self.db.commit()
+        await self._sync_variable_product_stock(product_id)
+
+        for v in created_variants:
+            await self.db.refresh(v)
+        return created_variants
+
+    async def update_variant(self, variant_id: uuid.UUID, **kwargs) -> ProductVariant:
+        """Update a product variant."""
+        variant = await self.db.get(ProductVariant, variant_id)
+        if not variant:
+            raise ValueError("Variant not found")
+
+        if kwargs.get("is_default"):
+            from sqlalchemy import update
+            await self.db.execute(
+                update(ProductVariant)
+                .where(ProductVariant.product_id == variant.product_id)
+                .values(is_default=False)
+            )
+
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(variant, key, value)
+
+        await self.db.commit()
+        await self.db.refresh(variant)
+        await self._sync_variable_product_stock(variant.product_id)
+        return variant
+
+    async def delete_variant(self, variant_id: uuid.UUID) -> bool:
+        """Delete a variant."""
+        variant = await self.db.get(ProductVariant, variant_id)
+        if not variant:
+            return False
+        product_id = variant.product_id
+        await self.db.delete(variant)
+        await self.db.commit()
+        await self._sync_variable_product_stock(product_id)
+        return True
+
+    # ========================================================================
+    # BUNDLE OPERATIONS
+    # ========================================================================
+
+    async def get_bundle_items(self, product_id: uuid.UUID) -> List[BundleItem]:
+        """Get all component items for a bundle product."""
+        result = await self.db.execute(
+            select(BundleItem)
+            .where(BundleItem.bundle_product_id == product_id)
+            .options(selectinload(BundleItem.component_product))
+            .order_by(BundleItem.sort_order)
+        )
+        return list(result.scalars().all())
+
+    async def add_bundle_item(
+        self,
+        bundle_product_id: uuid.UUID,
+        component_product_id: uuid.UUID,
+        quantity: int = 1,
+        sort_order: int = 0,
+        is_optional: bool = False
+    ) -> BundleItem:
+        """Add a component item to a bundle product."""
+        bundle_product = await self.db.get(Product, bundle_product_id)
+        if not bundle_product:
+            raise ValueError("Bundle product not found")
+
+        component_product = await self.db.get(Product, component_product_id)
+        if not component_product:
+            raise ValueError("Component product not found")
+
+        if bundle_product_id == component_product_id:
+            raise ValueError("A product cannot be a component of itself")
+
+        bundle_product.product_type = "bundle"
+
+        item = BundleItem(
+            bundle_product_id=bundle_product_id,
+            component_product_id=component_product_id,
+            quantity=quantity,
+            sort_order=sort_order,
+            is_optional=is_optional
+        )
+        self.db.add(item)
+        await self.db.commit()
+
+        # Reload item with component_product loaded
+        res = await self.db.execute(
+            select(BundleItem)
+            .where(BundleItem.id == item.id)
+            .options(selectinload(BundleItem.component_product))
+        )
+        return res.scalar_one()
+
+    async def update_bundle_item(self, item_id: uuid.UUID, **kwargs) -> BundleItem:
+        """Update a bundle component item."""
+        item = await self.db.get(BundleItem, item_id)
+        if not item:
+            raise ValueError("Bundle item not found")
+
+        for key, value in kwargs.items():
+            if value is not None:
+                setattr(item, key, value)
+
+        await self.db.commit()
+        res = await self.db.execute(
+            select(BundleItem)
+            .where(BundleItem.id == item_id)
+            .options(selectinload(BundleItem.component_product))
+        )
+        return res.scalar_one()
+
+    async def remove_bundle_item(self, item_id: uuid.UUID) -> bool:
+        """Remove a component item from a bundle."""
+        item = await self.db.get(BundleItem, item_id)
+        if not item:
+            return False
+        await self.db.delete(item)
+        await self.db.commit()
+        return True
+
+    # ========================================================================
+    # RELATED PRODUCT OPERATIONS
+    # ========================================================================
+
+    async def get_related_products(
+        self, product_id: uuid.UUID, relation_type: Optional[str] = None
+    ) -> List[RelatedProduct]:
+        """Get related products linked to a product."""
+        query = (
+            select(RelatedProduct)
+            .where(RelatedProduct.product_id == product_id)
+            .options(selectinload(RelatedProduct.related_product))
+            .order_by(RelatedProduct.sort_order)
+        )
+        if relation_type:
+            query = query.where(RelatedProduct.relation_type == relation_type)
+
+        result = await self.db.execute(query)
+        return list(result.scalars().all())
+
+    async def add_related_product(
+        self,
+        product_id: uuid.UUID,
+        related_product_id: uuid.UUID,
+        relation_type: str,
+        sort_order: int = 0,
+        is_bidirectional: bool = True
+    ) -> RelatedProduct:
+        """Link two products (cross_sell, upsell, accessory, spare_part)."""
+        if product_id == related_product_id:
+            raise ValueError("A product cannot be related to itself")
+
+        p1 = await self.db.get(Product, product_id)
+        p2 = await self.db.get(Product, related_product_id)
+        if not p1 or not p2:
+            raise ValueError("Target products not found")
+
+        rel = RelatedProduct(
+            product_id=product_id,
+            related_product_id=related_product_id,
+            relation_type=relation_type,
+            sort_order=sort_order,
+            is_bidirectional=is_bidirectional
+        )
+        self.db.add(rel)
+
+        # Bidirectional link logic: Yes for cross_sell and accessory; No for upsell
+        if is_bidirectional and relation_type in ("cross_sell", "accessory"):
+            reverse_rel = RelatedProduct(
+                product_id=related_product_id,
+                related_product_id=product_id,
+                relation_type=relation_type,
+                sort_order=sort_order,
+                is_bidirectional=True
+            )
+            self.db.add(reverse_rel)
+
+        await self.db.commit()
+
+        res = await self.db.execute(
+            select(RelatedProduct)
+            .where(RelatedProduct.id == rel.id)
+            .options(selectinload(RelatedProduct.related_product))
+        )
+        return res.scalar_one()
+
+    async def remove_related_product(self, relation_id: uuid.UUID) -> bool:
+        """Remove a related product link."""
+        rel = await self.db.get(RelatedProduct, relation_id)
+        if not rel:
+            return False
+
+        # If bidirectional, remove reverse relationship if it exists
+        if rel.is_bidirectional and rel.relation_type in ("cross_sell", "accessory"):
+            reverse_result = await self.db.execute(
+                select(RelatedProduct).where(
+                    RelatedProduct.product_id == rel.related_product_id,
+                    RelatedProduct.related_product_id == rel.product_id,
+                    RelatedProduct.relation_type == rel.relation_type
+                )
+            )
+            reverse_rel = reverse_result.scalar_one_or_none()
+            if reverse_rel:
+                await self.db.delete(reverse_rel)
+
+        await self.db.delete(rel)
+        await self.db.commit()
+        return True
+

@@ -47,6 +47,9 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
     # ===============================
     # BASIC INFO
     # ===============================
+    product_type: Mapped[str] = mapped_column(
+        String(20), default="simple", nullable=False, index=True
+    )  # simple, variable, bundle
     name: Mapped[str] = mapped_column(String(500), nullable=False)
     slug: Mapped[str] = mapped_column(String(500), unique=True, index=True, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -93,6 +96,7 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
     # MERCHANDISING FLAGS
     # ===============================
     is_featured: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_clinical_pick: Mapped[bool] = mapped_column(Boolean, default=False)
     is_on_sale: Mapped[bool] = mapped_column(Boolean, default=False)
     popularity_score: Mapped[int] = mapped_column(Integer, default=0)
     view_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -156,6 +160,20 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
     )
     variants: Mapped[List["ProductVariant"]] = relationship(
         "ProductVariant",
+        back_populates="product",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+    bundle_items: Mapped[List["BundleItem"]] = relationship(
+        "BundleItem",
+        foreign_keys="BundleItem.bundle_product_id",
+        back_populates="bundle_product",
+        cascade="all, delete-orphan",
+        lazy="selectin"
+    )
+    related_products: Mapped[List["RelatedProduct"]] = relationship(
+        "RelatedProduct",
+        foreign_keys="RelatedProduct.product_id",
         back_populates="product",
         cascade="all, delete-orphan",
         lazy="selectin"

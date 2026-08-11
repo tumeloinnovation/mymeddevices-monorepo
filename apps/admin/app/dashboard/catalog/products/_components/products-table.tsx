@@ -240,6 +240,35 @@ export function ProductsTable({
           </span>
         ),
       }),
+      columnHelper.accessor("product_type", {
+        id: "type",
+        header: "Type",
+        cell: ({ row }) => {
+          const type = row.original.product_type || "simple";
+          const varCount = row.original.variants?.length || 0;
+          const bundleCount = row.original.bundle_items?.length || 0;
+
+          if (type === "variable") {
+            return (
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border border-blue-200 dark:border-blue-800">
+                🔀 Variable ({varCount})
+              </span>
+            );
+          }
+          if (type === "bundle") {
+            return (
+              <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                📋 Bundle ({bundleCount})
+              </span>
+            );
+          }
+          return (
+            <span className="inline-flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400 border border-zinc-200 dark:border-zinc-700">
+              📦 Simple
+            </span>
+          );
+        },
+      }),
       columnHelper.accessor("stock_quantity", {
         id: "stock",
         header: ({ column }) => (

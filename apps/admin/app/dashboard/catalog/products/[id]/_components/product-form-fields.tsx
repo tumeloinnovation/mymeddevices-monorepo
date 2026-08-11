@@ -5,7 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Building2, Plus, Trash2 } from "lucide-react";
+import { Building2, Plus, Trash2, SlidersHorizontal, CheckCircle2 } from "lucide-react";
 
 export function Field({
   label,
@@ -92,7 +92,7 @@ export function PriceView({
 }) {
   if (value == null) return <TextView>\u2014</TextView>;
   const fmt = `${currency} ${value.toLocaleString("en-KE")}`;
-  return <p className="text-xl font-bold text-primary">{fmt}</p>;
+  return <p className="text-xl font-bold text-foreground">{fmt}</p>;
 }
 
 export function ComparePriceView({
@@ -222,23 +222,25 @@ export function SpecificationsView({ data }: { data: unknown }) {
 
   if (entries.length === 0) {
     return (
-      <div className="text-center py-6 px-4 rounded-xl bg-muted/10 border border-dashed border-muted/20 text-xs text-muted-foreground font-medium">
-        No technical specifications defined.
+      <div className="text-center py-8 px-4 rounded-2xl bg-muted/10 border border-dashed border-border/80 text-xs text-muted-foreground font-medium flex flex-col items-center gap-2">
+        <SlidersHorizontal className="h-6 w-6 text-muted-foreground/50 stroke-[1.5]" />
+        <span>No technical or clinical specifications defined.</span>
       </div>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5 mt-2">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
       {entries.map(([key, val]) => (
         <div
           key={key}
-          className="flex flex-col gap-1 p-3 rounded-xl bg-muted/20 border border-muted/10 hover:border-muted/30 transition-all duration-200"
+          className="flex flex-col gap-1 p-3.5 rounded-xl bg-card border border-border/60 shadow-xs hover:border-primary/30 transition-all duration-200"
         >
-          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+            <CheckCircle2 className="h-3 w-3 text-indigo-500" />
             {key}
           </span>
-          <span className="text-sm font-semibold text-foreground leading-relaxed">
+          <span className="text-xs sm:text-sm font-bold text-foreground leading-snug">
             {typeof val === "object" ? JSON.stringify(val) : String(val)}
           </span>
         </div>
@@ -284,69 +286,99 @@ export function SpecificationsEditor({ form }: { form: any }) {
     updateSpecs(updated);
   };
 
-  const handleSpecAdd = () => {
+  const handleSpecAdd = (defaultKey?: string, defaultValue?: string) => {
     const updated = { ...specs };
-    let newKey = "New Specification";
+    let newKey = defaultKey || "New Specification";
     let counter = 1;
     while (newKey in updated) {
-      newKey = `New Specification ${counter}`;
+      newKey = `${defaultKey || "New Specification"} ${counter}`;
       counter++;
     }
-    updated[newKey] = "";
+    updated[newKey] = defaultValue || "";
     updateSpecs(updated);
   };
 
   const entries = Object.entries(specs);
 
+  const presetSpecs = [
+    { label: "Intended Use", val: "Clinical / Diagnostic" },
+    { label: "Power Source", val: "100-240V AC, 50/60Hz" },
+    { label: "Operating Temp", val: "10°C - 40°C" },
+    { label: "Accuracy", val: "Clinically Validated (±2%)" },
+  ];
+
   return (
     <div className="flex flex-col gap-4 mt-2">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground">
-          Define technical details as clinical/physical key-value pairs.
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-muted/20 p-3 rounded-xl border">
+        <span className="text-xs font-medium text-muted-foreground">
+          Define technical metrics as key-value pairs.
         </span>
         <Button
           type="button"
           variant="outline"
           size="sm"
-          onClick={handleSpecAdd}
-          className="rounded-xl h-8 text-xs font-semibold gap-2 border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700 transition-all active:scale-[0.97] duration-150"
+          onClick={() => handleSpecAdd()}
+          className="rounded-lg h-8 text-xs font-bold gap-1.5 border-primary/30 text-primary hover:bg-primary/10 transition-all"
         >
           <Plus className="h-3.5 w-3.5" />
-          Add Specification
+          Add Attribute
         </Button>
       </div>
 
+      {/* Preset Quick Add Badges */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-[11px] font-bold text-muted-foreground mr-1">Quick Add Presets:</span>
+        {presetSpecs.map((preset) => (
+          <button
+            key={preset.label}
+            type="button"
+            onClick={() => handleSpecAdd(preset.label, preset.val)}
+            className="text-[10px] font-semibold bg-card border border-border px-2 py-1 rounded-md hover:bg-primary/10 hover:border-primary/40 text-foreground transition-all flex items-center gap-1"
+          >
+            <Plus className="h-2.5 w-2.5 text-primary" />
+            {preset.label}
+          </button>
+        ))}
+      </div>
+
       {entries.length === 0 ? (
-        <div className="text-center p-8 rounded-xl bg-muted/10 border border-dashed border-muted/20 text-xs text-muted-foreground font-medium">
-          No specifications yet. Click "Add Specification" to define one.
+        <div className="text-center p-8 rounded-2xl bg-muted/10 border border-dashed border-border/80 text-xs text-muted-foreground font-medium flex flex-col items-center gap-2">
+          <SlidersHorizontal className="h-6 w-6 text-muted-foreground/40" />
+          <span>No specifications defined. Use quick add presets or click "Add Attribute".</span>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {entries.map(([key, val], idx) => (
             <div
               key={idx}
-              className="flex gap-2 items-center bg-muted/5 p-2 rounded-xl border border-muted-foreground/10 hover:border-muted-foreground/20 transition-all duration-200"
+              className="flex gap-2 items-center bg-card p-2.5 rounded-xl border border-border shadow-xs hover:border-primary/30 transition-all duration-200"
             >
-              <Input
-                value={key}
-                onChange={(e) => handleSpecChange(key, e.target.value, val as string)}
-                placeholder="Specification Name"
-                className="h-9 rounded-lg font-semibold text-xs bg-background flex-1"
-              />
-              <Input
-                value={val as string}
-                onChange={(e) => handleSpecChange(key, key, e.target.value)}
-                placeholder="Value"
-                className="h-9 rounded-lg text-xs bg-background flex-1"
-              />
+              <div className="flex flex-col gap-1 flex-1">
+                <span className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider px-1">Attribute Name</span>
+                <Input
+                  value={key}
+                  onChange={(e) => handleSpecChange(key, e.target.value, val as string)}
+                  placeholder="e.g. Accuracy"
+                  className="h-8 rounded-md font-bold text-xs bg-muted/20"
+                />
+              </div>
+              <div className="flex flex-col gap-1 flex-1">
+                <span className="text-[9px] font-bold uppercase text-muted-foreground tracking-wider px-1">Attribute Value</span>
+                <Input
+                  value={val as string}
+                  onChange={(e) => handleSpecChange(key, key, e.target.value)}
+                  placeholder="e.g. ±2%"
+                  className="h-8 rounded-md text-xs bg-muted/20"
+                />
+              </div>
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
                 onClick={() => handleSpecDelete(key)}
-                className="rounded-lg h-9 w-9 text-red-500 hover:bg-red-500/10 hover:text-red-600 transition-all flex-shrink-0 active:scale-[0.95] duration-150"
+                className="rounded-lg h-8 w-8 text-destructive hover:bg-destructive/10 transition-all flex-shrink-0 self-end mb-0.5"
               >
-                <Trash2 className="h-4 w-4" />
+                <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>
           ))}
@@ -355,6 +387,7 @@ export function SpecificationsEditor({ form }: { form: any }) {
     </div>
   );
 }
+
 
 export function DimensionsView({
   dimensions,

@@ -170,6 +170,7 @@ class TypesenseClient:
                 {"name": "in_stock", "type": "bool", "facet": True},
                 {"name": "stock_quantity", "type": "int32", "optional": True},
                 {"name": "is_featured", "type": "bool", "facet": True},
+                {"name": "is_clinical_pick", "type": "bool", "facet": True, "optional": True},
                 {"name": "popularity_score", "type": "int32"},
                 {"name": "category_id", "type": "string", "optional": True, "facet": True},
                 {"name": "category_name", "type": "string", "optional": True, "facet": True},
@@ -284,6 +285,9 @@ class TypesenseClient:
         price_min: Optional[float] = None,
         price_max: Optional[float] = None,
         is_featured: Optional[bool] = None,
+        is_clinical_pick: Optional[bool] = None,
+        care_setting: Optional[str] = None,
+        condition: Optional[str] = None,
         is_on_sale: Optional[bool] = None,
         in_stock: Optional[bool] = None,
         sort_by: str = "newest",
@@ -306,6 +310,12 @@ class TypesenseClient:
             filter_parts.append(f"price:<={price_max}")
         if is_featured is not None:
             filter_parts.append(f"is_featured:={str(is_featured).lower()}")
+        if is_clinical_pick is not None:
+            filter_parts.append(f"is_clinical_pick:={str(is_clinical_pick).lower()}")
+        if care_setting:
+            filter_parts.append(f"tags:={care_setting}")
+        if condition:
+            filter_parts.append(f"tags:={condition}")
         if is_on_sale is not None:
             filter_parts.append(f"is_on_sale:={str(is_on_sale).lower()}")
         if in_stock is True:

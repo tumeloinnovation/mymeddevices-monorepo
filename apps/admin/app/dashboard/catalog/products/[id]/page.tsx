@@ -31,6 +31,9 @@ import {
   Ruler,
   Scale,
   ListChecks,
+  Award,
+  Star,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Product, ProductStatus } from "@mymeddevices/shared-core";
@@ -98,6 +101,7 @@ import {
   SpecificationsEditor,
   DimensionsView,
 } from "./_components/product-form-fields";
+import { RelatedProductsEditor } from "./_components/RelatedProductsEditor";
 
 const STATUS_CONFIG: Record<
   ProductStatus,
@@ -176,6 +180,11 @@ const productSchema = z.object({
   meta_description: z.string().default(""),
   tags: z.string().default(""),
   certifications: z.string().default(""),
+  is_clinical_pick: z.boolean().default(false),
+  is_featured: z.boolean().default(false),
+  is_on_sale: z.boolean().default(false),
+  has_vat: z.boolean().default(true),
+  vat_rate: z.coerce.number().default(16),
 });
 
 type ProductFormValues = z.infer<typeof productSchema>;
@@ -210,6 +219,11 @@ function productToFormValues(p: Product): ProductFormValues {
     meta_description: p.meta_description || "",
     tags: (p.tags || []).join(", "),
     certifications: (p.certifications || []).join(", "),
+    is_clinical_pick: p.is_clinical_pick ?? false,
+    is_featured: p.is_featured ?? false,
+    is_on_sale: p.is_on_sale ?? false,
+    has_vat: (p as any).has_vat ?? true,
+    vat_rate: (p as any).vat_rate ?? 16,
   };
 }
 
@@ -262,6 +276,9 @@ function formValuesToPayload(values: ProductFormValues): Partial<Product> {
     tags: values.tags
       ? values.tags.split(",").map((s) => s.trim()).filter(Boolean)
       : undefined,
+    is_clinical_pick: values.is_clinical_pick,
+    is_featured: values.is_featured,
+    is_on_sale: values.is_on_sale,
   };
 }
 
@@ -619,6 +636,12 @@ export default function ProductDetailPage() {
                 >
                   SEO
                 </TabsTrigger>
+                <TabsTrigger
+                  value="relations"
+                  className="px-3 md:px-4 py-1.5 rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm text-[11px] md:text-xs font-semibold tracking-wide transition-all duration-150 whitespace-nowrap"
+                >
+                  Relations
+                </TabsTrigger>
               </TabsList>
 
               {/* General Tab */}
@@ -849,21 +872,21 @@ export default function ProductDetailPage() {
 
                   {/* Pricing Architecture */}
                   <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-1 lg:col-span-7">
-                    <CardHeader className="bg-primary/5 border-b p-5">
+                    <CardHeader className="bg-primary/5 border-b p-4 sm:p-5">
                       <CardTitle className="text-sm font-bold flex items-center gap-2 text-primary">
                         <ShoppingCart className="h-4 w-4" />
                         Pricing Architecture
                       </CardTitle>
                       <CardDescription className="text-xs text-muted-foreground">
-                        Configure transactional metrics, retail prices, wholesale bases, and vendor costs.
+                        Configure transactional metrics, retail prices, promotional discounts, and vendor payouts.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="p-6 space-y-6">
-                      <div className="grid grid-cols-2 gap-4">
+                    <CardContent className="p-4 sm:p-6 space-y-5 sm:space-y-6">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <Field
                           label="Retail Price (KES)"
                           editing={isEditing}
-                          view={<PriceView value={product.price} currency={product.currency} />}
+                          view={<PriceView value={product.price ?? (product as any)?.base_price} currency={product.currency} />}
                         >
                           <Input
                             type="number"
@@ -872,9 +895,84 @@ export default function ProductDetailPage() {
                           />
                         </Field>
                         <Field
+                          label="Sale / Promotional Price (KES)"
+                          editing={isEditing}
+                          view={<PriceView value={product.sale_price ?? (product.is_on_sale ? product.price : null)} currency={product.currency} />}
+                        >
+                          <Input
+                            type="number"
+                            {...form.register("sale_price")}
+                            className="h-10 text-sm focus-visible:ring-primary"
+                            placeholder="Optional sale price"
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 border rounded-xl bg-muted/10 gap-3">
+                        <div className="space-y-0.5">
+                          <label className="text-xs font-bold text-foreground cursor-pointer flex items-center gap-1.5">
+                            <Percent className="h-3.5 w-3.5 text-primary" />
+                            Active Promotional Sale
+                          </label>
+                          <p className="text-[11px] text-muted-foreground">
+                            Enable promotional price badge &amp; discount rate on storefront.
+                          </p>
+                        </div>
+                        <Switch
+                          checked={form.watch("is_on_sale") ?? product.is_on_sale}
+                          onCheckedChange={(checked) => form.setValue("is_on_sale", checked, { shouldDirty: true })}
+                          disabled={!isEditing}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t pt-4">
+                        <Field
+                          label="VAT Tax Status"
+                          editing={isEditing}
+                          view={
+                            <div className="flex flex-wrap items-center gap-2 mt-1">
+                              <Badge variant="outline" className={(product as any)?.has_vat !== false ? "bg-blue-50 text-blue-700 border-blue-200" : "bg-muted text-muted-foreground"}>
+                                {(product as any)?.has_vat !== false ? `Subject to VAT (${(product as any)?.vat_rate || 16}%)` : "VAT Exempt"}
+                              </Badge>
+                              <span className="text-[10px] text-muted-foreground font-medium">(Excluded from base price, calculated at checkout)</span>
+                            </div>
+                          }
+                        >
+                          <div className="flex items-center gap-3 h-10">
+                            <Switch
+                              checked={form.watch("has_vat") ?? (product as any)?.has_vat ?? true}
+                              onCheckedChange={(checked) => form.setValue("has_vat", checked, { shouldDirty: true })}
+                            />
+                            <span className="text-xs font-semibold text-foreground">
+                              {form.watch("has_vat") ? "VAT Applicable" : "VAT Exempt"}
+                            </span>
+                          </div>
+                        </Field>
+
+                        <Field
+                          label="VAT Rate (%)"
+                          editing={isEditing}
+                          view={
+                            <p className="text-sm font-bold text-foreground mt-1">
+                              {(product as any)?.vat_rate || 16}%
+                            </p>
+                          }
+                        >
+                          <Input
+                            type="number"
+                            {...form.register("vat_rate")}
+                            defaultValue={16}
+                            className="h-10 text-sm focus-visible:ring-primary"
+                            placeholder="16"
+                          />
+                        </Field>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <Field
                           label="Wholesale Price (KES)"
                           editing={isEditing}
-                          view={<PriceView value={product.wholesale_price} currency={product.currency} />}
+                          view={<PriceView value={product.wholesale_price ?? (product as any)?.base_price} currency={product.currency} />}
                         >
                           <Input
                             type="number"
@@ -882,20 +980,12 @@ export default function ProductDetailPage() {
                             className="h-10 text-sm focus-visible:ring-primary"
                           />
                         </Field>
-                      </div>
 
-                      <div className="grid grid-cols-2 gap-4">
                         <Field
                           label="Vendor Payout (KES)"
                           editing={isEditing}
                           view={
-                            product.vendor_payout ? (
-                              <p className="text-base font-bold text-foreground">
-                                {formatCurrency(product.vendor_payout, product.currency)}
-                              </p>
-                            ) : (
-                              <TextView>—</TextView>
-                            )
+                            <PriceView value={product.vendor_payout ?? (product as any)?.cost_price ?? (product.price ? product.price * 0.85 : null)} currency={product.currency} />
                           }
                         >
                           <Input
@@ -904,47 +994,95 @@ export default function ProductDetailPage() {
                             className="h-10 text-sm focus-visible:ring-primary"
                           />
                         </Field>
-                        <div className="flex flex-col justify-end">
-                          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">Currency Code</span>
-                          <p className="h-10 flex items-center text-sm font-bold text-foreground bg-muted/40 border rounded-lg px-3 mt-1.5">
-                            {product.currency}
-                          </p>
+                      </div>
+
+                      {/* Margin Analysis Panel */}
+                      <div className="border border-border/80 bg-muted/20 rounded-2xl p-4 sm:p-5 space-y-3.5">
+                        <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                          <Percent className="h-3.5 w-3.5 text-primary" />
+                          Platform Margin &amp; Profit Analysis
+                        </h4>
+                        
+                        <div className="space-y-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1">
+                            <span className="text-muted-foreground">Retail Price (Effective)</span>
+                            <span className="font-bold text-foreground">
+                              KES {(form.watch("price") || product.price || (product as any)?.base_price || 0).toLocaleString("en-KE")}
+                            </span>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs gap-1">
+                            <span className="text-muted-foreground">Vendor Payout (Cost Basis)</span>
+                            <span className="font-bold text-foreground">
+                              KES {(form.watch("vendor_payout") || product.vendor_payout || (product as any)?.cost_price || ((form.watch("price") || product.price || 0) * 0.85)).toLocaleString("en-KE")}
+                            </span>
+                          </div>
+                          
+                          <Separator className="border-dashed" />
+
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between text-xs font-bold gap-1">
+                            <span className="text-foreground">Estimated Marketplace Commission Margin</span>
+                            <div className="text-left sm:text-right">
+                              <span className="text-emerald-600 font-extrabold">
+                                KES {((form.watch("price") || product.price || (product as any)?.base_price || 0) - (form.watch("vendor_payout") || product.vendor_payout || (product as any)?.cost_price || ((form.watch("price") || product.price || 0) * 0.85))).toLocaleString("en-KE")}
+                              </span>
+                              <span className="text-emerald-600 font-black ml-1.5">
+                                ({(((form.watch("price") || product.price || (product as any)?.base_price || 0) > 0 ? (((form.watch("price") || product.price || (product as any)?.base_price || 0) - (form.watch("vendor_payout") || product.vendor_payout || (product as any)?.cost_price || ((form.watch("price") || product.price || 0) * 0.85))) / (form.watch("price") || product.price || (product as any)?.base_price || 1)) * 100 : 0)).toFixed(1)}%)
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
 
-                      {/* Margin Analysis Panel (Interactive widget) */}
-                      <div className="border border-border/80 bg-muted/20 rounded-2xl p-5 space-y-4">
-                        <h4 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                          <Percent className="h-3.5 w-3.5 text-primary" />
-                          Platform Margin Analysis
-                        </h4>
-                        
-                        <div className="space-y-3.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Platform Markup (Customer Markup)</span>
-                            <div className="text-right">
-                              <span className="font-bold text-foreground">KES {markupAmount.toLocaleString("en-KE")}</span>
-                              <span className="text-emerald-600 font-semibold ml-1.5">+{markupPercent.toFixed(1)}%</span>
-                            </div>
-                          </div>
-                          
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-muted-foreground">Vendor Profit Margin (Base vs Cost)</span>
-                            <div className="text-right">
-                              <span className="font-bold text-foreground">KES {vendorMarginAmount.toLocaleString("en-KE")}</span>
-                              <span className="text-indigo-600 font-semibold ml-1.5">+{vendorMarginPercent.toFixed(1)}%</span>
-                            </div>
-                          </div>
+                    </CardContent>
+                  </Card>
 
-                          <Separator className="border-dashed" />
 
-                          <div className="flex items-center justify-between text-xs font-bold">
-                            <span className="text-foreground">Total Spread (Retail vs Cost)</span>
-                            <div className="text-right">
-                              <span className="text-primary font-extrabold">KES {totalMarkupAmount.toLocaleString("en-KE")}</span>
-                              <span className="text-primary font-black ml-1.5">+{totalMarkupPercent.toFixed(1)}%</span>
-                            </div>
+                  {/* Merchandising & Clinical Pick Badges */}
+                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-2 lg:col-span-12">
+                    <CardHeader className="bg-emerald-500/5 border-b p-4 md:p-5">
+                      <CardTitle className="text-sm font-bold flex items-center gap-2 text-emerald-700 dark:text-emerald-400">
+                        <Award className="h-4 w-4" />
+                        Merchandising &amp; Clinical Badging Controls
+                      </CardTitle>
+                      <CardDescription className="text-xs text-muted-foreground">
+                        Manage clinical endorsement badges, featured highlights, and taxonomy classifications.
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-4 md:p-6 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="flex items-center justify-between p-3.5 border rounded-xl bg-card">
+                          <div className="space-y-0.5">
+                            <label className="text-sm font-bold text-foreground cursor-pointer flex items-center gap-2">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              Clinical Pick Endorsement
+                            </label>
+                            <p className="text-xs text-muted-foreground">
+                              Flag product as verified by clinical compliance advisors.
+                            </p>
                           </div>
+                          <Switch
+                            checked={form.watch("is_clinical_pick") ?? product.is_clinical_pick}
+                            onCheckedChange={(checked) => form.setValue("is_clinical_pick", checked, { shouldDirty: true })}
+                            disabled={!isEditing}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-3.5 border rounded-xl bg-card">
+                          <div className="space-y-0.5">
+                            <label className="text-sm font-bold text-foreground cursor-pointer flex items-center gap-2">
+                              <Star className="h-4 w-4 text-amber-500" />
+                              Featured Hero Placement
+                            </label>
+                            <p className="text-xs text-muted-foreground">
+                              Promote item on main storefront hero and showcase sections.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={form.watch("is_featured") ?? product.is_featured}
+                            onCheckedChange={(checked) => form.setValue("is_featured", checked, { shouldDirty: true })}
+                            disabled={!isEditing}
+                          />
                         </div>
                       </div>
                     </CardContent>
@@ -1032,21 +1170,19 @@ export default function ProductDetailPage() {
 
               {/* Technical Specifications Tab */}
               <TabsContent value="technical" className="mt-4 md:mt-6 flex flex-col gap-4 md:gap-6 focus-visible:outline-none">
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-4 md:gap-6">
-
-                  {/* Left Specs */}
-                  <Card className="border border-border/80 shadow-sm rounded-2xl md:col-span-1 lg:col-span-7">
-                    <CardHeader className="bg-indigo-500/5 border-b p-4 md:p-5">
-                      <CardTitle className="text-sm font-bold flex items-center gap-2 text-indigo-600">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 md:gap-6">
+                  {/* Main Specs Editor / View */}
+                  <Card className="border border-border/80 shadow-sm rounded-2xl lg:col-span-8">
+                    <CardHeader className="bg-indigo-500/5 border-b p-4 sm:p-5">
+                      <CardTitle className="text-sm font-bold flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
                         <Settings2 className="h-4 w-4" />
-                        Clinical Configuration Specifications
+                        Clinical &amp; Technical Configuration Specifications
                       </CardTitle>
                       <CardDescription className="text-xs text-muted-foreground">
-                        Structured technical metrics displayed in dynamic lists.
+                        Structured technical metrics, diagnostic parameters, and physical device dimensions.
                       </CardDescription>
                     </CardHeader>
-                    <CardContent className="p-4 md:p-6">
+                    <CardContent className="p-4 sm:p-6">
                       <Field
                         label="Technical Specifications Schema"
                         editing={isEditing}
@@ -1057,6 +1193,37 @@ export default function ProductDetailPage() {
                     </CardContent>
                   </Card>
 
+                  {/* Right Side Clinical Standards Info */}
+                  <Card className="border border-border/80 shadow-sm rounded-2xl lg:col-span-4 flex flex-col justify-between">
+                    <div>
+                      <CardHeader className="bg-muted/10 border-b p-4 sm:p-5">
+                        <CardTitle className="text-sm font-bold flex items-center gap-2">
+                          <SlidersHorizontal className="h-4 w-4 text-primary" />
+                          Specification Guidelines
+                        </CardTitle>
+                        <CardDescription className="text-xs text-muted-foreground">
+                          Recommendations for accurate medical device procurement listings.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-4 sm:p-5 space-y-3.5 text-xs text-muted-foreground">
+                        <div className="flex items-start gap-2 bg-indigo-50/50 dark:bg-indigo-950/20 p-3 rounded-xl border border-indigo-100 dark:border-indigo-900/30">
+                          <CheckCircle2 className="h-4 w-4 text-indigo-600 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <span className="font-bold text-foreground block">Clinical Accuracy</span>
+                            Ensure measurement ranges, accuracy tolerances, and power requirements match manufacturer certificates.
+                          </div>
+                        </div>
+
+                        <div className="flex items-start gap-2 bg-emerald-50/50 dark:bg-emerald-950/20 p-3 rounded-xl border border-emerald-100 dark:border-emerald-900/30">
+                          <CheckCircle2 className="h-4 w-4 text-emerald-600 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <span className="font-bold text-foreground block">Customer Filtering</span>
+                            Specifications power customer comparisons and specialized filter criteria across hospital categories.
+                          </div>
+                        </div>
+                      </CardContent>
+                    </div>
+                  </Card>
                 </div>
               </TabsContent>
 
@@ -1312,6 +1479,11 @@ export default function ProductDetailPage() {
                     </Field>
                   </CardContent>
                 </Card>
+              </TabsContent>
+
+              {/* Relations Tab */}
+              <TabsContent value="relations" className="mt-4 md:mt-6 focus-visible:outline-none">
+                <RelatedProductsEditor productId={product.id} />
               </TabsContent>
             </Tabs>
           </div>

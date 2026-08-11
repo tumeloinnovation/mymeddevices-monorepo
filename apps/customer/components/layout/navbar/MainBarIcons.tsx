@@ -18,7 +18,20 @@ import { useWishlistStore } from "@/lib/store/useWishlistStore";
 import { useCompareStore } from "@/lib/store/useCompareStore";
 import { CustomerAuthModal } from "@mymeddevices/shared-ui";
 import { useAuthStore, getUserDisplayName, useAuthCookie } from "@mymeddevices/shared-core";
-import { User, Settings as SettingsIcon, CreditCard as CreditCardIcon, Bell as BellIcon, LogOut as LogOutIcon, Package as PackageIcon } from "lucide-react";
+import {
+  User,
+  Settings as SettingsIcon,
+  CreditCard as CreditCardIcon,
+  Bell as BellIcon,
+  LogOut as LogOutIcon,
+  Package as PackageIcon,
+  Star,
+  MapPin,
+  Ticket,
+  Award,
+  ShieldCheck,
+  ChevronRight,
+} from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -29,6 +42,7 @@ import {
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
@@ -69,52 +83,79 @@ export const MainBarIcons = () => {
   const dashboardRoute = getDashboardRoute();
   const safeDashboardRoute = dashboardRoute === '/' ? '/dashboard' : dashboardRoute;
 
-  const listItems = [
+  const loyaltyPoints = user?.loyaltyPoints ?? (user as any)?.loyalty_points ?? 0;
+  const loyaltyTier = user?.loyaltyTier || 'Bronze';
+
+  const menuSections = [
     {
-      icon: <UserIcon className="h-4 w-4" />,
-      property: 'Profile',
-      href: safeDashboardRoute
+      title: 'Account & Profile',
+      items: [
+        {
+          icon: <User className="h-4 w-4 text-primary" />,
+          label: 'My Profile',
+          href: `${safeDashboardRoute}/profile`,
+        },
+        {
+          icon: <Award className="h-4 w-4 text-amber-500" />,
+          label: 'Loyalty Rewards',
+          href: `${safeDashboardRoute}/loyalty`,
+          badge: `${loyaltyPoints} pts`,
+        },
+      ],
     },
     {
-      icon: <PackageIcon className="h-4 w-4" />,
-      property: 'My Orders',
-      href: `${safeDashboardRoute}/orders`
+      title: 'Shopping & Orders',
+      items: [
+        {
+          icon: <PackageIcon className="h-4 w-4 text-blue-500" />,
+          label: 'My Orders',
+          href: `${safeDashboardRoute}/orders`,
+        },
+        {
+          icon: <Heart className="h-4 w-4 text-rose-500" />,
+          label: 'Wishlist',
+          href: `${safeDashboardRoute}/wishlist`,
+          badge: wishlistItems.length > 0 ? `${wishlistItems.length}` : undefined,
+        },
+        {
+          icon: <Star className="h-4 w-4 text-amber-400 fill-amber-400" />,
+          label: 'My Reviews & Ratings',
+          href: `${safeDashboardRoute}/reviews`,
+        },
+        {
+          icon: <MapPin className="h-4 w-4 text-emerald-500" />,
+          label: 'Saved Addresses',
+          href: `${safeDashboardRoute}/addresses`,
+        },
+      ],
     },
     {
-      icon: <Heart className="h-4 w-4" />,
-      property: 'Wishlist',
-      href: `${safeDashboardRoute}/wishlist`
+      title: 'Support & Settings',
+      items: [
+        {
+          icon: <Ticket className="h-4 w-4 text-purple-500" />,
+          label: 'Support & Tickets',
+          href: `${safeDashboardRoute}/tickets`,
+        },
+        {
+          icon: <CreditCardIcon className="h-4 w-4 text-teal-500" />,
+          label: 'Payment Methods',
+          href: `${safeDashboardRoute}/payment-methods`,
+        },
+        {
+          icon: <SettingsIcon className="h-4 w-4 text-slate-500" />,
+          label: 'Account Settings',
+          href: `${safeDashboardRoute}/preferences`,
+        },
+      ],
     },
-    {
-      icon: <SettingsIcon className="h-4 w-4" />,
-      property: 'Saved Addresses',
-      href: `${safeDashboardRoute}/addresses`
-    },
-    {
-      icon: <SettingsIcon className="h-4 w-4" />,
-      property: 'Settings',
-      href: `${safeDashboardRoute}/settings`
-    },
-    {
-      icon: <CreditCardIcon className="h-4 w-4" />,
-      property: 'Billing',
-      href: `${safeDashboardRoute}/payment-methods`
-    },
-    {
-      icon: <BellIcon className="h-4 w-4" />,
-      property: 'Notifications',
-      href: `${safeDashboardRoute}/settings`
-    },
-    {
-      icon: <LogOutIcon className="h-4 w-4" />,
-      property: 'Sign Out',
-      onClick: async () => {
-        await logout();
-        clearAuthCookie();
-        router.push('/');
-      }
-    }
   ];
+
+  const handleSignOut = async () => {
+    await logout();
+    clearAuthCookie();
+    router.push('/');
+  };
 
   const renderItemPreview = (items: any[]) => (
     <motion.div
@@ -281,7 +322,7 @@ export const MainBarIcons = () => {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <div className="relative flex flex-col items-center text-muted-foreground hover:text-primary transition-all duration-200 cursor-pointer">
-              <Avatar className="h-5 w-5">
+              <Avatar className="h-5 w-5 border border-primary/20">
                 <AvatarImage src={avatarUrl} alt={displayName} />
                 <AvatarFallback className="text-[10px] bg-primary text-primary-foreground font-semibold">
                   {displayName[0]?.toUpperCase() || 'U'}
@@ -292,38 +333,78 @@ export const MainBarIcons = () => {
               </span>
             </div>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-56" align="end">
-            <DropdownMenuLabel className="font-normal">
-              <div className="flex flex-col space-y-1">
-                <p className="text-sm font-medium leading-none">{displayName}</p>
-                <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
+          <DropdownMenuContent className="w-64 p-2 shadow-xl border border-border/80" align="end">
+            <DropdownMenuLabel className="font-normal p-2">
+              <div className="flex flex-col space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold leading-none truncate max-w-[150px]">{displayName}</p>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20 capitalize">
+                    <ShieldCheck className="w-3 h-3" />
+                    {user?.role || 'Customer'}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
+
+                {/* Loyalty Points Banner */}
+                <Link
+                  href={`${safeDashboardRoute}/loyalty`}
+                  className="flex items-center justify-between p-2 mt-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 hover:bg-amber-500/20 transition-all group"
+                >
+                  <div className="flex items-center gap-2">
+                    <Award className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                    <div className="flex flex-col">
+                      <span className="text-[11px] font-semibold leading-tight">Loyalty Rewards</span>
+                      <span className="text-[9px] text-muted-foreground capitalize">{loyaltyTier} Tier</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                      {loyaltyPoints} pts
+                    </span>
+                    <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
+                  </div>
+                </Link>
               </div>
             </DropdownMenuLabel>
-            <DropdownMenuGroup>
-              {listItems.map((item, index) => (
-                item.onClick ? (
-                  <DropdownMenuItem
-                    key={index}
-                    className="*:[svg]:text-muted-foreground cursor-pointer flex items-center gap-2"
-                    onClick={item.onClick}
-                  >
-                    {item.icon}
-                    <span className="text-popover-foreground">{item.property}</span>
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem
-                    key={index}
-                    asChild
-                    className="*:[svg]:text-muted-foreground cursor-pointer"
-                  >
-                    <Link href={item.href || '#'} className="flex items-center gap-2 w-full">
-                      {item.icon}
-                      <span className="text-popover-foreground">{item.property}</span>
-                    </Link>
-                  </DropdownMenuItem>
-                )
-              ))}
-            </DropdownMenuGroup>
+
+            {menuSections.map((section, sIndex) => (
+              <div key={sIndex}>
+                <DropdownMenuSeparator className="my-1" />
+                <div className="px-2 py-1 text-[10px] font-semibold tracking-wider text-muted-foreground/70 uppercase">
+                  {section.title}
+                </div>
+                <DropdownMenuGroup>
+                  {section.items.map((item, iIndex) => (
+                    <DropdownMenuItem
+                      key={iIndex}
+                      asChild
+                      className="cursor-pointer rounded-md focus:bg-accent hover:bg-accent"
+                    >
+                      <Link href={item.href} className="flex items-center justify-between w-full px-2 py-1.5 text-xs">
+                        <div className="flex items-center gap-2.5">
+                          {item.icon}
+                          <span className="text-popover-foreground font-medium">{item.label}</span>
+                        </div>
+                        {item.badge && (
+                          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+                            {item.badge}
+                          </span>
+                        )}
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              </div>
+            ))}
+
+            <DropdownMenuSeparator className="my-1" />
+            <DropdownMenuItem
+              onClick={handleSignOut}
+              className="text-red-600 focus:text-red-600 dark:text-red-400 dark:focus:text-red-400 focus:bg-red-50 dark:focus:bg-red-950/40 cursor-pointer flex items-center gap-2 px-2 py-1.5 text-xs font-medium rounded-md my-0.5"
+            >
+              <LogOutIcon className="h-4 w-4" />
+              <span>Sign Out</span>
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       ) : (

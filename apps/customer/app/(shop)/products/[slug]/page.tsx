@@ -114,14 +114,37 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   }
 }
 
+async function fetchRelatedProducts(slug: string): Promise<any[]> {
+  try {
+    const res = await fetch(`${API_URL}/api/v1/storefront/products/${slug}/related`, {
+      next: { revalidate: 3600 }
+    });
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.map((item: any) => ({
+      id: item.related_product?.id || item.id,
+      name: item.related_product?.name || 'Product',
+      slug: item.related_product?.slug || '',
+      sku: item.related_product?.sku || 'N/A',
+      price: item.related_product?.price?.toString() || '0',
+      regular_price: item.related_product?.price?.toString() || '0',
+      images: item.related_product?.image_url ? [{ src: item.related_product.image_url }] : [],
+      stock_status: item.related_product?.stock_status || 'instock',
+      relation_type: item.relation_type,
+    }));
+  } catch (e) {
+    console.error('Failed to fetch related products:', e);
+    return [];
+  }
+}
+
 export default async function ProductDetailPage({ params }: Props) {
   const { slug } = await params;
   const product = await fetchProduct(slug);
 
   if (!product) notFound();
 
-  // Related products and reviews defaults
-  const relatedProducts: Product[] = [];
+  const relatedProducts = await fetchRelatedProducts(slug);
   const reviews: any[] = [];
 
   return (

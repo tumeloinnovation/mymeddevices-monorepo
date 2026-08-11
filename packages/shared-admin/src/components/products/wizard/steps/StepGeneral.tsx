@@ -105,6 +105,81 @@ export function StepGeneral({
           <Badge variant="outline" className="font-mono text-[10px] uppercase">Step 1 of 6</Badge>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
+          {/* Product Type Classification Selector */}
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">
+              Product Classification Type <span className="text-rose-500">*</span>
+            </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <button
+                type="button"
+                onClick={() => setValue("product_type", "simple", { shouldValidate: true })}
+                className={`p-3 text-left border rounded-lg transition-all flex items-start gap-3 ${
+                  (productTypeVal || "simple") === "simple"
+                    ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 ring-1 ring-emerald-500"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
+                }`}
+              >
+                <div className={`p-2 rounded-md ${ (productTypeVal || "simple") === "simple" ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500" }`}>
+                  <Package className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-xs text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    Simple Product
+                  </div>
+                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Standalone device with a single SKU & price.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setValue("product_type", "variable", { shouldValidate: true })}
+                className={`p-3 text-left border rounded-lg transition-all flex items-start gap-3 ${
+                  productTypeVal === "variable"
+                    ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 ring-1 ring-emerald-500"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
+                }`}
+              >
+                <div className={`p-2 rounded-md ${ productTypeVal === "variable" ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500" }`}>
+                  <Layers className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-xs text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    Variable Product
+                  </div>
+                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Has variations (e.g., Folds, Size, Material).
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setValue("product_type", "bundle", { shouldValidate: true })}
+                className={`p-3 text-left border rounded-lg transition-all flex items-start gap-3 ${
+                  productTypeVal === "bundle"
+                    ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 ring-1 ring-emerald-500"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
+                }`}
+              >
+                <div className={`p-2 rounded-md ${ productTypeVal === "bundle" ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500" }`}>
+                  <Copy className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-xs text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    Bundle / Kit
+                  </div>
+                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Curated collection of multiple items sold together.
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <Separator className="bg-zinc-200 dark:bg-zinc-800" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">

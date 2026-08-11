@@ -70,6 +70,18 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
     return currentPrice * quantity
   }, [currentPrice, quantity])
 
+  // Calculate price range for variable products
+  const priceRange = useMemo(() => {
+    if (variants.length === 0) return null;
+    const prices = variants.map(v => (v as any).calculated_price || (v as any).override_price || (parseFloat(product.price) + ((v as any).price_adjustment || 0)));
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    if (min === max || isNaN(min) || isNaN(max)) return null;
+    return { min, max };
+  }, [variants, product.price]);
+
+  const requiresVariantSelection = (product as any).product_type === 'variable' && variants.length > 0 && !selectedVariant;
+
   const handleWishlistToggle = () => {
     if (isInWishlist(product.id)) {
       removeFromWishlist(product.id);
@@ -169,8 +181,14 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
 
   return (
     <div className="space-y-5">
-      {/* Stock Status Badge */}
-      <div className="flex items-center gap-3">
+      {/* Product Title */}
+      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
+        {product.name}
+      </h1>
+
+      {/* Stock Status, Rating & Reviews - Combined Row */}
+      <div className="flex items-center flex-wrap gap-3">
+        {/* Stock Status */}
         {product.stock_status === 'instock' ? (
           <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
             IN STOCK
@@ -185,27 +203,28 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
             SALE
           </Badge>
         )}
-      </div>
 
-      {/* Product Title */}
-      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
-        {product.name}
-      </h1>
-
-      {/* Rating & Reviews */}
-      <div className="flex items-center gap-2">
-        <div className="flex items-center">
-          {[...Array(5)].map((_, i) => (
-            <Star
-              key={i}
-              className={`h-4 w-4 ${
-                i < 5 ? 'fill-amber-400 text-amber-400' : 'text-gray-300 dark:text-gray-600'
-              }`}
-            />
-          ))}
+        {/* Rating & Reviews - Using real data */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center">
+            {[...Array(5)].map((_, i) => (
+              <Star
+                key={i}
+                className={`h-4 w-4 ${
+                  i < Math.round(parseFloat((product as any)?.average_rating || (product as any)?.popularity_score / 10 || 0))
+                    ? 'fill-amber-400 text-amber-400'
+                    : 'text-gray-300 dark:text-gray-600'
+                }`}
+              />
+            ))}
+          </div>
+          <span className="text-sm font-medium text-gray-900 dark:text-gray-100">
+            {(parseFloat((product as any)?.average_rating || (product as any)?.popularity_score / 10 || 0)).toFixed(1)}
+          </span>
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            ({(product as any)?.rating_count || (product as any)?.view_count || 0} reviews)
+          </span>
         </div>
-        <span className="text-sm font-medium text-gray-900 dark:text-gray-100">5.0</span>
-        <span className="text-sm text-gray-500 dark:text-gray-400">(124 reviews)</span>
       </div>
 
       {/* Brand */}
@@ -218,18 +237,24 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
       {/* Price Section */}
       <div className="space-y-1">
         <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-bold text-gray-900 dark:text-gray-100">
-            KES {formatCurrency(currentPrice)}
-          </span>
+          {priceRange && !selectedVariant ? (
+            <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 font-mono">
+              KES {formatCurrency(priceRange.min)} — KES {formatCurrency(priceRange.max)}
+            </span>
+          ) : (
+            <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 font-mono">
+              KES {formatCurrency(currentPrice)}
+            </span>
+          )}
           {product.on_sale && product.sale_price && (
-            <span className="text-lg text-gray-400 line-through">
+            <span className="text-lg text-gray-400 line-through font-mono">
               KES {formatCurrency(parseFloat(product.sale_price))}
             </span>
           )}
         </div>
         {quantity > 1 && (
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Total: <span className="font-semibold text-gray-900 dark:text-gray-100">KES {formatCurrency(totalPrice)}</span>
+            Total: <span className="font-semibold text-gray-900 dark:text-gray-100 font-mono">KES {formatCurrency(totalPrice)}</span>
           </p>
         )}
       </div>

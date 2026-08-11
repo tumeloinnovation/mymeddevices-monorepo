@@ -22,4 +22,5 @@ export type { Cart as ShoppingCart } from './services/shopping-service';
 export * from './lib/logger';
 export * from './lib/config/platform-fees';
 export * from './lib/utils/product-mapper';
+export * from './constants/taxonomy';
 

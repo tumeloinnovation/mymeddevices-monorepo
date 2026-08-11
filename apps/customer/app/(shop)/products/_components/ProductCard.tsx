@@ -12,16 +12,18 @@ import {
   Facebook,
   Twitter,
   MessageCircle,
+  Star,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useCompareStore } from "@/lib/store/useCompareStore";
 import Link from "next/link";
-import { Product } from "@/lib/data/types";
+import type { Product } from "@/lib/hooks/useProducts";
 import useCartStore from "@/lib/store/useCartStore";
 import { useWishlistStore } from "@/lib/store/useWishlistStore";
 import { formatCurrency } from "@/lib/utils/utils";
@@ -47,7 +49,8 @@ interface ProductCardProps {
   // Extract product details
   const [imgSrc, setImgSrc] = useState(product?.images?.[0]?.src || (product?.images?.[0] as any)?.url || '/logos/logo-portrait.png');
   const name = product?.name || '';
-  const category = product?.categories?.[0]?.name || '';
+  // Try multiple possible category field structures
+  const category = product?.categories?.[0]?.name || (product as any)?.category_name || (product as any)?.category || '';
   const price = product ? parseFloat(product.on_sale ? product.sale_price : product.price) : 0;
   const originalPrice = product?.on_sale ? parseFloat(product.regular_price) : undefined;
   const slug = product?.slug || '';
@@ -64,11 +67,13 @@ interface ProductCardProps {
   const removeFromWishlist = useWishlistStore((state) => state.removeItem);
   const isInWishlist = useWishlistStore((state) => state.isInWishlist);
   const wishlistHydrated = useWishlistStore((state) => state.hydrated);
-  
+  const wishlistItems = useWishlistStore((state) => state.items);
+
   const addToCompare = useCompareStore((state) => state.addItem);
   const removeFromCompare = useCompareStore((state) => state.removeItem);
   const isInCompare = useCompareStore((state) => state.isInCompare);
   const compareHydrated = useCompareStore((state) => state.hydrated);
+  const compareItems = useCompareStore((state) => state.items);
 
   const productId = product?.id;
   const isInCart = useCartStore((state) => productId ? state.isInCart(productId) : false);
@@ -156,6 +161,16 @@ interface ProductCardProps {
 
           {/* Status Badges */}
           <div className="absolute left-2 top-2 flex flex-col gap-1 z-10">
+            {(product as any)?.product_type === 'variable' && (
+              <div className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wider">
+                {product.variants?.length ? `${product.variants.length} Options` : 'Variable'}
+              </div>
+            )}
+            {(product as any)?.product_type === 'bundle' && (
+              <div className="bg-amber-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wider">
+                Kit · {(product as any)?.bundle_items?.length || 'Package'}
+              </div>
+            )}
             {hasDiscount && (
               <div className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wider">
                 Sale
@@ -167,41 +182,54 @@ interface ProductCardProps {
               </div>
             )}
           </div>
-          
-          {/* Rating Placeholder - Simplified for now */}
+
+          {/* Rating - Using popularity_score as proxy; will be replaced when review system is implemented */}
           <div className="absolute left-2 bottom-2 bg-white/90 dark:bg-black/40 px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-0.5">
-            <span className="text-yellow-500">★</span>
-            <span>4.5</span>
-            <span className="text-muted-foreground">(24)</span>
+            <Star className="h-2.5 w-2.5 fill-yellow-500 text-yellow-500" />
+            <span>{((product as any)?.popularity_score || 0) / 10}</span>
+            <span className="text-muted-foreground">({(product as any)?.view_count || 0})</span>
           </div>
 
           <div className="absolute right-2 top-2 flex flex-col gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleWishlistToggle}
-              className={`bg-white/80 dark:bg-black/40 p-1.5 rounded-full shadow-sm opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ${
-                wishlistHydrated && isInWishlist(product.id) ? 'text-red-500' : 'text-gray-700 dark:text-gray-200'
-              }`}
-              style={{ transitionDelay: `0ms` }}
-              aria-label={wishlistHydrated && isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
-            >
-              <Heart className={`h-3.5 w-3.5 ${wishlistHydrated && isInWishlist(product.id) ? 'fill-current' : ''}`} />
-            </Button>
-            <Popover open={isShareOpen} onOpenChange={setIsShareOpen}>
-              <PopoverTrigger asChild>
-                {/* Keep trigger visible when popover is open and while hovered into the popover */}
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className={`bg-white/80 dark:bg-black/40 p-1.5 rounded-full shadow-sm transition-all duration-300 text-gray-700 dark:text-gray-200 ${
-                    isShareOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0'
+                  onClick={handleWishlistToggle}
+                  className={`bg-white/80 dark:bg-black/40 p-1.5 rounded-full shadow-sm opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ${
+                    wishlistHydrated && isInWishlist(product.id) ? 'text-red-500' : 'text-gray-700 dark:text-gray-200'
                   }`}
-                  style={{ transitionDelay: `80ms` }}
-                  aria-label={isShareOpen ? 'Share menu open' : 'Share'}
+                  style={{ transitionDelay: `0ms` }}
+                  aria-label={wishlistHydrated && isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}
                 >
-                  <Share2 className="h-3.5 w-3.5" />
+                  <Heart className={`h-3.5 w-3.5 ${wishlistHydrated && isInWishlist(product.id) ? 'fill-current' : ''}`} />
                 </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">
+                <p>{wishlistHydrated && isInWishlist(product.id) ? "Remove from wishlist" : "Add to wishlist"}</p>
+              </TooltipContent>
+            </Tooltip>
+            <Popover open={isShareOpen} onOpenChange={setIsShareOpen}>
+              <PopoverTrigger asChild>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`bg-white/80 dark:bg-black/40 p-1.5 rounded-full shadow-sm transition-all duration-300 text-gray-700 dark:text-gray-200 ${
+                        isShareOpen ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0'
+                      }`}
+                      style={{ transitionDelay: `80ms` }}
+                      aria-label={isShareOpen ? 'Share menu open' : 'Share'}
+                    >
+                      <Share2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="left">
+                    <p>Share product</p>
+                  </TooltipContent>
+                </Tooltip>
               </PopoverTrigger>
               <PopoverContent className="w-44 p-2" side="right" align="start">
                 <div className="flex flex-col gap-1">
@@ -235,23 +263,30 @@ interface ProductCardProps {
                 </div>
               </PopoverContent>
             </Popover>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={handleCompareToggle}
-              className={`bg-white/80 dark:bg-black/40 p-1.5 rounded-full shadow-sm opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ${
-                compareHydrated && isInCompare(product.id) ? 'text-blue-600' : 'text-gray-700 dark:text-gray-200'
-              }`}
-              style={{ transitionDelay: `160ms` }}
-              aria-label={compareHydrated && isInCompare(product.id) ? "Remove from compare" : "View related products"}
-            >
-              <GitCompare className={`h-3.5 w-3.5 ${compareHydrated && isInCompare(product.id) ? 'fill-current' : ''}`} />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={handleCompareToggle}
+                  className={`bg-white/80 dark:bg-black/40 p-1.5 rounded-full shadow-sm opacity-0 translate-y-2 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-300 ${
+                    compareHydrated && isInCompare(product.id) ? 'text-blue-600' : 'text-gray-700 dark:text-gray-200'
+                  }`}
+                  style={{ transitionDelay: `160ms` }}
+                  aria-label={compareHydrated && isInCompare(product.id) ? "Remove from compare" : "View related products"}
+                >
+                  <GitCompare className={`h-3.5 w-3.5 ${compareHydrated && isInCompare(product.id) ? 'fill-current' : ''}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="left">
+                <p>{compareHydrated && isInCompare(product.id) ? "Remove from compare" : "Compare products"}</p>
+              </TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
         {/* Content Section */}
-        <div className="p-3 sm:p-4 flex flex-col justify-between flex-1">
+        <div className="px-3 sm:px-4 py-2 flex flex-col justify-between flex-1">
           <div onClick={handleNavigateToDetails} className="cursor-pointer min-h-[2.5rem]">
             {category && (
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
@@ -264,7 +299,7 @@ interface ProductCardProps {
           </div>
 
           {/* Price Section */}
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-1 flex items-center gap-2">
             <p className="text-sm font-semibold text-primary">
               Ksh. {formatCurrency(price)}
             </p>
@@ -276,7 +311,7 @@ interface ProductCardProps {
           </div>
 
           {/* Bottom Action Section */}
-          <div className="mt-2 flex items-center gap-2 h-10">
+          <div className="mt-1 flex items-center gap-2 h-10">
             <motion.div className="flex-1 h-full">
               <AnimatePresence mode="wait" initial={false}>
                 {!isInCart ? (

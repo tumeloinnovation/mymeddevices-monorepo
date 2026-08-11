@@ -6,6 +6,13 @@ import {
   ProductListResponse,
   ProductImage,
   ProductImageCreate,
+  ProductVariant,
+  ProductVariantCreate,
+  VariantMatrixRequest,
+  BundleItem,
+  BundleItemCreate,
+  RelatedProduct,
+  RelatedProductCreate,
   Category,
   CategoryCreate,
   CategoryUpdate,
@@ -114,6 +121,61 @@ export const catalogService = {
 
   async reorderImages(productId: string, imageIds: string[]): Promise<ProductImage[]> {
     return apiClient.patch<ProductImage[]>(`/catalog/products/${productId}/images/reorder`, { image_ids: imageIds });
+  },
+
+  // Product Variants
+  async getVariants(productId: string): Promise<ProductVariant[]> {
+    return apiClient.get<ProductVariant[]>(`/catalog/products/${productId}/variants`);
+  },
+
+  async createVariant(productId: string, data: ProductVariantCreate): Promise<ProductVariant> {
+    return apiClient.post<ProductVariant>(`/catalog/products/${productId}/variants`, data);
+  },
+
+  async createVariantMatrix(productId: string, data: VariantMatrixRequest): Promise<ProductVariant[]> {
+    return apiClient.post<ProductVariant[]>(`/catalog/products/${productId}/variants/bulk`, data);
+  },
+
+  async updateVariant(productId: string, variantId: string, data: Partial<ProductVariantCreate>): Promise<ProductVariant> {
+    return apiClient.patch<ProductVariant>(`/catalog/products/${productId}/variants/${variantId}`, data);
+  },
+
+  async deleteVariant(productId: string, variantId: string): Promise<void> {
+    return apiClient.delete(`/catalog/products/${productId}/variants/${variantId}`);
+  },
+
+  // Bundle Items
+  async getBundleItems(productId: string): Promise<BundleItem[]> {
+    return apiClient.get<BundleItem[]>(`/catalog/products/${productId}/bundle-items`);
+  },
+
+  async addBundleItem(productId: string, data: BundleItemCreate): Promise<BundleItem> {
+    return apiClient.post<BundleItem>(`/catalog/products/${productId}/bundle-items`, data);
+  },
+
+  async updateBundleItem(productId: string, itemId: string, data: Partial<BundleItemCreate>): Promise<BundleItem> {
+    return apiClient.patch<BundleItem>(`/catalog/products/${productId}/bundle-items/${itemId}`, data);
+  },
+
+  async removeBundleItem(productId: string, itemId: string): Promise<void> {
+    return apiClient.delete(`/catalog/products/${productId}/bundle-items/${itemId}`);
+  },
+
+  // Related Products
+  async getRelatedProducts(productId: string, relation_type?: string): Promise<RelatedProduct[]> {
+    return apiClient.get<RelatedProduct[]>(`/catalog/products/${productId}/related`, { params: { relation_type } });
+  },
+
+  async addRelatedProduct(productId: string, data: RelatedProductCreate): Promise<RelatedProduct> {
+    return apiClient.post<RelatedProduct>(`/catalog/products/${productId}/related`, data);
+  },
+
+  async removeRelatedProduct(productId: string, relationId: string): Promise<void> {
+    return apiClient.delete(`/catalog/products/${productId}/related/${relationId}`);
+  },
+
+  async getStorefrontRelatedProducts(slug: string, relation_type?: string): Promise<RelatedProduct[]> {
+    return apiClient.get<RelatedProduct[]>(`/storefront/products/${slug}/related`, { params: { relation_type } });
   },
 
   // Categories

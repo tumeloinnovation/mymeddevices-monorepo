@@ -28,6 +28,54 @@ export interface ProductImageCreate {
   is_primary?: boolean;
 }
 
+export type ProductType = 'simple' | 'variable' | 'bundle';
+
+export interface ComponentProductSummary {
+  id: string;
+  name: string;
+  slug: string;
+  sku?: string;
+  price?: number;
+  image_url?: string;
+  stock_status: StockStatus;
+}
+
+export interface BundleItem {
+  id: string;
+  bundle_product_id: string;
+  component_product_id: string;
+  component_product?: ComponentProductSummary;
+  quantity: number;
+  sort_order: number;
+  is_optional: boolean;
+}
+
+export interface BundleItemCreate {
+  component_product_id: string;
+  quantity?: number;
+  sort_order?: number;
+  is_optional?: boolean;
+}
+
+export type RelationType = 'cross_sell' | 'upsell' | 'accessory' | 'spare_part';
+
+export interface RelatedProduct {
+  id: string;
+  product_id: string;
+  related_product_id: string;
+  related_product?: ComponentProductSummary;
+  relation_type: RelationType;
+  sort_order: number;
+  is_bidirectional: boolean;
+}
+
+export interface RelatedProductCreate {
+  related_product_id: string;
+  relation_type: RelationType;
+  sort_order?: number;
+  is_bidirectional?: boolean;
+}
+
 export interface ProductVariant {
   id: string;
   product_id: string;
@@ -41,6 +89,28 @@ export interface ProductVariant {
   image_url?: string;
   is_default?: boolean;
   is_active: boolean;
+  sort_order?: number;
+  weight_kg?: number;
+}
+
+export interface ProductVariantCreate {
+  name: string;
+  sku?: string;
+  price_adjustment?: number;
+  override_price?: number;
+  stock_quantity?: number;
+  attributes?: MedicalVariantAttributes;
+  is_active?: boolean;
+  is_default?: boolean;
+  image_url?: string;
+  sort_order?: number;
+  weight_kg?: number;
+}
+
+export interface VariantMatrixRequest {
+  attribute_groups: Record<string, string[]>;
+  base_sku_prefix?: string;
+  default_stock?: number;
 }
 
 export interface VariantAttributeOption {
@@ -63,6 +133,7 @@ export interface Product {
   vendor_id: string;
   category_id?: string;
   category_name?: string;
+  product_type: ProductType;
   name: string;
   slug: string;
   description?: string;
@@ -85,6 +156,7 @@ export interface Product {
   verified_at?: string;
   rejection_reason?: string;
   is_featured: boolean;
+  is_clinical_pick?: boolean;
   is_on_sale: boolean;
   popularity_score: number;
   view_count: number;
@@ -106,6 +178,8 @@ export interface Product {
   completeness_score: number;
   images: ProductImage[];
   variants?: ProductVariant[];
+  bundle_items?: BundleItem[];
+  related_products?: RelatedProduct[];
   created_at: string;
   updated_at: string;
 }

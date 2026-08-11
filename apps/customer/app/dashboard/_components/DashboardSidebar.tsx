@@ -277,40 +277,76 @@ export function DashboardSidebar() {
                                     </SidebarMenuButton>
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent
-                                    className="w-[--radix-dropdown-menu-trigger-width] min-w-56 rounded-lg"
+                                    className="w-64 p-2 rounded-lg shadow-lg border border-border"
                                     side={isMobile ? 'bottom' : 'right'}
                                     align="end"
                                     sideOffset={4}
                                 >
-                                    <DropdownMenuLabel className="p-0 font-normal">
-                                        <div className="flex items-center gap-2 px-1 py-1.5 text-left text-sm">
-                                            <Avatar className="h-8 w-8 rounded-lg">
-                                                <AvatarFallback className="rounded-lg bg-primary text-primary-foreground">
-                                                    {initials}
-                                                </AvatarFallback>
-                                            </Avatar>
-                                            <div className="grid flex-1 text-left text-sm leading-tight">
-                                                <span className="truncate font-semibold">
+                                    <DropdownMenuLabel className="p-1 font-normal">
+                                        <div className="flex flex-col space-y-1.5 px-1 py-1">
+                                            <div className="flex items-center justify-between">
+                                                <span className="truncate font-semibold text-sm">
                                                     {user?.displayName || user?.firstName || 'User'}
                                                 </span>
-                                                <span className="truncate text-xs text-muted-foreground">
-                                                    {user?.email}
+                                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-primary/10 text-primary capitalize">
+                                                    {user?.role || 'Customer'}
                                                 </span>
                                             </div>
+                                            <span className="truncate text-xs text-muted-foreground">
+                                                {user?.email}
+                                            </span>
+                                            <Link
+                                                href="/dashboard/loyalty"
+                                                className="flex items-center justify-between p-1.5 mt-1 rounded bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 hover:bg-amber-500/20 transition-all text-xs"
+                                            >
+                                                <span className="flex items-center gap-1.5 font-medium text-[11px]">
+                                                    <Gift className="w-3.5 h-3.5 text-amber-500" />
+                                                    Rewards
+                                                </span>
+                                                <span className="font-bold text-[11px] px-1.5 py-0.2 rounded bg-amber-500/20">
+                                                    {user?.loyaltyPoints ?? (user as any)?.loyalty_points ?? 0} pts
+                                                </span>
+                                            </Link>
                                         </div>
                                     </DropdownMenuLabel>
-                                    <DropdownMenuSeparator />
+
+                                    <DropdownMenuSeparator className="my-1" />
                                     <DropdownMenuGroup>
                                         <DropdownMenuItem asChild>
-                                            <Link href="/dashboard/settings" className="flex items-center w-full cursor-pointer">
-                                                <Settings className="mr-2 h-4 w-4" />
-                                                Settings
+                                            <Link href="/dashboard/profile" className="flex items-center w-full cursor-pointer text-xs">
+                                                <User className="mr-2 h-3.5 w-3.5 text-primary" />
+                                                My Profile
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem asChild>
+                                            <Link href="/dashboard/orders" className="flex items-center w-full cursor-pointer text-xs">
+                                                <Package className="mr-2 h-3.5 w-3.5 text-blue-500" />
+                                                My Orders
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem asChild>
+                                            <Link href="/dashboard/reviews" className="flex items-center w-full cursor-pointer text-xs">
+                                                <MessageSquare className="mr-2 h-3.5 w-3.5 text-amber-400" />
+                                                My Reviews
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem asChild>
+                                            <Link href="/dashboard/tickets" className="flex items-center w-full cursor-pointer text-xs">
+                                                <LifeBuoy className="mr-2 h-3.5 w-3.5 text-purple-500" />
+                                                Support Tickets
+                                            </Link>
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem asChild>
+                                            <Link href="/dashboard/preferences" className="flex items-center w-full cursor-pointer text-xs">
+                                                <Settings className="mr-2 h-3.5 w-3.5 text-slate-500" />
+                                                Account Settings
                                             </Link>
                                         </DropdownMenuItem>
                                     </DropdownMenuGroup>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={handleLogout}>
-                                        <LogOut className="mr-2 h-4 w-4" />
+
+                                    <DropdownMenuSeparator className="my-1" />
+                                    <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600 dark:text-red-400 cursor-pointer text-xs font-medium">
+                                        <LogOut className="mr-2 h-3.5 w-3.5" />
                                         Log out
                                     </DropdownMenuItem>
                                 </DropdownMenuContent>

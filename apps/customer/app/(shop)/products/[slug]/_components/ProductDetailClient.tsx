@@ -5,14 +5,14 @@ import type { Product, Review } from '@/lib/data/types'
 import { useRecentlyViewedStore } from '@/lib/store/useRecentlyViewedStore'
 
 import DescriptionTab from '@/app/(shop)/products/_components/DescriptionTab'
-import OffersTab from '@/app/(shop)/products/_components/OffersTab'
 import ProductGallery from '@/app/(shop)/products/_components/ProductGallery'
 import ProductSection from '@/components/common/ProductSection'
 import ProductInfo from '@/app/(shop)/products/_components/ProductInfo'
 import ReviewsTab from '@/app/(shop)/products/[slug]/_components/ReviewsTab'
 import SpecsTab from '@/app/(shop)/products/_components/SpecsTab'
+import AccessoriesTab from '@/app/(shop)/products/[slug]/_components/AccessoriesTab'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { FileText, MessageSquare, Sliders, Tag } from 'lucide-react'
+import { FileText, MessageSquare, Sliders, Tag, Package } from 'lucide-react'
 import ProductNotFound from '../../_components/ProductNotFound'
 import { ProductJsonLd, BreadcrumbJsonLd } from '@/components/seo'
 
@@ -60,7 +60,8 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
       <ProductJsonLd product={product} url={productUrl} />
       <BreadcrumbJsonLd items={breadcrumbItems} />
 
-      <div className="px-4 py-8 max-w-7xl mx-auto">
+      <div className="container mx-auto px-4 py-6">
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
           <div className="sticky top-8">
             <ProductGallery images={images} selected={selectedImage} onSelect={setSelectedImage} />
@@ -85,8 +86,8 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
                 <TabsTrigger value="reviews" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
                   <MessageSquare className="h-4 w-4" /> Reviews
                 </TabsTrigger>
-                <TabsTrigger value="offers" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-                  <Tag className="h-4 w-4" /> Offers
+                <TabsTrigger value="accessories" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
+                  <Tag className="h-4 w-4" /> Accessories
                 </TabsTrigger>
               </TabsList>
 
@@ -109,26 +110,39 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
                 <TabsContent value="reviews">
                   <ReviewsTab productId={String(product.id)} productSlug={product.slug} productName={product.name} />
                 </TabsContent>
-                <TabsContent value="offers">
-                  <OffersTab />
+                <TabsContent value="accessories">
+                  <AccessoriesTab product={product} relatedProducts={relatedProducts} />
                 </TabsContent>
               </div>
             </Tabs>
           </div>
         </div>
 
-        {relatedProducts.length > 0 && (
-          <section className="py-2 mt-12">
+        {/* You Might Also Like Section */}
+        {(relatedProducts.length > 0 || recentlyViewedItems.length > 0) ? (
+          <section className="py-4 mt-12">
             <ProductSection
-              title="You may also like"
-              description="Explore similar products that might interest you."
-              items={relatedProducts}
+              title="You Might Also Like"
+              description="Discover similar products and accessories."
+              items={relatedProducts.length > 0 ? relatedProducts : recentlyViewedItems.slice(0, 4)}
             />
+          </section>
+        ) : (
+          <section className="py-4 mt-12">
+            <div className="text-center py-12 bg-gray-50 dark:bg-muted/20 rounded-xl">
+              <Package className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                More Products Coming Soon
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                We're constantly updating our catalog. Check back later for more great products.
+              </p>
+            </div>
           </section>
         )}
 
-        {recentlyViewedItems.length > 0 && (
-          <section className="py-2 mt-12">
+        {recentlyViewedItems.length > 0 && relatedProducts.length > 0 && (
+          <section className="py-4 mt-8">
             <ProductSection
               title="Recently Viewed"
               description="Products you browsed recently."

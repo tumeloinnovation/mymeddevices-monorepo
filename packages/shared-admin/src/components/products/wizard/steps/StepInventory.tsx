@@ -10,9 +10,13 @@ import { Badge } from "../../../ui/badge";
 import { Switch } from "../../../ui/switch";
 import { Separator } from "../../../ui/separator";
 import { ProductWizardFormData } from "../product-wizard-schema";
+import { useProductWizardStore } from "../use-product-wizard-store";
+import { StepVariants } from "./StepVariants";
+import { StepBundle } from "./StepBundle";
 
 export function StepInventory() {
   const { register, watch, setValue, formState: { errors } } = useFormContext<ProductWizardFormData>();
+  const { draftProductId } = useProductWizardStore();
 
   const stockStatusVal = watch("stock_status") || "instock";
   const brandName = watch("brand_name") || "MED";
@@ -196,6 +200,14 @@ export function StepInventory() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Conditionally render Variant Matrix Generator or Bundle Component Builder */}
+      {watch("product_type") === "variable" && (
+        <StepVariants productId={draftProductId || undefined} />
+      )}
+      {watch("product_type") === "bundle" && (
+        <StepBundle productId={draftProductId || undefined} />
+      )}
     </div>
   );
 }

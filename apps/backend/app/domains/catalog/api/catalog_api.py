@@ -11,6 +11,7 @@ from app.core.dependencies import get_current_user, require_role
 from app.domains.auth.models.user import User
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.category import Category
+from app.domains.catalog.models.brand import Brand
 from app.domains.vendor.models.vendor_profile import VendorProfile
 from app.domains.catalog.services.catalog_service import CatalogService
 from app.domains.catalog.services.ai_assist_service import AIAssistService
@@ -24,6 +25,15 @@ from app.domains.catalog.schemas.product_schemas import (
     ProductImageResponse,
     ProductImageReorder,
     ProductReject,
+    ProductVariantCreate,
+    ProductVariantUpdate,
+    VariantMatrixRequest,
+    ProductVariantResponse,
+    BundleItemCreate,
+    BundleItemUpdate,
+    BundleItemResponse,
+    RelatedProductCreate,
+    RelatedProductResponse,
     AIAssistRequest,
     AIDescriptionRequest,
     AIAssistResponse,
@@ -1042,6 +1052,24 @@ async def get_ai_suggestions(
             category_res = await db.execute(category_stmt)
             category = category_res.scalar_one_or_none()
 
+        # Resolve brand name if product.brand is a UUID or brand_id is set
+        brand_name = product.brand
+        if product.brand_id or (product.brand and len(product.brand) == 36 and "-" in product.brand):
+            target_brand_id = product.brand_id or product.brand
+            try:
+                brand_uuid = uuid.UUID(str(target_brand_id))
+                brand_stmt = select(Brand).where(Brand.id == brand_uuid)
+                brand_res = await db.execute(brand_stmt)
+                brand_obj = brand_res.scalar_one_or_none()
+                if brand_obj:
+                    brand_name = brand_obj.name
+            except ValueError:
+                pass
+
+        # Create a transient product object with resolved brand name for AI prompt generation
+        if brand_name != product.brand:
+            product.brand = brand_name
+
         ai_service = AIAssistService()
         suggestions_res = await ai_service.generate_suggestions(
             product=product,
@@ -1190,8 +1218,208 @@ async def reorder_product_images(
         images = await service.reorder_product_images(
             vendor_id=vendor_id,
             product_id=id,
-            image_ids=data.image_ids
+            image_ids=[str(img_id) for img_id in data.image_ids]
         )
         return images
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+# ============================================================================
+# PRODUCT VARIANTS
+# ============================================================================
+
+@router.get("/products/{id}/variants", response_model=List[ProductVariantResponse], tags=["Product Variants"])
+async def list_product_variants(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """List all variants for a product."""
+    service = CatalogService(db)
+    return await service.get_variants(id)
+
+
+@router.post("/products/{id}/variants", response_model=ProductVariantResponse, status_code=status.HTTP_201_CREATED, tags=["Product Variants"])
+async def create_product_variant(
+    id: uuid.UUID,
+    data: ProductVariantCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Create a single product variant."""
+    service = CatalogService(db)
+    try:
+        variant = await service.create_variant(product_id=id, **data.model_dump(exclude_unset=True))
+        return variant
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.post("/products/{id}/variants/bulk", response_model=List[ProductVariantResponse], status_code=status.HTTP_201_CREATED, tags=["Product Variants"])
+async def create_variant_matrix(
+    id: uuid.UUID,
+    data: VariantMatrixRequest,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Generate variant matrix combinations from attribute groups."""
+    service = CatalogService(db)
+    try:
+        variants = await service.create_variant_matrix(
+            product_id=id,
+            attribute_groups=data.attribute_groups,
+            base_sku_prefix=data.base_sku_prefix,
+            default_stock=data.default_stock
+        )
+        return variants
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.patch("/products/{id}/variants/{variant_id}", response_model=ProductVariantResponse, tags=["Product Variants"])
+async def update_product_variant(
+    id: uuid.UUID,
+    variant_id: uuid.UUID,
+    data: ProductVariantUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a product variant."""
+    service = CatalogService(db)
+    try:
+        variant = await service.update_variant(variant_id=variant_id, **data.model_dump(exclude_unset=True))
+        return variant
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/products/{id}/variants/{variant_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Product Variants"])
+async def delete_product_variant(
+    id: uuid.UUID,
+    variant_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Delete a product variant."""
+    service = CatalogService(db)
+    deleted = await service.delete_variant(variant_id=variant_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variant not found")
+
+
+# ============================================================================
+# BUNDLE ITEMS
+# ============================================================================
+
+@router.get("/products/{id}/bundle-items", response_model=List[BundleItemResponse], tags=["Bundle Items"])
+async def list_bundle_items(
+    id: uuid.UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """List component items for a bundle product."""
+    service = CatalogService(db)
+    return await service.get_bundle_items(id)
+
+
+@router.post("/products/{id}/bundle-items", response_model=BundleItemResponse, status_code=status.HTTP_201_CREATED, tags=["Bundle Items"])
+async def add_bundle_item(
+    id: uuid.UUID,
+    data: BundleItemCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Add a component item to a bundle product."""
+    service = CatalogService(db)
+    try:
+        item = await service.add_bundle_item(
+            bundle_product_id=id,
+            component_product_id=data.component_product_id,
+            quantity=data.quantity,
+            sort_order=data.sort_order,
+            is_optional=data.is_optional
+        )
+        return item
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.patch("/products/{id}/bundle-items/{item_id}", response_model=BundleItemResponse, tags=["Bundle Items"])
+async def update_bundle_item(
+    id: uuid.UUID,
+    item_id: uuid.UUID,
+    data: BundleItemUpdate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Update a bundle component item."""
+    service = CatalogService(db)
+    try:
+        item = await service.update_bundle_item(item_id=item_id, **data.model_dump(exclude_unset=True))
+        return item
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/products/{id}/bundle-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Bundle Items"])
+async def remove_bundle_item(
+    id: uuid.UUID,
+    item_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Remove a component item from a bundle product."""
+    service = CatalogService(db)
+    deleted = await service.remove_bundle_item(item_id=item_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bundle item not found")
+
+
+# ============================================================================
+# RELATED PRODUCTS
+# ============================================================================
+
+@router.get("/products/{id}/related", response_model=List[RelatedProductResponse], tags=["Related Products"])
+async def list_related_products(
+    id: uuid.UUID,
+    relation_type: Optional[str] = Query(None, description="cross_sell, upsell, accessory, spare_part"),
+    db: AsyncSession = Depends(get_db)
+):
+    """List related products linked to a product."""
+    service = CatalogService(db)
+    return await service.get_related_products(product_id=id, relation_type=relation_type)
+
+
+@router.post("/products/{id}/related", response_model=RelatedProductResponse, status_code=status.HTTP_201_CREATED, tags=["Related Products"])
+async def add_related_product(
+    id: uuid.UUID,
+    data: RelatedProductCreate,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Link a related product (cross_sell, upsell, accessory, spare_part)."""
+    service = CatalogService(db)
+    try:
+        rel = await service.add_related_product(
+            product_id=id,
+            related_product_id=data.related_product_id,
+            relation_type=data.relation_type,
+            sort_order=data.sort_order,
+            is_bidirectional=data.is_bidirectional
+        )
+        return rel
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+
+@router.delete("/products/{id}/related/{relation_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["Related Products"])
+async def remove_related_product(
+    id: uuid.UUID,
+    relation_id: uuid.UUID,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: AsyncSession = Depends(get_db)
+):
+    """Remove a related product link."""
+    service = CatalogService(db)
+    deleted = await service.remove_related_product(relation_id=relation_id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relation not found")

@@ -45,6 +45,7 @@ class ProductReject(BaseModel):
 
 class ProductCreate(BaseModel):
     """Schema for creating a new draft product. Only name is required."""
+    product_type: str = Field("simple", description="simple, variable, or bundle")
     name: str = Field(..., min_length=2, max_length=500)
     vendor_id: Optional[uuid.UUID] = Field(None, description="Vendor ID (required for admin creation, auto-filled for vendors)")
     category_id: Optional[uuid.UUID] = None
@@ -89,6 +90,7 @@ class ProductCreate(BaseModel):
 
 class ProductUpdate(BaseModel):
     """Schema for updating a product. All fields optional."""
+    product_type: Optional[str] = Field(None, description="simple, variable, or bundle")
     name: Optional[str] = Field(None, min_length=2, max_length=500)
     category_id: Optional[uuid.UUID] = None
     description: Optional[str] = None
@@ -130,11 +132,51 @@ class ProductUpdate(BaseModel):
     meta_title: Optional[str] = Field(None, max_length=255)
     meta_description: Optional[str] = Field(None, max_length=500)
     tags: Optional[List[str]] = None
+    is_clinical_pick: Optional[bool] = None
 
 
 # ============================================================================
 # PRODUCT RESPONSES
 # ============================================================================
+# VARIANT, BUNDLE & RELATED PRODUCT SCHEMAS
+# ============================================================================
+
+class ProductVariantCreate(BaseModel):
+    """Schema for creating a product variant"""
+    name: str = Field(..., max_length=255)
+    sku: Optional[str] = Field(None, max_length=100)
+    price_adjustment: Optional[float] = 0
+    override_price: Optional[float] = None
+    stock_quantity: int = 0
+    attributes: Optional[dict] = None
+    is_active: bool = True
+    is_default: bool = False
+    image_url: Optional[str] = Field(None, max_length=1000)
+    sort_order: int = 0
+    weight_kg: Optional[float] = None
+
+
+class ProductVariantUpdate(BaseModel):
+    """Schema for updating a product variant"""
+    name: Optional[str] = Field(None, max_length=255)
+    sku: Optional[str] = Field(None, max_length=100)
+    price_adjustment: Optional[float] = None
+    override_price: Optional[float] = None
+    stock_quantity: Optional[int] = None
+    attributes: Optional[dict] = None
+    is_active: Optional[bool] = None
+    is_default: Optional[bool] = None
+    image_url: Optional[str] = Field(None, max_length=1000)
+    sort_order: Optional[int] = None
+    weight_kg: Optional[float] = None
+
+
+class VariantMatrixRequest(BaseModel):
+    """Bulk matrix generation request from attribute groups"""
+    attribute_groups: dict[str, List[str]] = Field(..., description="e.g. {'size': ['S', 'M'], 'color': ['Blue', 'Black']}")
+    base_sku_prefix: Optional[str] = None
+    default_stock: int = 0
+
 
 class ProductVariantResponse(BaseModel):
     """Product variant response"""
@@ -143,13 +185,88 @@ class ProductVariantResponse(BaseModel):
     name: str
     sku: Optional[str] = None
     price_adjustment: Optional[float] = 0
+    override_price: Optional[float] = None
+    calculated_price: Optional[float] = None
     stock_quantity: int = 0
     attributes: Optional[dict] = None
     is_active: bool = True
+    is_default: bool = False
+    image_url: Optional[str] = None
+    sort_order: int = 0
+    weight_kg: Optional[float] = None
 
     class Config:
         from_attributes = True
 
+
+class BundleItemCreate(BaseModel):
+    """Schema for adding a component to a bundle product"""
+    component_product_id: uuid.UUID
+    quantity: int = Field(1, ge=1)
+    sort_order: int = 0
+    is_optional: bool = False
+
+
+class BundleItemUpdate(BaseModel):
+    """Schema for updating a bundle item"""
+    quantity: Optional[int] = Field(None, ge=1)
+    sort_order: Optional[int] = None
+    is_optional: Optional[bool] = None
+
+
+class ComponentProductSummary(BaseModel):
+    """Compact summary of a component product inside a bundle"""
+    id: uuid.UUID
+    name: str
+    slug: str
+    sku: Optional[str] = None
+    price: Optional[float] = None
+    image_url: Optional[str] = None
+    stock_status: str
+
+    class Config:
+        from_attributes = True
+
+
+class BundleItemResponse(BaseModel):
+    """Bundle item response"""
+    id: uuid.UUID
+    bundle_product_id: uuid.UUID
+    component_product_id: uuid.UUID
+    component_product: Optional[ComponentProductSummary] = None
+    quantity: int
+    sort_order: int
+    is_optional: bool
+
+    class Config:
+        from_attributes = True
+
+
+class RelatedProductCreate(BaseModel):
+    """Schema for adding a related product link"""
+    related_product_id: uuid.UUID
+    relation_type: str = Field(..., description="cross_sell, upsell, accessory, spare_part")
+    sort_order: int = 0
+    is_bidirectional: bool = True
+
+
+class RelatedProductResponse(BaseModel):
+    """Related product response"""
+    id: uuid.UUID
+    product_id: uuid.UUID
+    related_product_id: uuid.UUID
+    related_product: Optional[ComponentProductSummary] = None
+    relation_type: str
+    sort_order: int
+    is_bidirectional: bool
+
+    class Config:
+        from_attributes = True
+
+
+# ============================================================================
+# PRODUCT RESPONSES
+# ============================================================================
 
 class ProductResponse(BaseModel):
     """Full product response for vendor dashboard (includes all fields)"""
@@ -159,6 +276,7 @@ class ProductResponse(BaseModel):
     category_name: Optional[str] = None
 
     # Basic info
+    product_type: str = "simple"
     name: str
     slug: str
     description: Optional[str] = None
@@ -186,8 +304,9 @@ class ProductResponse(BaseModel):
     rejection_reason: Optional[str] = None
 
     # Merchandising
-    is_featured: bool
-    is_on_sale: bool
+    is_featured: bool = False
+    is_clinical_pick: bool = False
+    is_on_sale: bool = False
     popularity_score: int
     view_count: int
 
@@ -215,9 +334,11 @@ class ProductResponse(BaseModel):
     ai_generated_fields: Optional[dict] = None
     completeness_score: int
 
-    # Images & Variants
+    # Images, Variants, Bundles, Related
     images: List[ProductImageResponse] = []
     variants: List[ProductVariantResponse] = []
+    bundle_items: List[BundleItemResponse] = []
+    related_products: List[RelatedProductResponse] = []
 
     created_at: datetime
     updated_at: datetime
@@ -245,6 +366,7 @@ class StorefrontProductResponse(BaseModel):
     category_name: Optional[str] = None
 
     # Basic info
+    product_type: str = "simple"
     name: str
     slug: str
     sku: Optional[str] = None
@@ -284,9 +406,11 @@ class StorefrontProductResponse(BaseModel):
     meta_description: Optional[str] = None
     tags: Optional[List[str]] = None
 
-    # Images & Variants
+    # Images, Variants, Bundles, Related
     images: List[ProductImageResponse] = []
     variants: List[ProductVariantResponse] = []
+    bundle_items: List[BundleItemResponse] = []
+    related_products: List[RelatedProductResponse] = []
 
     created_at: datetime
 

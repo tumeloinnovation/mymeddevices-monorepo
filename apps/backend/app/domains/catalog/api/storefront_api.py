@@ -10,6 +10,7 @@ from app.domains.catalog.services.catalog_service import CatalogService
 from app.domains.catalog.schemas.product_schemas import (
     StorefrontProductResponse,
     StorefrontProductListResponse,
+    RelatedProductResponse,
 )
 from app.domains.catalog.schemas.category_schemas import CategoryTreeResponse
 from app.domains.customers.repositories.customer_repository import ReviewRepository
@@ -27,9 +28,12 @@ async def get_storefront_products(
     price_min: Optional[float] = Query(None, ge=0, description="Minimum price"),
     price_max: Optional[float] = Query(None, ge=0, description="Maximum price"),
     is_featured: Optional[bool] = Query(None, description="Filter by featured status"),
+    is_clinical_pick: Optional[bool] = Query(None, description="Filter by clinical pick status"),
+    care_setting: Optional[str] = Query(None, description="Filter by care setting tag (e.g. care_setting:icu)"),
+    condition: Optional[str] = Query(None, description="Filter by condition tag (e.g. condition:respiratory)"),
     is_on_sale: Optional[bool] = Query(None, description="Filter by on sale status"),
     in_stock: Optional[bool] = Query(None, description="Filter by stock availability"),
-    sort_by: str = Query("newest", description="Sorting options: newest, price_asc, price_desc, popular, name_asc"),
+    sort_by: str = Query("newest", description="Sorting options: newest, price_asc, price_desc, popular, name_asc, trending"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     db: AsyncSession = Depends(get_db)
@@ -46,6 +50,9 @@ async def get_storefront_products(
         price_min=price_min,
         price_max=price_max,
         is_featured=is_featured,
+        is_clinical_pick=is_clinical_pick,
+        care_setting=care_setting,
+        condition=condition,
         is_on_sale=is_on_sale,
         in_stock=in_stock,
         sort_by=sort_by,
@@ -189,3 +196,22 @@ async def get_product_reviews(
         })
 
     return success_response(public_reviews)
+
+
+@router.get("/products/{slug}/related", response_model=List[RelatedProductResponse], dependencies=[Depends(RateLimiterDependency("products_get"))])
+async def get_storefront_related_products(
+    slug: str,
+    relation_type: Optional[str] = Query(None, description="cross_sell, upsell, accessory, spare_part"),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Get related products for a product slug on the public storefront.
+    """
+    service = CatalogService(db)
+    try:
+        product = await service.get_storefront_product_by_slug(slug)
+        related = await service.get_related_products(product_id=product.id, relation_type=relation_type)
+        return related
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+
