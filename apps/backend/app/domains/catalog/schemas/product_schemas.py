@@ -1,6 +1,6 @@
 from typing import Optional, List, Any
 import uuid
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from datetime import datetime
 
 
@@ -53,13 +53,17 @@ class ProductCreate(BaseModel):
     short_description: Optional[str] = Field(None, max_length=1000)
     sku: Optional[str] = Field(None, max_length=100)
 
-    # Pricing
+    # Pricing & Tax
     base_price: Optional[float] = Field(None, ge=0)
     markup_price: Optional[float] = Field(None, ge=0)
     commission_fee: Optional[float] = Field(None, ge=0)
     price: Optional[float] = Field(None, ge=0)
     cost_price: Optional[float] = Field(None, ge=0)
+    wholesale_price: Optional[float] = Field(None, ge=0)
+    compare_at_price: Optional[float] = Field(None, ge=0)
     currency: str = "KES"
+    has_vat: bool = True
+    vat_rate: float = 16.0
 
     # Inventory
     stock_quantity: int = 0
@@ -97,13 +101,17 @@ class ProductUpdate(BaseModel):
     short_description: Optional[str] = Field(None, max_length=1000)
     sku: Optional[str] = Field(None, max_length=100)
 
-    # Pricing
+    # Pricing & Tax
     base_price: Optional[float] = Field(None, ge=0)
     markup_price: Optional[float] = Field(None, ge=0)
     commission_fee: Optional[float] = Field(None, ge=0)
     price: Optional[float] = Field(None, ge=0)
     cost_price: Optional[float] = Field(None, ge=0)
+    wholesale_price: Optional[float] = Field(None, ge=0)
+    compare_at_price: Optional[float] = Field(None, ge=0)
     currency: Optional[str] = None
+    has_vat: Optional[bool] = None
+    vat_rate: Optional[float] = None
 
     # Inventory
     stock_quantity: Optional[int] = None
@@ -133,6 +141,9 @@ class ProductUpdate(BaseModel):
     meta_description: Optional[str] = Field(None, max_length=500)
     tags: Optional[List[str]] = None
     is_clinical_pick: Optional[bool] = None
+
+    # Status (admin can change status directly)
+    status: Optional[str] = Field(None, description="Product status: draft, pending_review, published, archived")
 
 
 # ============================================================================
@@ -222,10 +233,24 @@ class ComponentProductSummary(BaseModel):
     sku: Optional[str] = None
     price: Optional[float] = None
     image_url: Optional[str] = None
-    stock_status: str
+    stock_status: Optional[str] = "instock"
 
     class Config:
         from_attributes = True
+
+    @field_validator("image_url", mode="before")
+    @classmethod
+    def get_image_url(cls, v: Any, info: Any) -> Any:
+        if v:
+            return v
+        return None
+
+    @field_validator("stock_status", mode="before")
+    @classmethod
+    def get_stock_status(cls, v: Any) -> Any:
+        if v:
+            return v
+        return "instock"
 
 
 class BundleItemResponse(BaseModel):
@@ -283,13 +308,17 @@ class ProductResponse(BaseModel):
     short_description: Optional[str] = None
     sku: Optional[str] = None
 
-    # Pricing
+    # Pricing & Tax
     base_price: Optional[float] = None
     markup_price: Optional[float] = None
     commission_fee: Optional[float] = None
     price: Optional[float] = None
     cost_price: Optional[float] = None
+    wholesale_price: Optional[float] = None
+    compare_at_price: Optional[float] = None
     currency: str
+    has_vat: bool = True
+    vat_rate: float = 16.0
 
     # Inventory
     stock_quantity: int
@@ -373,10 +402,13 @@ class StorefrontProductResponse(BaseModel):
     description: Optional[str] = None
     short_description: Optional[str] = None
 
-    # Pricing
+    # Pricing & Tax
     price: Optional[float] = None
+    compare_at_price: Optional[float] = None
     currency: str
-    is_on_sale: bool
+    is_on_sale: bool = False
+    has_vat: bool = True
+    vat_rate: float = 16.0
 
     # Inventory
     in_stock: bool = True
@@ -416,6 +448,30 @@ class StorefrontProductResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_brand_name(cls, data: Any) -> Any:
+        # Check if data is an ORM object
+        if hasattr(data, "brand_relation") and getattr(data, "brand_relation", None):
+            brand_rel = getattr(data, "brand_relation")
+            if hasattr(brand_rel, "name") and brand_rel.name:
+                # If brand attribute on ORM object is None or a UUID string, set brand to brand_relation.name
+                brand_val = getattr(data, "brand", None)
+                if not brand_val or (isinstance(brand_val, str) and len(brand_val) == 36 and "-" in brand_val):
+                    setattr(data, "brand", brand_rel.name)
+        elif hasattr(data, "brand"):
+            brand_val = getattr(data, "brand", None)
+            if isinstance(brand_val, str) and len(brand_val) == 36 and "-" in brand_val:
+                # Fallback if brand field on ORM object is a UUID string and brand_relation isn't loaded
+                pass
+        elif isinstance(data, dict):
+            brand_rel = data.get("brand_relation")
+            if isinstance(brand_rel, dict) and brand_rel.get("name"):
+                brand_val = data.get("brand")
+                if not brand_val or (isinstance(brand_val, str) and len(brand_val) == 36 and "-" in brand_val):
+                    data["brand"] = brand_rel["name"]
+        return data
 
 
 class StorefrontProductListResponse(BaseModel):

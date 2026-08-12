@@ -12,14 +12,16 @@ export const productWizardSchema = z.object({
   product_type: z.string().optional(),
   internal_reference: z.string().optional(),
 
-  vendor_payout: z.coerce
+  base_price: z.coerce
     .number()
-    .min(50, "Base price must be at least KES 50")
+    .min(1, "Vendor payout base price must be at least KES 1")
     .max(100000000, "Exceeds maximum allowable price"),
+  cost_price: z.coerce.number().optional(),
   wholesale_price: z.coerce.number().optional(),
-  vat_rate: z.number().default(0.16),
+  compare_at_price: z.coerce.number().optional(),
+  has_vat: z.boolean().default(true),
+  vat_rate: z.coerce.number().default(16),
   sale_active: z.boolean().default(false),
-  sale_price: z.coerce.number().optional(),
   sale_end_date: z.string().optional(),
 
   sku: z.string().min(3, "SKU identifier is required"),

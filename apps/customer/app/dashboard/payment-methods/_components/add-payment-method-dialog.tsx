@@ -2,21 +2,18 @@
 
 import { useState } from 'react';
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Loader2, Phone, CreditCard, Building2, Check } from 'lucide-react';
+import { Loader2, Phone, CreditCard, Building2, Check, ShieldCheck } from 'lucide-react';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { z } from 'zod';
 import {
   Form,
@@ -27,7 +24,6 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Switch } from '@/components/ui/switch';
-import { toast } from 'sonner';
 import {
   useCreateMpesaMethod,
   useCreateCardMethod,
@@ -38,7 +34,7 @@ const mpesaSchema = z.object({
   phone_number: z
     .string()
     .min(1, 'Phone number is required')
-    .regex(/^\+254\d{9}$/, 'Phone number must be in format +254XXXXXXXXX'),
+    .regex(/^\+254\d{9}$/, 'Format must be +254XXXXXXXXX'),
   display_name: z.string().optional(),
   is_default: z.boolean().optional(),
 });
@@ -50,15 +46,15 @@ const cardSchema = z.object({
     .regex(/^\d{13,19}$/, 'Invalid card number'),
   card_expiry_month: z
     .string()
-    .min(1, 'Expiry month is required')
-    .regex(/^(0[1-9]|1[0-2])$/, 'Invalid month (01-12)'),
+    .min(1, 'Month required')
+    .regex(/^(0[1-9]|1[0-2])$/, 'MM (01-12)'),
   card_expiry_year: z
     .string()
-    .min(1, 'Expiry year is required')
-    .regex(/^\d{4}$/, 'Invalid year (YYYY)'),
+    .min(1, 'Year required')
+    .regex(/^\d{4}$/, 'YYYY'),
   cardholder_name: z
     .string()
-    .min(1, 'Cardholder name is required')
+    .min(1, 'Cardholder name required')
     .min(2, 'Name is too short'),
   display_name: z.string().optional(),
   is_default: z.boolean().optional(),
@@ -69,11 +65,11 @@ const bankSchema = z.object({
   bank_account_number: z
     .string()
     .min(1, 'Account number is required')
-    .min(8, 'Account number is too short'),
+    .min(8, 'Account number too short'),
   bank_account_name: z
     .string()
-    .min(1, 'Account holder name is required')
-    .min(2, 'Name is too short'),
+    .min(1, 'Account holder name required')
+    .min(2, 'Name too short'),
   display_name: z.string().optional(),
   is_default: z.boolean().optional(),
 });
@@ -84,10 +80,6 @@ interface AddPaymentMethodDialogProps {
   onSuccess?: () => void;
 }
 
-/**
- * Dialog for adding new payment methods
- * Supports M-Pesa, Card, and Bank transfer
- */
 export function AddPaymentMethodDialog({
   open,
   onOpenChange,
@@ -95,9 +87,8 @@ export function AddPaymentMethodDialog({
 }: AddPaymentMethodDialogProps) {
   const [activeTab, setActiveTab] = useState<'mpesa' | 'card' | 'bank'>('mpesa');
 
-  // M-Pesa form
   const mpesaForm = useForm<z.infer<typeof mpesaSchema>>({
-    resolver: zodResolver(mpesaSchema),
+    resolver: standardSchemaResolver(mpesaSchema),
     defaultValues: {
       phone_number: '',
       display_name: '',
@@ -105,9 +96,8 @@ export function AddPaymentMethodDialog({
     },
   });
 
-  // Card form
   const cardForm = useForm<z.infer<typeof cardSchema>>({
-    resolver: zodResolver(cardSchema),
+    resolver: standardSchemaResolver(cardSchema),
     defaultValues: {
       card_number: '',
       card_expiry_month: '',
@@ -118,9 +108,8 @@ export function AddPaymentMethodDialog({
     },
   });
 
-  // Bank form
   const bankForm = useForm<z.infer<typeof bankSchema>>({
-    resolver: zodResolver(bankSchema),
+    resolver: standardSchemaResolver(bankSchema),
     defaultValues: {
       bank_name: '',
       bank_account_number: '',
@@ -130,7 +119,6 @@ export function AddPaymentMethodDialog({
     },
   });
 
-  // Mutations
   const createMpesa = useCreateMpesaMethod();
   const createCard = useCreateCardMethod();
   const createBank = useCreateBankMethod();
@@ -141,7 +129,7 @@ export function AddPaymentMethodDialog({
         await createMpesa.mutateAsync(values);
       } else if (activeTab === 'card') {
         const cardData = {
-          card_token: 'temp_token', // In production, this comes from payment processor
+          card_token: 'temp_token',
           card_last4: values.card_number.slice(-4),
           card_brand: detectCardBrand(values.card_number),
           card_expiry_month: values.card_expiry_month,
@@ -158,12 +146,11 @@ export function AddPaymentMethodDialog({
       onOpenChange(false);
       onSuccess?.();
 
-      // Reset forms
       mpesaForm.reset();
       cardForm.reset();
       bankForm.reset();
     } catch {
-      // Error is handled by the mutation
+      // Error handled by mutation
     }
   };
 
@@ -173,358 +160,364 @@ export function AddPaymentMethodDialog({
     createBank.isPending;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add Payment Method</DialogTitle>
-          <DialogDescription>
-            Choose a payment method to add to your account
-          </DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="w-full sm:max-w-md p-0 flex flex-col h-full bg-card border-l border-border">
+        {/* Header */}
+        <SheetHeader className="p-6 border-b border-border space-y-1">
+          <SheetTitle className="text-xl font-bold tracking-tight text-foreground">
+            Add Payment Method
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground">
+            Save M-Pesa, card, or bank account for faster checkout.
+          </SheetDescription>
+        </SheetHeader>
 
-        <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="mpesa" className="gap-2">
-              <Phone className="h-4 w-4" />
-              M-Pesa
-            </TabsTrigger>
-            <TabsTrigger value="card" className="gap-2">
-              <CreditCard className="h-4 w-4" />
-              Card
-            </TabsTrigger>
-            <TabsTrigger value="bank" className="gap-2">
-              <Building2 className="h-4 w-4" />
-              Bank
-            </TabsTrigger>
-          </TabsList>
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
+            <TabsList className="grid w-full grid-cols-3 h-10 p-1 bg-muted/50 rounded-lg">
+              <TabsTrigger value="mpesa" className="gap-1.5 text-xs font-medium">
+                <Phone className="h-3.5 w-3.5" />
+                M-Pesa
+              </TabsTrigger>
+              <TabsTrigger value="card" className="gap-1.5 text-xs font-medium">
+                <CreditCard className="h-3.5 w-3.5" />
+                Card
+              </TabsTrigger>
+              <TabsTrigger value="bank" className="gap-1.5 text-xs font-medium">
+                <Building2 className="h-3.5 w-3.5" />
+                Bank
+              </TabsTrigger>
+            </TabsList>
 
-          {/* M-Pesa Tab */}
-          <TabsContent value="mpesa">
-            <Form {...mpesaForm}>
-              <form onSubmit={mpesaForm.handleSubmit(handleSubmit)} className="space-y-4">
-                <FormField
-                  control={mpesaForm.control}
-                  name="phone_number"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Phone Number</FormLabel>
-                      <FormControl>
-                        <Input placeholder="+254700000000" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={mpesaForm.control}
-                  name="display_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Display Name (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Personal M-Pesa" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={mpesaForm.control}
-                  name="is_default"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                      <div className="space-y-0.5">
-                        <FormLabel>Set as default</FormLabel>
-                        <p className="text-xs text-muted-foreground">
-                          Use this payment method by default
-                        </p>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <DialogFooter>
-                  <Button
-                    type="submit"
-                    disabled={isLoading || createMpesa.isSuccess}
-                    className="w-full"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Adding...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Add M-Pesa Method
-                      </>
-                    )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </TabsContent>
-
-          {/* Card Tab */}
-          <TabsContent value="card">
-            <Form {...cardForm}>
-              <form onSubmit={cardForm.handleSubmit(handleSubmit)} className="space-y-4">
-                <FormField
-                  control={cardForm.control}
-                  name="card_number"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Card Number</FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="1234567890123456"
-                          maxLength={19}
-                          {...field}
-                          onChange={(e) => {
-                            const formatted = e.target.value.replace(/\D/g, '');
-                            field.onChange(formatted);
-                          }}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <div className="grid grid-cols-2 gap-4">
+            {/* M-Pesa Form */}
+            <TabsContent value="mpesa" className="mt-5 space-y-4">
+              <Form {...mpesaForm}>
+                <form onSubmit={mpesaForm.handleSubmit(handleSubmit)} className="space-y-4">
                   <FormField
-                    control={cardForm.control}
-                    name="card_expiry_month"
+                    control={mpesaForm.control}
+                    name="phone_number"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Expiry Month</FormLabel>
+                        <FormLabel className="text-xs font-medium">Phone Number</FormLabel>
                         <FormControl>
-                          <Input placeholder="MM" maxLength={2} {...field} />
+                          <Input placeholder="+254700000000" className="h-9 text-xs" {...field} />
                         </FormControl>
-                        <FormMessage />
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={mpesaForm.control}
+                    name="display_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-medium">Label / Nickname (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. Personal M-Pesa" className="h-9 text-xs" {...field} />
+                        </FormControl>
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={mpesaForm.control}
+                    name="is_default"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border border-border/60 p-3 bg-muted/20">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-xs font-medium block">Set as Default Method</FormLabel>
+                          <p className="text-[11px] text-muted-foreground">
+                            Use this automatically during express checkout
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="pt-4">
+                    <Button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full h-10 text-xs font-medium gap-2"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-3.5 w-3.5" />
+                          Save M-Pesa Method
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </TabsContent>
+
+            {/* Card Form */}
+            <TabsContent value="card" className="mt-5 space-y-4">
+              <Form {...cardForm}>
+                <form onSubmit={cardForm.handleSubmit(handleSubmit)} className="space-y-4">
+                  <FormField
+                    control={cardForm.control}
+                    name="card_number"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-medium">Card Number</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="1234567890123456"
+                            maxLength={19}
+                            className="h-9 text-xs font-mono"
+                            {...field}
+                            onChange={(e) => {
+                              const formatted = e.target.value.replace(/\D/g, '');
+                              field.onChange(formatted);
+                            }}
+                          />
+                        </FormControl>
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField
+                      control={cardForm.control}
+                      name="card_expiry_month"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-medium">Expiry Month</FormLabel>
+                          <FormControl>
+                            <Input placeholder="MM" maxLength={2} className="h-9 text-xs" {...field} />
+                          </FormControl>
+                          <FormMessage className="text-[11px]" />
+                        </FormItem>
+                      )}
+                    />
+
+                    <FormField
+                      control={cardForm.control}
+                      name="card_expiry_year"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel className="text-xs font-medium">Expiry Year</FormLabel>
+                          <FormControl>
+                            <Input placeholder="YYYY" maxLength={4} className="h-9 text-xs" {...field} />
+                          </FormControl>
+                          <FormMessage className="text-[11px]" />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+
+                  <FormField
+                    control={cardForm.control}
+                    name="cardholder_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-medium">Cardholder Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="JOHN DOE" className="h-9 text-xs uppercase" {...field} />
+                        </FormControl>
+                        <FormMessage className="text-[11px]" />
                       </FormItem>
                     )}
                   />
 
                   <FormField
                     control={cardForm.control}
-                    name="card_expiry_year"
+                    name="display_name"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Expiry Year</FormLabel>
+                        <FormLabel className="text-xs font-medium">Label / Nickname (Optional)</FormLabel>
                         <FormControl>
-                          <Input placeholder="YYYY" maxLength={4} {...field} />
+                          <Input placeholder="e.g. Business Debit Card" className="h-9 text-xs" {...field} />
                         </FormControl>
-                        <FormMessage />
+                        <FormMessage className="text-[11px]" />
                       </FormItem>
                     )}
                   />
-                </div>
 
-                <FormField
-                  control={cardForm.control}
-                  name="cardholder_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Cardholder Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="JOHN DOE" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={cardForm.control}
-                  name="display_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Display Name (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Personal Card" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={cardForm.control}
-                  name="is_default"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                      <div className="space-y-0.5">
-                        <FormLabel>Set as default</FormLabel>
-                        <p className="text-xs text-muted-foreground">
-                          Use this payment method by default
-                        </p>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <DialogFooter>
-                  <Button
-                    type="submit"
-                    disabled={isLoading || createCard.isSuccess}
-                    className="w-full"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Adding...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Add Card
-                      </>
+                  <FormField
+                    control={cardForm.control}
+                    name="is_default"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border border-border/60 p-3 bg-muted/20">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-xs font-medium block">Set as Default Method</FormLabel>
+                          <p className="text-[11px] text-muted-foreground">
+                            Use this automatically during checkout
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
                     )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </TabsContent>
+                  />
 
-          {/* Bank Tab */}
-          <TabsContent value="bank">
-            <Form {...bankForm}>
-              <form onSubmit={bankForm.handleSubmit(handleSubmit)} className="space-y-4">
-                <FormField
-                  control={bankForm.control}
-                  name="bank_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Bank Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Equity Bank" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+                  <div className="pt-4">
+                    <Button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full h-10 text-xs font-medium gap-2"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-3.5 w-3.5" />
+                          Save Card Method
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </TabsContent>
 
-                <FormField
-                  control={bankForm.control}
-                  name="bank_account_number"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Account Number</FormLabel>
-                      <FormControl>
-                        <Input placeholder="1234567890" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={bankForm.control}
-                  name="bank_account_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Account Holder Name</FormLabel>
-                      <FormControl>
-                        <Input placeholder="JOHN DOE" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={bankForm.control}
-                  name="display_name"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Display Name (Optional)</FormLabel>
-                      <FormControl>
-                        <Input placeholder="Business Account" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={bankForm.control}
-                  name="is_default"
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center justify-between rounded-lg border p-3 shadow-sm">
-                      <div className="space-y-0.5">
-                        <FormLabel>Set as default</FormLabel>
-                        <p className="text-xs text-muted-foreground">
-                          Use this payment method by default
-                        </p>
-                      </div>
-                      <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                        />
-                      </FormControl>
-                    </FormItem>
-                  )}
-                />
-
-                <DialogFooter>
-                  <Button
-                    type="submit"
-                    disabled={isLoading || createBank.isSuccess}
-                    className="w-full"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Adding...
-                      </>
-                    ) : (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Add Bank Account
-                      </>
+            {/* Bank Form */}
+            <TabsContent value="bank" className="mt-5 space-y-4">
+              <Form {...bankForm}>
+                <form onSubmit={bankForm.handleSubmit(handleSubmit)} className="space-y-4">
+                  <FormField
+                    control={bankForm.control}
+                    name="bank_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-medium">Bank Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. Equity Bank" className="h-9 text-xs" {...field} />
+                        </FormControl>
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
                     )}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+                  />
+
+                  <FormField
+                    control={bankForm.control}
+                    name="bank_account_number"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-medium">Account Number</FormLabel>
+                        <FormControl>
+                          <Input placeholder="1234567890" className="h-9 text-xs font-mono" {...field} />
+                        </FormControl>
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={bankForm.control}
+                    name="bank_account_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-medium">Account Holder Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="JOHN DOE" className="h-9 text-xs uppercase" {...field} />
+                        </FormControl>
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={bankForm.control}
+                    name="display_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-xs font-medium">Label / Nickname (Optional)</FormLabel>
+                        <FormControl>
+                          <Input placeholder="e.g. Primary Bank Account" className="h-9 text-xs" {...field} />
+                        </FormControl>
+                        <FormMessage className="text-[11px]" />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={bankForm.control}
+                    name="is_default"
+                    render={({ field }) => (
+                      <FormItem className="flex items-center justify-between rounded-lg border border-border/60 p-3 bg-muted/20">
+                        <div className="space-y-0.5">
+                          <FormLabel className="text-xs font-medium block">Set as Default Method</FormLabel>
+                          <p className="text-[11px] text-muted-foreground">
+                            Use this automatically during checkout
+                          </p>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+
+                  <div className="pt-4">
+                    <Button
+                      type="submit"
+                      disabled={isLoading}
+                      className="w-full h-10 text-xs font-medium gap-2"
+                    >
+                      {isLoading ? (
+                        <>
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Check className="h-3.5 w-3.5" />
+                          Save Bank Details
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </form>
+              </Form>
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-border bg-muted/20 mt-auto">
+          <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+            <span>Encrypted with 256-bit AES protocol</span>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-/**
- * Detect card brand from card number
- */
 function detectCardBrand(cardNumber: string): string {
   const number = cardNumber.replace(/\D/g, '');
-
-  // Visa
   if (/^4/.test(number)) return 'Visa';
-  // Mastercard
   if (/^5[1-5]/.test(number)) return 'Mastercard';
-  // Amex
   if (/^3[47]/.test(number)) return 'American Express';
-  // Discover
   if (/^6(?:011|5)/.test(number)) return 'Discover';
-
   return 'Card';
 }

@@ -33,10 +33,13 @@ import {
   Lock,
   X,
   LogOut,
+  Bell,
+  User,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PasswordStrengthChecklist } from './_components/password-strength-checklist'
 import { SecurityScoreWidget } from './_components/security-score-widget'
+import { cn } from '@/lib/utils'
 
 // ─── Types ───────────────────────────────────────────────────────────────
 
@@ -48,6 +51,47 @@ interface Device {
   lastActive: string
   isCurrent: boolean
 }
+
+// Security sections for sidebar navigation
+interface SecuritySection {
+  id: string
+  label: string
+  icon: any
+  description: string
+}
+
+const securitySections: SecuritySection[] = [
+  {
+    id: 'password',
+    label: 'Password',
+    icon: Key,
+    description: 'Change your password',
+  },
+  {
+    id: 'two-factor',
+    label: 'Two-Factor Auth',
+    icon: Shield,
+    description: 'Add extra security layer',
+  },
+  {
+    id: 'sessions',
+    label: 'Active Sessions',
+    icon: Monitor,
+    description: 'Manage signed-in devices',
+  },
+  {
+    id: 'alerts',
+    label: 'Login Alerts',
+    icon: Bell,
+    description: 'Security notifications',
+  },
+  {
+    id: 'danger',
+    label: 'Danger Zone',
+    icon: AlertTriangle,
+    description: 'Account actions',
+  },
+]
 
 // ─── Device Icon ─────────────────────────────────────────────────────────
 
@@ -106,7 +150,7 @@ function PasswordSection() {
   }
 
   return (
-    <Card>
+    <Card id="password-section">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Key className="size-5 text-muted-foreground" />
@@ -219,7 +263,7 @@ function PasswordSection() {
 
 function TwoFactorSection() {
   return (
-    <Card>
+    <Card id="two-factor-section">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Smartphone className="size-5 text-muted-foreground" />
@@ -321,7 +365,7 @@ function SessionsSection() {
   const currentDevice = mappedDevices?.find(d => d.is_current)
 
   return (
-    <Card>
+    <Card id="sessions-section">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Monitor className="size-5 text-muted-foreground" />
@@ -370,8 +414,8 @@ function SessionsSection() {
         )}
         {currentDevice && mappedDevices && mappedDevices.length > 1 && (
           <div className="pt-2">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               className="text-destructive border-destructive/20 hover:bg-destructive/10"
               onClick={() => deleteAllMutation.mutate(currentDevice.id)}
               disabled={deleteAllMutation.isPending}
@@ -380,81 +424,6 @@ function SessionsSection() {
             </Button>
           </div>
         )}
-      </CardContent>
-    </Card>
-  )
-}
-
-// ─── Login Alerts Section ────────────────────────────────────────────────
-
-function LoginAlertsSection() {
-  const { data: profile, isLoading } = useCustomerProfile()
-  const updateMutation = useUpdateCustomerProfile()
-
-  const emailAlerts = profile?.email_security ?? true
-  const smsAlerts = profile?.sms_security ?? true
-
-  const toggleEmailAlerts = async (checked: boolean) => {
-    try {
-      await updateMutation.mutateAsync({ email_security: checked })
-      toast.success(checked ? 'Email alerts enabled' : 'Email alerts disabled')
-    } catch {
-      toast.error('Failed to update alert settings')
-    }
-  }
-
-  const toggleSmsAlerts = async (checked: boolean) => {
-    try {
-      await updateMutation.mutateAsync({ sms_security: checked })
-      toast.success(checked ? 'SMS alerts enabled' : 'SMS alerts disabled')
-    } catch {
-      toast.error('Failed to update alert settings')
-    }
-  }
-
-  if (isLoading) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Login Alerts</CardTitle>
-          <CardDescription>Get notified when someone signs into your account</CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center justify-center py-6">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </CardContent>
-      </Card>
-    )
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Login Alerts</CardTitle>
-        <CardDescription>Get notified when someone signs into your account</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/5 transition-colors">
-          <div className="flex flex-col gap-0.5">
-            <Label htmlFor="email-alerts" className="font-medium cursor-pointer">Email Alerts</Label>
-            <p className="text-xs text-muted-foreground">Receive email for new sign-ins</p>
-          </div>
-          <Switch
-            id="email-alerts"
-            checked={emailAlerts}
-            onCheckedChange={toggleEmailAlerts}
-          />
-        </div>
-        <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/5 transition-colors">
-          <div className="flex flex-col gap-0.5">
-            <Label htmlFor="sms-alerts" className="font-medium cursor-pointer">SMS Alerts</Label>
-            <p className="text-xs text-muted-foreground">Receive text message for new sign-ins</p>
-          </div>
-          <Switch
-            id="sms-alerts"
-            checked={smsAlerts}
-            onCheckedChange={toggleSmsAlerts}
-          />
-        </div>
       </CardContent>
     </Card>
   )
@@ -495,7 +464,7 @@ function DangerZoneSection() {
   }
 
   return (
-    <Card className="border-destructive/50">
+    <Card id="danger-section" className="border-destructive/50">
       <CardHeader>
         <CardTitle className="text-base text-destructive flex items-center gap-2">
           <AlertTriangle className="size-5" />
@@ -590,22 +559,18 @@ function DangerZoneSection() {
 
 export default function SecurityPage() {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <div>
-        <h1 className="text-3xl font-bold">Security</h1>
-        <p className="text-muted-foreground mt-2">Manage your password and security settings.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Security & Authentication</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">Manage your credentials, two-factor authentication, and active sessions.</p>
       </div>
 
-      <SecurityScoreWidget />
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="space-y-6">
         <PasswordSection />
         <TwoFactorSection />
+        <SessionsSection />
+        <DangerZoneSection />
       </div>
-
-      <SessionsSection />
-      <LoginAlertsSection />
-      <DangerZoneSection />
     </div>
   )
 }

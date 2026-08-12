@@ -37,7 +37,7 @@ export function TextView({
 }) {
   return (
     <p className={`text-sm font-medium text-foreground ${className}`}>
-      {children ?? "\u2014"}
+      {children ?? "-"}
     </p>
   );
 }
@@ -51,30 +51,30 @@ export function MonoView({
 }) {
   return (
     <span className={`text-xs font-mono text-muted-foreground bg-muted px-2 py-0.5 rounded ${className}`}>
-      {children ?? "\u2014"}
+      {children ?? "-"}
     </span>
   );
 }
 
 export function BadgeView({
   children,
+  variant = "secondary",
   className = "",
 }: {
   children: ReactNode;
+  variant?: "default" | "secondary" | "outline" | "destructive";
   className?: string;
 }) {
+  if (!children) return <TextView>-</TextView>;
   return (
-    <Badge
-      variant="outline"
-      className={`h-7 px-2.5 rounded-lg text-xs font-semibold border-primary/20 text-primary bg-primary/5 ${className}`}
-    >
-      {children ?? "Uncategorized"}
+    <Badge variant={variant} className={`text-xs font-medium ${className}`}>
+      {children}
     </Badge>
   );
 }
 
 export function BrandView({ name }: { name?: string | null }) {
-  if (!name) return <TextView>—</TextView>;
+  if (!name) return <TextView>-</TextView>;
   return (
     <p className="text-sm font-semibold flex items-center gap-1.5">
       <Building2 className="h-3.5 w-3.5 text-muted-foreground" />
@@ -90,7 +90,7 @@ export function PriceView({
   value?: number | null;
   currency?: string;
 }) {
-  if (value == null) return <TextView>\u2014</TextView>;
+  if (value == null) return <TextView>-</TextView>;
   const fmt = `${currency} ${value.toLocaleString("en-KE")}`;
   return <p className="text-xl font-bold text-foreground">{fmt}</p>;
 }
@@ -102,7 +102,7 @@ export function ComparePriceView({
   value?: number | null;
   currency?: string;
 }) {
-  if (value == null) return <TextView>\u2014</TextView>;
+  if (value == null) return <TextView>-</TextView>;
   const fmt = `${currency} ${value.toLocaleString("en-KE")}`;
   return (
     <p className="text-sm font-semibold text-muted-foreground line-through">
@@ -190,7 +190,7 @@ export function SlugView({ slug }: { slug: string }) {
 }
 
 export function TimestampView({ date }: { date?: string | null }) {
-  if (!date) return <TextView>\u2014</TextView>;
+  if (!date) return <TextView>-</TextView>;
   return (
     <TextView className="text-xs text-muted-foreground">
       {new Date(date).toLocaleDateString("en-KE", {

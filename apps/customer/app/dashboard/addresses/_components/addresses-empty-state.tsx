@@ -1,44 +1,31 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Truck } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { MapPin, Plus, Navigation } from 'lucide-react';
 
 interface AddressesEmptyStateProps {
   onAdd: () => void;
 }
 
-/**
- * Empty state for addresses page
- * Shows when user has no addresses saved
- */
 export function AddressesEmptyState({ onAdd }: AddressesEmptyStateProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="flex flex-col items-center justify-center py-16 px-4"
-    >
-      <Card className="w-full max-w-md p-8 text-center">
-        {/* Illustration */}
-        <div className="flex items-center justify-center w-24 h-24 mx-auto mb-6 rounded-full bg-primary/5">
-          <MapPin className="h-12 w-12 text-muted-foreground" />
+    <Card className="border border-border/80 bg-card shadow-sm">
+      <CardContent className="flex flex-col items-center justify-center p-8 sm:p-12 text-center max-w-md mx-auto">
+        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary mb-4 border border-primary/20 shadow-xs">
+          <MapPin className="h-7 w-7" />
         </div>
 
-        {/* Message */}
-        <h3 className="text-xl font-semibold mb-2">No saved addresses</h3>
-        <p className="text-muted-foreground mb-6">
-          Add your home and work addresses for faster checkout. We'll use Google Maps to find your location.
+        <h3 className="text-base font-bold tracking-tight text-foreground">No saved addresses yet</h3>
+        <p className="text-xs text-muted-foreground mt-1.5 max-w-xs leading-relaxed">
+          Add your delivery locations for 1-click checkout. You can pinpoint exact locations using Google Maps.
         </p>
 
-        {/* CTA */}
-        <Button onClick={onAdd} className="gap-2">
-          <Truck className="h-4 w-4" />
-          Add Your First Address
-        </Button>
-      </Card>
-    </motion.div>
+        <div className="flex items-center justify-center gap-1.5 mt-6 text-[11px] text-muted-foreground/80 pt-4 border-t border-border/50 w-full">
+          <Navigation className="h-3 w-3 text-primary shrink-0" />
+          <span>Real-time GPS pin location supported</span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

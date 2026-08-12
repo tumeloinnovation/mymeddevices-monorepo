@@ -31,6 +31,8 @@ class Order(Base, IDMixin, AuditMixin):
     notes: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     internal_notes: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     idempotency_key: Mapped[Optional[str]] = mapped_column(String(100), unique=True, nullable=True, index=True)
+    loyalty_discount: Mapped[Optional[Decimal]] = mapped_column(Numeric(12, 2), nullable=True, default=None)
+    loyalty_points_redeemed: Mapped[Optional[int]] = mapped_column(nullable=True, default=None)
 
     # Relationships
     user: Mapped["User"] = relationship("User", backref="orders")

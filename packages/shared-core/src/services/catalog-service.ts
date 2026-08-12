@@ -4,6 +4,7 @@ import {
   ProductCreate,
   ProductUpdate,
   ProductListResponse,
+  ProductStatus,
   ProductImage,
   ProductImageCreate,
   ProductVariant,
@@ -81,6 +82,10 @@ export const catalogService = {
 
   async unarchiveProduct(id: string): Promise<Product> {
     return apiClient.post<Product>(`/catalog/products/${id}/unarchive`, {});
+  },
+
+  async changeStatus(id: string, status: ProductStatus): Promise<Product> {
+    return apiClient.patch<Product>(`/catalog/products/${id}`, { status });
   },
 
   // Completeness & AI

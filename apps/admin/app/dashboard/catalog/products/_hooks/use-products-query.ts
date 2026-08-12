@@ -103,5 +103,11 @@ export function useProductMutations() {
     onSuccess: invalidate,
   });
 
-  return { verify, publish, archive, unarchive, reject, delete: deleteProduct };
+  const changeStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      catalogService.changeStatus(id, status as any),
+    onSuccess: invalidate,
+  });
+
+  return { verify, publish, archive, unarchive, reject, delete: deleteProduct, changeStatus };
 }

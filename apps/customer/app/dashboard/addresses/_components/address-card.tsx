@@ -1,16 +1,10 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { motion } from 'framer-motion';
-import { MapPin, Package, CreditCard, Home, Briefcase, MoreVertical, Trash2, Check } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { MapPin, Package, Star, Trash2, Pencil, Home, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Address } from '@/lib/store/useAddressStore';
 
@@ -32,172 +26,119 @@ const TAG_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
   office: Briefcase,
 };
 
-/**
- * Card component for displaying addresses
- * Shows address details, tags, and default badges
- */
 export function AddressCard({
   address,
   isDefaultShipping = false,
   isDefaultBilling = false,
-  onSelect,
   onSetDefaultShipping,
-  onSetDefaultBilling,
   onEdit,
   onDelete,
   isDeleting = false,
 }: AddressCardProps) {
-  const TagIcon = address.tag ? TAG_ICONS[address.tag] || MapPin : MapPin;
-
-  const cardVariants = {
-    initial: { opacity: 0, y: 20, scale: 0.95 },
-    animate: { opacity: 1, y: 0, scale: 1 },
-    exit: { opacity: 0, scale: 0.95, height: 0 },
-  };
+  const TagIcon = address.tag ? TAG_ICONS[address.tag.toLowerCase()] || MapPin : MapPin;
 
   return (
-    <motion.div
-      variants={cardVariants}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      transition={{ duration: 0.2 }}
-      layout
-    >
+    <TooltipProvider>
       <Card
         className={cn(
-          'relative transition-all duration-200 cursor-pointer hover:shadow-md',
-          (isDefaultShipping || isDefaultBilling) && 'border-primary border-2'
+          'border border-border bg-card shadow-sm transition-all',
+          isDefaultShipping && 'border-primary/50 bg-primary/[0.02]'
         )}
-        onClick={onSelect}
       >
-        <div className="p-6">
-          <div className="flex items-start gap-4">
-            {/* Icon */}
-            <div
-              className={cn(
-                'flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 shrink-0',
-                (isDefaultShipping || isDefaultBilling) && 'bg-primary/20'
-              )}
-            >
-              <TagIcon className="h-5 w-5" />
+        <CardContent className="p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="p-2.5 rounded-lg bg-muted/50 border border-border/60 shrink-0">
+              <TagIcon className="h-4 w-4 text-primary" />
             </div>
 
-            {/* Details */}
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2">
-                <div className="space-y-1">
-                  {/* Tags and Badges */}
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {address.tag && (
-                      <Badge variant="secondary" className="capitalize text-xs">
-                        {address.tag}
-                      </Badge>
-                    )}
-                    {isDefaultShipping && (
-                      <Badge variant="default" className="gap-1 text-xs">
-                        <Package className="h-3 w-3" />
-                        Default Shipping
-                      </Badge>
-                    )}
-                    {isDefaultBilling && (
-                      <Badge variant="outline" className="gap-1 text-xs">
-                        <CreditCard className="h-3 w-3" />
-                        Default Billing
-                      </Badge>
+            <div className="min-w-0 space-y-0.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-sm text-foreground truncate">
+                  {address.address}
+                </span>
+
+                {address.tag && (
+                  <Badge variant="outline" className="capitalize text-[10px] font-normal py-0">
+                    {address.tag}
+                  </Badge>
                 )}
-                  </div>
 
-                  {/* Address */}
-                  <p className="font-medium text-sm">{address.address}</p>
-
-                  {/* Region */}
-                  {address.region && (
-                    <p className="text-xs text-muted-foreground">{address.region}</p>
-                  )}
-
-                  {/* Additional Details */}
-                  {(address.city || address.postcode) && (
-                    <p className="text-xs text-muted-foreground">
-                      {[address.city, address.postcode].filter(Boolean).join(', ')}
-                    </p>
-                  )}
-                </div>
-
-                {/* Actions */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                    {!isDefaultShipping && onSetDefaultShipping && (
-                      <DropdownMenuItem onClick={onSetDefaultShipping} className="gap-2">
-                        <Package className="h-4 w-4" />
-                        Set as Default Shipping
-                      </DropdownMenuItem>
-                    )}
-                    {!isDefaultBilling && onSetDefaultBilling && (
-                      <DropdownMenuItem onClick={onSetDefaultBilling} className="gap-2">
-                        <CreditCard className="h-4 w-4" />
-                        Set as Default Billing
-                      </DropdownMenuItem>
-                    )}
-                    {onEdit && (
-                      <DropdownMenuItem onClick={onEdit} className="gap-2">
-                        <Check className="h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem
-                      onClick={onDelete}
-                      disabled={isDeleting || (isDefaultShipping && isDefaultBilling)}
-                      className="gap-2 text-destructive focus:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                {isDefaultShipping && (
+                  <Badge variant="secondary" className="gap-1 text-[10px] font-medium px-2 py-0 bg-primary/10 text-primary border-primary/20">
+                    <Package className="h-2.5 w-2.5" />
+                    Default Shipping
+                  </Badge>
+                )}
               </div>
-            </div>
-          </div>
-        </div>
-      </Card>
-    </motion.div>
-  );
-}
 
-/**
- * Add new address card (placeholder)
- */
-export function AddAddressCard({ onClick }: { onClick: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.2 }}
-    >
-      <Card
-        className="border-dashed border-2 hover:border-primary/50 transition-colors cursor-pointer group h-full"
-        onClick={onClick}
-      >
-        <div className="flex items-center justify-center h-full min-h-[140px]">
-          <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 mx-auto mb-2 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
-              <MapPin className="h-6 w-6 text-primary" />
+              <p className="text-xs text-muted-foreground truncate">
+                {[address.region, address.city, address.postcode].filter(Boolean).join(', ') || 'Nairobi, Kenya'}
+              </p>
             </div>
-            <p className="font-medium text-sm">Add New Address</p>
-            <p className="text-xs text-muted-foreground">Use Google Maps search</p>
           </div>
-        </div>
+
+          {/* Action Icon Buttons */}
+          <div className="flex items-center gap-1 shrink-0">
+            {!isDefaultShipping && onSetDefaultShipping && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onSetDefaultShipping}
+                    className="h-8 w-8 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10"
+                  >
+                    <Star className="h-4 w-4" />
+                    <span className="sr-only">Set as Default</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Set as Default
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {onEdit && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onEdit}
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span className="sr-only">Edit Address</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Edit Address
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {onDelete && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onDelete}
+                    disabled={isDeleting || isDefaultShipping}
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-30"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Delete Address</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {isDefaultShipping ? "Default address cannot be deleted" : "Delete Address"}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </CardContent>
       </Card>
-    </motion.div>
+    </TooltipProvider>
   );
 }

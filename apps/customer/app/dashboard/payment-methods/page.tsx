@@ -2,27 +2,16 @@
 
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Lock } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Loader2, ShieldCheck } from 'lucide-react';
 import { usePaymentMethods, useSetDefaultPaymentMethod, useDeletePaymentMethod } from '@/lib/hooks/usePaymentMethods';
-import { PaymentMethodCard, AddPaymentMethodCard } from './_components/payment-method-card';
+import { PaymentMethodCard } from './_components/payment-method-card';
 import { PaymentMethodsEmptyState } from './_components/payment-methods-empty-state';
 import { AddPaymentMethodDialog } from './_components/add-payment-method-dialog';
+import { EditPaymentMethodSheet } from './_components/edit-payment-method-sheet';
 import { DeletePaymentMethodDialog } from './_components/delete-payment-method-dialog';
-import { Loader2, CreditCard } from 'lucide-react';
 import type { PaymentMethod } from '@/lib/api/endpoints/payment-methods';
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
-  },
-};
 
 function PaymentMethodsPageContent() {
   const { data: paymentMethods, isLoading } = usePaymentMethods();
@@ -30,7 +19,10 @@ function PaymentMethodsPageContent() {
   const deleteMethod = useDeletePaymentMethod();
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editSheetOpen, setEditSheetOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  
+  const [methodToEdit, setMethodToEdit] = useState<PaymentMethod | null>(null);
   const [methodToDelete, setMethodToDelete] = useState<PaymentMethod | null>(null);
 
   const handleSetDefault = async (methodId: string) => {
@@ -39,6 +31,11 @@ function PaymentMethodsPageContent() {
     } catch {
       // Error handled by mutation
     }
+  };
+
+  const handleEditClick = (method: PaymentMethod) => {
+    setMethodToEdit(method);
+    setEditSheetOpen(true);
   };
 
   const handleDeleteClick = (method: PaymentMethod) => {
@@ -65,144 +62,73 @@ function PaymentMethodsPageContent() {
     }
   };
 
-  // Group methods by type (M-Pesa first, then cards, then banks)
-  const groupedMethods = {
-    mpesa: paymentMethods?.filter((m) => m.payment_type === 'mpesa') || [],
-    card: paymentMethods?.filter((m) => m.payment_type === 'card') || [],
-    bank: paymentMethods?.filter((m) => m.payment_type === 'bank_transfer') || [],
+  const handleEditSheetChange = (open: boolean) => {
+    setEditSheetOpen(open);
+    if (!open) {
+      setMethodToEdit(null);
+    }
   };
 
   const hasMethods = paymentMethods && paymentMethods.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Payment Methods</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your payment options for faster checkout
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Payment Methods</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Manage saved M-Pesa numbers, debit/credit cards, and bank details.
           </p>
         </div>
-        <Button onClick={() => setAddDialogOpen(true)} className="gap-2">
-          <CreditCard className="h-4 w-4" />
+        <Button onClick={() => setAddDialogOpen(true)} className="gap-2 shrink-0 self-start sm:self-auto">
+          <Plus className="h-4 w-4" />
           Add Payment Method
         </Button>
       </div>
 
       {/* Content */}
       {isLoading ? (
-        <Card>
+        <Card className="border border-border bg-card shadow-sm">
           <CardContent className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
       ) : !hasMethods ? (
         <PaymentMethodsEmptyState onAdd={() => setAddDialogOpen(true)} />
       ) : (
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="space-y-8"
-        >
-          {/* M-Pesa Section */}
-          {groupedMethods.mpesa.length > 0 && (
-            <section>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span className="text-green-600 dark:text-green-400">M-Pesa</span>
-                <span className="text-sm text-muted-foreground font-normal">
-                  ({groupedMethods.mpesa.length})
-                </span>
-              </h3>
-              <div className="grid gap-4">
-                <AnimatePresence mode="popLayout">
-                  {groupedMethods.mpesa.map((method) => (
-                    <PaymentMethodCard
-                      key={method.id}
-                      method={method}
-                      onSetDefault={() => handleSetDefault(method.id)}
-                      onDelete={() => handleDeleteClick(method)}
-                      isDeleting={deleteMethod.isPending}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
-            </section>
-          )}
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 gap-3">
+            {paymentMethods.map((method) => (
+              <PaymentMethodCard
+                key={method.id}
+                method={method}
+                onSetDefault={() => handleSetDefault(method.id)}
+                onEdit={() => handleEditClick(method)}
+                onDelete={() => handleDeleteClick(method)}
+                isDeleting={deleteMethod.isPending}
+              />
+            ))}
+          </div>
 
-          {/* Cards Section */}
-          {groupedMethods.card.length > 0 && (
-            <section>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>Cards</span>
-                <span className="text-sm text-muted-foreground font-normal">
-                  ({groupedMethods.card.length})
-                </span>
-              </h3>
-              <div className="grid gap-4">
-                <AnimatePresence mode="popLayout">
-                  {groupedMethods.card.map((method) => (
-                    <PaymentMethodCard
-                      key={method.id}
-                      method={method}
-                      onSetDefault={() => handleSetDefault(method.id)}
-                      onDelete={() => handleDeleteClick(method)}
-                      isDeleting={deleteMethod.isPending}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
-            </section>
-          )}
-
-          {/* Bank Transfers Section */}
-          {groupedMethods.bank.length > 0 && (
-            <section>
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <span>Bank Accounts</span>
-                <span className="text-sm text-muted-foreground font-normal">
-                  ({groupedMethods.bank.length})
-                </span>
-              </h3>
-              <div className="grid gap-4">
-                <AnimatePresence mode="popLayout">
-                  {groupedMethods.bank.map((method) => (
-                    <PaymentMethodCard
-                      key={method.id}
-                      method={method}
-                      onSetDefault={() => handleSetDefault(method.id)}
-                      onDelete={() => handleDeleteClick(method)}
-                      isDeleting={deleteMethod.isPending}
-                    />
-                  ))}
-                </AnimatePresence>
-              </div>
-            </section>
-          )}
-
-          {/* Add Card */}
-          <AddPaymentMethodCard onClick={() => setAddDialogOpen(true)} />
-        </motion.div>
+          {/* Quick Security Badge */}
+          <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/30 border border-border/50 text-xs text-muted-foreground">
+            <ShieldCheck className="h-4 w-4 text-emerald-500 shrink-0" />
+            <span>All payment methods are encrypted and processed through PCI-DSS compliant gateways.</span>
+          </div>
+        </div>
       )}
 
-      {/* Security Notice */}
-      {hasMethods && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.3 }}
-          className="flex items-center justify-center gap-2 py-4 text-xs text-muted-foreground border-t"
-        >
-          <Lock className="h-3 w-3" />
-          <span>Your payment information is encrypted and secure</span>
-        </motion.div>
-      )}
-
-      {/* Dialogs */}
+      {/* Dialogs / Sheets */}
       <AddPaymentMethodDialog
         open={addDialogOpen}
         onOpenChange={setAddDialogOpen}
+      />
+
+      <EditPaymentMethodSheet
+        open={editSheetOpen}
+        onOpenChange={handleEditSheetChange}
+        method={methodToEdit}
       />
 
       <DeletePaymentMethodDialog
@@ -223,4 +149,3 @@ export default function PaymentMethodsPage() {
     </ErrorBoundary>
   );
 }
-

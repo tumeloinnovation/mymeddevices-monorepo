@@ -1,0 +1,14 @@
+#!/bin/bash
+# Post-testing commit helper
+# Run this after you've tested your changes locally
+# It will show what changed and help you commit with a proper message
+
+echo "=== Post-Testing Commit Helper ==="
+echo ""
+echo "📋 Current changes:"
+git status --short
+echo ""
+echo "📊 Changes summary:"
+git diff --stat
+echo ""
+echo "✅ Ready to commit! Tell Claude what you tested and any specific commit message preferences."

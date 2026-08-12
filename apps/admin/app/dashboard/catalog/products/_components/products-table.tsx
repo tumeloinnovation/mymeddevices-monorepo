@@ -101,6 +101,7 @@ interface ProductsTableProps {
   onPageChange: (page: number) => void;
   onQuickAction: (id: string, action: "verify" | "publish" | "archive" | "unarchive" | "reject") => void;
   onDelete: (product: Product) => void;
+  onStatusChange?: (product: Product) => void;
   onBulkAction?: (ids: string[], action: "verify" | "publish" | "archive" | "unarchive" | "delete") => void;
   hasActiveFilters?: boolean;
   onClearFilters?: () => void;
@@ -116,6 +117,7 @@ export function ProductsTable({
   onPageChange,
   onQuickAction,
   onDelete,
+  onStatusChange,
   onBulkAction,
   hasActiveFilters,
   onClearFilters,
@@ -384,6 +386,7 @@ export function ProductsTable({
                   product={product}
                   onQuickAction={onQuickAction}
                   onDelete={onDelete}
+                  onStatusChange={onStatusChange}
                 />
               )}
             </div>
@@ -736,10 +739,12 @@ function RowActions({
   product,
   onQuickAction,
   onDelete,
+  onStatusChange,
 }: {
   product: Product;
   onQuickAction: (id: string, action: "verify" | "publish" | "archive" | "unarchive" | "reject") => void;
   onDelete: (product: Product) => void;
+  onStatusChange?: (product: Product) => void;
 }) {
   return (
     <DropdownMenu>
@@ -802,6 +807,16 @@ function RowActions({
             <DropdownMenuItem onClick={() => onQuickAction(product.id, "unarchive")}>
               <Package className="h-3.5 w-3.5 mr-1.5" />
               Restore to draft
+            </DropdownMenuItem>
+          </>
+        )}
+
+        {onStatusChange && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => onStatusChange(product)}>
+              <FileEdit className="h-3.5 w-3.5 mr-1.5" />
+              Change status
             </DropdownMenuItem>
           </>
         )}

@@ -195,7 +195,7 @@ export function useCategoryProducts(
         dimensions: item.dimensions || { length: '', width: '', height: '' },
         meta_data: [],
         date_created: item.created_at || new Date().toISOString(),
-        permalink: `/products/${item.sku || item.id}`,
+        permalink: `/products/${item.slug || item.sku || item.id}`,
         type: 'simple',
         purchasable: true,
         catalog_visibility: 'visible',

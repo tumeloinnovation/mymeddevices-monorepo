@@ -36,4 +36,4 @@ class RelatedProduct(Base, IDMixin, AuditMixin):
 
     # Relationships
     product: Mapped["Product"] = relationship("Product", foreign_keys=[product_id], back_populates="related_products")
-    related_product: Mapped["Product"] = relationship("Product", foreign_keys=[related_product_id])
+    related_product: Mapped["Product"] = relationship("Product", foreign_keys=[related_product_id], lazy="selectin")

@@ -24,12 +24,13 @@ export function StepReview({ role, imagePreviews, isSubmitting, onSubmit }: Step
   const nameVal = watch("name") || "—";
   const skuVal = watch("sku") || "—";
   const stockQty = Number(watch("stock_quantity")) || 0;
-  const vendorPayoutVal = Number(watch("vendor_payout")) || 0;
-  const wholesalePriceVal = Number(watch("wholesale_price")) || 0;
-  const vatRate = watch("vat_rate") ?? 0.16;
+  const basePriceVal = Number(watch("base_price")) || 0;
+  const costPriceVal = Number(watch("cost_price")) || 0;
+  const rawVatRate = watch("vat_rate") ?? 16;
+  const vatRateDecimal = rawVatRate > 1 ? rawVatRate / 100 : rawVatRate;
 
-  const platformPricing = calculatePlatformPricing(vendorPayoutVal, wholesalePriceVal);
-  const vatAmount = Math.round(platformPricing.customerPrice * vatRate * 100) / 100;
+  const platformPricing = calculatePlatformPricing(basePriceVal, costPriceVal);
+  const vatAmount = Math.round(platformPricing.customerPrice * vatRateDecimal * 100) / 100;
   const finalCustomerPriceWithVat = Math.round((platformPricing.customerPrice + vatAmount) * 100) / 100;
 
   const primaryImageSrc = imagePreviews[primaryImageIndex] || imagePreviews[0];
@@ -68,7 +69,7 @@ export function StepReview({ role, imagePreviews, isSubmitting, onSubmit }: Step
               </div>
               <div className="p-3 border border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
                 <span className="text-zinc-500">Seller Base Payout:</span>
-                <span className="font-bold text-purple-600 dark:text-purple-400">KES {vendorPayoutVal.toLocaleString()}</span>
+                <span className="font-bold text-purple-600 dark:text-purple-400">KES {basePriceVal.toLocaleString()}</span>
               </div>
               <div className="p-3 border-2 border-emerald-600 dark:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 flex justify-between items-center">
                 <span className="text-emerald-800 dark:text-emerald-300 font-bold uppercase text-[11px]">

@@ -4,23 +4,12 @@ import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Loader2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Loader2 } from 'lucide-react';
 import { useAddressStore, type Address } from '@mymeddevices/core/lib/store/useAddressStore';
-import { AddressCard, AddAddressCard } from './_components/address-card';
+import { AddressCard } from './_components/address-card';
 import { AddressesEmptyState } from './_components/addresses-empty-state';
 import { DeleteAddressDialog } from './_components/delete-address-dialog';
 import DeliveryAddressSheet from '@/components/maps/DeliveryAddressSheet';
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
-  },
-};
 
 function AddressesPage() {
   const { addresses, hydrated, removeAddress, setDefaultAddress } = useAddressStore();
@@ -38,11 +27,9 @@ function AddressesPage() {
   const handleDeleteConfirm = () => {
     if (!addressToDelete) return;
 
-    // Check if it's a default address
     const isDefault = addresses.some(a => a.id === addressToDelete.id && a.isDefault);
 
     if (isDefault && addresses.length === 1) {
-      // Cannot delete the only default address
       return;
     }
 
@@ -62,84 +49,77 @@ function AddressesPage() {
     setDefaultAddress(addressId);
   };
 
-  const handleNewAddress = (address: Address) => {
-    // The DeliveryAddressSheet handles adding to the store
-    // We just need to close the sheet
+  const handleNewAddress = () => {
     setAddSheetOpen(false);
+    setEditingAddress(undefined);
   };
 
   const handleEditAddress = (address: Address) => {
     setEditingAddress(address);
-    // In a full implementation, this would open a pre-filled sheet
-    // For now, we'll just show a message
-    console.log('Edit address:', address);
+    setAddSheetOpen(true);
   };
-
-  // Get default shipping and billing addresses
-  // For now, we use the single isDefault flag
-  const defaultAddress = addresses.find((a: Address) => a.isDefault);
 
   const hasAddresses = hydrated && addresses.length > 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       {/* Page Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">My Addresses</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your delivery addresses for faster checkout
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">My Addresses</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Manage your saved shipping & billing delivery locations.
           </p>
         </div>
-        <Button onClick={() => setAddSheetOpen(true)} className="gap-2">
-          <MapPin className="h-4 w-4" />
-          Add Address
+        <Button 
+          onClick={() => {
+            setEditingAddress(undefined);
+            setAddSheetOpen(true);
+          }} 
+          className="gap-2 shrink-0 self-start sm:self-auto"
+        >
+          <Plus className="h-4 w-4" />
+          Add New Address
         </Button>
       </div>
 
       {/* Content */}
       {!hydrated ? (
-        <Card>
+        <Card className="border border-border bg-card shadow-sm">
           <CardContent className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </CardContent>
         </Card>
       ) : !hasAddresses ? (
-        <AddressesEmptyState onAdd={() => setAddSheetOpen(true)} />
+        <AddressesEmptyState onAdd={() => {
+          setEditingAddress(undefined);
+          setAddSheetOpen(true);
+        }} />
       ) : (
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-        >
-          <AnimatePresence mode="popLayout">
-            {addresses.map((address) => (
-              <AddressCard
-                key={address.id}
-                address={address}
-                isDefaultShipping={address.isDefault}
-                isDefaultBilling={address.isDefault}
-                onSetDefaultShipping={() => handleSetDefault(address.id!)}
-                onEdit={() => handleEditAddress(address)}
-                onDelete={() => handleDeleteClick(address)}
-              />
-            ))}
-          </AnimatePresence>
-
-          {/* Add Card */}
-          <div className="md:col-span-1">
-            <AddAddressCard onClick={() => setAddSheetOpen(true)} />
-          </div>
-        </motion.div>
+        <div className="grid grid-cols-1 gap-3">
+          {addresses.map((address) => (
+            <AddressCard
+              key={address.id}
+              address={address}
+              isDefaultShipping={address.isDefault}
+              isDefaultBilling={address.isDefault}
+              onSetDefaultShipping={() => handleSetDefault(address.id!)}
+              onEdit={() => handleEditAddress(address)}
+              onDelete={() => handleDeleteClick(address)}
+            />
+          ))}
+        </div>
       )}
 
-      {/* Add/Edit Address Sheet */}
+      {/* Delivery Address Google Maps Sheet */}
       <DeliveryAddressSheet
         delivery={editingAddress as any}
         onSelect={handleNewAddress as any}
         open={addSheetOpen}
-        onOpenChange={setAddSheetOpen}
+        onOpenChange={(open) => {
+          setAddSheetOpen(open);
+          if (!open) setEditingAddress(undefined);
+        }}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -162,4 +142,3 @@ export default function AddressesPageWrapper() {
     </ErrorBoundary>
   );
 }
-

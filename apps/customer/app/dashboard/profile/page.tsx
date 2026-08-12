@@ -8,8 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@mymeddevices/shared-core';
 import { useCustomerProfile, useCustomerAddresses } from '@/lib/hooks/useDashboard';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Calendar, Award } from 'lucide-react';
+import { Calendar, Award, AlertCircle, Check } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { calculateProfileCompleteness, getMissingFields, type ProfileCompletenessData } from '@/lib/data/profile-validation';
 
 function ProfilePageContent() {
   const user = useAuthStore((state) => state.user);
@@ -36,6 +37,11 @@ function ProfilePageContent() {
     avatar_url: user?.avatar_url || profile?.avatar_url,
     hasAddress: (addresses?.length ?? 0) > 0,
   };
+
+  // Calculate completeness and missing fields
+  const percentage = calculateProfileCompleteness(profileData);
+  const missingFields = getMissingFields(profileData);
+  const isComplete = percentage === 100;
 
   return (
     <div className="space-y-6">
@@ -64,7 +70,16 @@ function ProfilePageContent() {
             <CardContent className="space-y-6">
               {/* Avatar with completeness ring */}
               <div className="flex items-center justify-center">
-                <ProfileCompletenessRing profile={profileData} />
+                <div className="relative">
+                  <ProfileCompletenessRing profile={profileData} />
+                  {isComplete && (
+                    <div className="absolute inset-0 flex items-center justify-center animate-in zoom-in duration-300">
+                      <div className="h-8 w-8 rounded-full bg-green-500 flex items-center justify-center">
+                        <Check className="h-5 w-5 text-white" />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="text-center">
@@ -73,6 +88,32 @@ function ProfilePageContent() {
                 </p>
                 <p className="text-sm text-muted-foreground">{user?.email}</p>
               </div>
+
+              {/* Show missing fields or completion message */}
+              {!isComplete && missingFields.length > 0 && (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <p className="text-sm font-medium text-amber-800 dark:text-amber-200 mb-2">
+                    Complete your profile ({percentage}%)
+                  </p>
+                  <ul className="space-y-1">
+                    {missingFields.map((field) => (
+                      <li key={field} className="flex items-center gap-2 text-xs text-amber-700 dark:text-amber-300">
+                        <AlertCircle className="h-3 w-3 shrink-0" />
+                        <span className="capitalize">Add {field}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {isComplete && (
+                <div className="p-3 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200 flex items-center gap-2">
+                    <Check className="h-4 w-4" />
+                    Your profile is complete!
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-3 pt-2 border-t">
                 <div className="flex items-center gap-2 text-sm">

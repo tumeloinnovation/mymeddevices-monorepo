@@ -87,11 +87,13 @@ function ProductWizardInner({
       model_number: "",
       product_type: "equipment",
       internal_reference: "",
-      vendor_payout: 0,
+      base_price: 0,
+      cost_price: undefined,
       wholesale_price: undefined,
-      vat_rate: 0.16,
+      compare_at_price: undefined,
+      has_vat: true,
+      vat_rate: 16,
       sale_active: false,
-      sale_price: undefined,
       sale_end_date: "",
       sku: "",
       stock_quantity: 0,
@@ -190,7 +192,7 @@ function ProductWizardInner({
   const handleNextStep = async () => {
     let fieldsToValidate: (keyof ProductWizardFormData)[] = [];
     if (currentStep === 0) fieldsToValidate = ["name", "slug", "category_id"];
-    if (currentStep === 1) fieldsToValidate = ["vendor_payout"];
+    if (currentStep === 1) fieldsToValidate = ["base_price"];
     if (currentStep === 2) fieldsToValidate = ["sku", "stock_quantity"];
     if (currentStep === 3 && imagePreviews.length === 0) {
       toast.error("At least 1 product image is required. Upload a primary equipment photo.");
@@ -226,22 +228,18 @@ function ProductWizardInner({
     if (formData.meta_title?.trim()) payload.meta_title = formData.meta_title.trim();
     if (formData.meta_description?.trim()) payload.meta_description = formData.meta_description.trim();
 
-    if (formData.vendor_payout !== undefined && formData.vendor_payout !== null && !isNaN(Number(formData.vendor_payout))) {
-      const vendorPayoutNum = Number(formData.vendor_payout);
-      const wholesalePriceNum = Number(formData.wholesale_price || 0);
-      const vatRate = formData.vat_rate ?? 0.16;
+    if (formData.base_price !== undefined && formData.base_price !== null && !isNaN(Number(formData.base_price))) {
+      const basePriceNum = Number(formData.base_price);
+      const costPriceNum = Number(formData.cost_price || 0);
 
-      payload.vendor_payout = vendorPayoutNum;
-      payload.base_price = vendorPayoutNum;
+      payload.base_price = basePriceNum;
 
       // Platform pricing calculation
-      const pricing = calculatePlatformPricing(vendorPayoutNum, wholesalePriceNum);
-      const vatAmount = Math.round(pricing.customerPrice * vatRate * 100) / 100;
-      const finalPrice = Math.round((pricing.customerPrice + vatAmount) * 100) / 100;
+      const pricing = calculatePlatformPricing(basePriceNum, costPriceNum);
 
       payload.markup_price = pricing.markupAmount;
       payload.commission_fee = pricing.commissionAmount;
-      payload.price = finalPrice;
+      payload.price = pricing.customerPrice;
     }
     if (formData.wholesale_price !== undefined && formData.wholesale_price !== null && !isNaN(Number(formData.wholesale_price)) && Number(formData.wholesale_price) > 0) {
       payload.wholesale_price = Number(formData.wholesale_price);
@@ -359,6 +357,7 @@ function ProductWizardInner({
         await catalogService.verifyProduct(product.id);
         toast.success("Product listing submitted for admin moderation!");
       } else {
+        await catalogService.publishProduct(product.id);
         toast.success("Product published to catalog successfully!");
       }
 

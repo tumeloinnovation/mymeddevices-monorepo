@@ -636,6 +636,11 @@ export default function DashboardLayout({
     setActiveGroupIndex(activeMatch.groupIdx)
   }, [activeMatch.groupIdx])
 
+  // Automatically close sidebar subpanel when navigating to another page
+  useEffect(() => {
+    setIsSubpanelOpen(false)
+  }, [pathname])
+
   const activeGroup = config[activeGroupIndex] || config[0]
   const currentPage = activeMatch.pageLabel
 

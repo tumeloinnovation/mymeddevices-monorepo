@@ -23,16 +23,21 @@ class LoyaltyService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def get_summary(self, customer_id: uuid.UUID) -> dict:
-        """Get loyalty summary including tier info and progress."""
-        # Get customer profile
+    async def _get_or_create_profile(self, customer_id: uuid.UUID) -> CustomerProfile:
+        """Get or create customer profile if missing."""
         result = await self.db.execute(
             select(CustomerProfile).where(CustomerProfile.user_id == customer_id)
         )
         profile = result.scalar_one_or_none()
-
         if not profile:
-            raise ValueError("Customer profile not found")
+            profile = CustomerProfile(user_id=customer_id, loyalty_points=0, loyalty_tier="bronze")
+            self.db.add(profile)
+            await self.db.flush()
+        return profile
+
+    async def get_summary(self, customer_id: uuid.UUID) -> dict:
+        """Get loyalty summary including tier info and progress."""
+        profile = await self._get_or_create_profile(customer_id)
 
         total_points = profile.loyalty_points or 0
         current_tier_name = profile.loyalty_tier or "bronze"
@@ -116,14 +121,7 @@ class LoyaltyService:
         reference_id: Optional[uuid.UUID] = None,
     ) -> LoyaltyLedger:
         """Add points to customer's balance."""
-        # Get current profile
-        result = await self.db.execute(
-            select(CustomerProfile).where(CustomerProfile.user_id == customer_id)
-        )
-        profile = result.scalar_one_or_none()
-
-        if not profile:
-            raise ValueError("Customer profile not found")
+        profile = await self._get_or_create_profile(customer_id)
 
         current_points = profile.loyalty_points or 0
         new_points = current_points + points
@@ -161,14 +159,7 @@ class LoyaltyService:
         if points <= 0:
             raise ValueError("Points must be positive")
 
-        # Get current profile
-        result = await self.db.execute(
-            select(CustomerProfile).where(CustomerProfile.user_id == customer_id)
-        )
-        profile = result.scalar_one_or_none()
-
-        if not profile:
-            raise ValueError("Customer profile not found")
+        profile = await self._get_or_create_profile(customer_id)
 
         current_points = profile.loyalty_points or 0
 
@@ -220,14 +211,7 @@ class LoyaltyService:
         admin_user_id: uuid.UUID,
     ) -> LoyaltyLedger:
         """Manually adjust points (admin only)."""
-        # Get current profile
-        result = await self.db.execute(
-            select(CustomerProfile).where(CustomerProfile.user_id == customer_id)
-        )
-        profile = result.scalar_one_or_none()
-
-        if not profile:
-            raise ValueError("Customer profile not found")
+        profile = await self._get_or_create_profile(customer_id)
 
         current_points = profile.loyalty_points or 0
         new_points = current_points + points  # Can be negative

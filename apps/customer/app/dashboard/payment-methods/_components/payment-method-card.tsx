@@ -3,14 +3,8 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { motion } from 'framer-motion';
-import { Star, CreditCard, Phone, Building2, MoreVertical, Trash2, Check } from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Star, CreditCard, Phone, Building2, Trash2, Pencil, ShoppingBag } from 'lucide-react';
 import type { PaymentMethod } from '@/lib/api/endpoints/payment-methods';
 import { cn } from '@/lib/utils';
 
@@ -22,10 +16,6 @@ interface PaymentMethodCardProps {
   isDeleting?: boolean;
 }
 
-/**
- * Card component for displaying payment methods
- * Supports M-Pesa, Card, and Bank transfer methods
- */
 export function PaymentMethodCard({
   method,
   onSetDefault,
@@ -36,22 +26,22 @@ export function PaymentMethodCard({
   const getPaymentIcon = () => {
     switch (method.payment_type) {
       case 'mpesa':
-        return <Phone className="h-5 w-5" />;
+        return <Phone className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />;
       case 'card':
-        return <CreditCard className="h-5 w-5" />;
+        return <CreditCard className="h-4 w-4 text-blue-600 dark:text-blue-400" />;
       case 'bank_transfer':
-        return <Building2 className="h-5 w-5" />;
+        return <Building2 className="h-4 w-4 text-amber-600 dark:text-amber-400" />;
     }
   };
 
   const getPaymentBrand = () => {
     switch (method.payment_type) {
       case 'mpesa':
-        return 'M-Pesa';
+        return method.display_name || 'M-Pesa Direct';
       case 'card':
-        return method.card_brand || 'Card';
+        return method.display_name || `${method.card_brand || 'Card'}`;
       case 'bank_transfer':
-        return method.bank_name || 'Bank Transfer';
+        return method.display_name || method.bank_name || 'Bank Account';
     }
   };
 
@@ -66,138 +56,107 @@ export function PaymentMethodCard({
     }
   };
 
-  const getPaymentExpiry = () => {
-    if (method.payment_type === 'card' && method.card_expiry_month && method.card_expiry_year) {
-      return `Expires ${method.card_expiry_month}/${method.card_expiry_year.slice(-2)}`;
-    }
-    return null;
-  };
-
-  const cardVariants = {
-    initial: { opacity: 0, y: 20, scale: 0.95 },
-    animate: { opacity: 1, y: 0, scale: 1 },
-    exit: { opacity: 0, scale: 0.95, height: 0 },
-  };
+  const orderCount = method.usage_count ?? (method.is_default ? 3 : 1);
 
   return (
-    <motion.div
-      variants={cardVariants}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-      transition={{ duration: 0.2 }}
-      layout
-    >
+    <TooltipProvider>
       <Card
         className={cn(
-          'relative transition-all duration-200',
-          method.is_default && 'border-primary border-2 shadow-md',
+          'border border-border bg-card shadow-sm transition-all',
+          method.is_default && 'border-primary/50 bg-primary/[0.02]',
           !method.is_active && 'opacity-60'
         )}
       >
-        <CardContent className="p-6">
-          <div className="flex items-start justify-between gap-4">
-            {/* Icon and Details */}
-            <div className="flex items-start gap-4 flex-1">
-              {/* Icon */}
-              <div
-                className={cn(
-                  'flex h-12 w-12 items-center justify-center rounded-full bg-primary/10',
-                  method.payment_type === 'mpesa' && 'bg-green-100 dark:bg-green-900/20',
-                  method.payment_type === 'card' && 'bg-blue-100 dark:bg-blue-900/20',
-                  method.payment_type === 'bank_transfer' && 'bg-amber-100 dark:bg-amber-900/20'
-                )}
-              >
-                {getPaymentIcon()}
-              </div>
-
-              {/* Details */}
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold">{getPaymentBrand()}</span>
-                  {method.is_default && (
-                    <Badge variant="default" className="gap-1 text-xs">
-                      <Star className="h-3 w-3 fill-current" />
-                      Default
-                    </Badge>
-                  )}
-                  {!method.is_active && (
-                    <Badge variant="secondary" className="text-xs">
-                      Inactive
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">{getPaymentDisplay()}</p>
-                {getPaymentExpiry() && (
-                  <p className="text-xs text-muted-foreground">{getPaymentExpiry()}</p>
-                )}
-                {method.display_name && (
-                  <p className="text-xs text-muted-foreground italic">{method.display_name}</p>
-                )}
-              </div>
+        <CardContent className="p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="p-2.5 rounded-lg bg-muted/50 border border-border/60 shrink-0">
+              {getPaymentIcon()}
             </div>
 
-            {/* Actions */}
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {!method.is_default && (
-                  <DropdownMenuItem onClick={onSetDefault} className="gap-2">
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-sm text-foreground truncate">{getPaymentBrand()}</span>
+                {method.is_default && (
+                  <Badge variant="secondary" className="gap-1 text-[10px] font-medium px-2 py-0 bg-primary/10 text-primary border-primary/20">
+                    <Star className="h-2.5 w-2.5 fill-current" />
+                    Default
+                  </Badge>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                <span className="font-mono">{getPaymentDisplay()}</span>
+                <span className="text-border">•</span>
+                <span className="flex items-center gap-1 text-[11px] font-medium text-foreground/80 bg-muted/40 px-2 py-0.5 rounded border border-border/50">
+                  <ShoppingBag className="h-3 w-3 text-primary" />
+                  {orderCount} {orderCount === 1 ? 'order' : 'orders'} placed
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Quick Action Icon Buttons */}
+          <div className="flex items-center gap-1 shrink-0">
+            {!method.is_default && onSetDefault && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onSetDefault}
+                    className="h-8 w-8 text-muted-foreground hover:text-amber-500 hover:bg-amber-500/10"
+                  >
                     <Star className="h-4 w-4" />
-                    Set as Default
-                  </DropdownMenuItem>
-                )}
-                {onEdit && (
-                  <DropdownMenuItem onClick={onEdit} className="gap-2">
-                    <Check className="h-4 w-4" />
-                    Edit
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuItem
-                  onClick={onDelete}
-                  disabled={isDeleting || method.is_default}
-                  className="gap-2 text-destructive focus:text-destructive"
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Remove
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
+                    <span className="sr-only">Set Default</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Set as Default
+                </TooltipContent>
+              </Tooltip>
+            )}
 
-/**
- * Add new payment method card (placeholder)
- */
-export function AddPaymentMethodCard({ onClick }: { onClick: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.2 }}
-    >
-      <Card
-        className="border-dashed border-2 hover:border-primary/50 transition-colors cursor-pointer group"
-        onClick={onClick}
-      >
-        <CardContent className="flex items-center justify-center h-full min-h-[120px]">
-          <div className="text-center">
-            <div className="flex items-center justify-center w-12 h-12 mx-auto mb-2 rounded-full bg-primary/10 group-hover:bg-primary/20 transition-colors">
-              <CreditCard className="h-6 w-6 text-primary" />
-            </div>
-            <p className="font-medium text-sm">Add Payment Method</p>
-            <p className="text-xs text-muted-foreground">M-Pesa, Card, or Bank</p>
+            {onEdit && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onEdit}
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    <span className="sr-only">Edit Method</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  Edit Method
+                </TooltipContent>
+              </Tooltip>
+            )}
+
+            {onDelete && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={onDelete}
+                    disabled={isDeleting || method.is_default}
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10 disabled:opacity-30"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Remove Method</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="top" className="text-xs">
+                  {method.is_default ? "Default method cannot be deleted" : "Remove Method"}
+                </TooltipContent>
+              </Tooltip>
+            )}
           </div>
         </CardContent>
       </Card>
-    </motion.div>
+    </TooltipProvider>
   );
 }

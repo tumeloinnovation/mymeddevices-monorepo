@@ -4,7 +4,7 @@ import { useState, useEffect, Suspense, useCallback, useRef, useMemo } from "rea
 import { useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Plus, Download, Trash2, XCircle, Loader2, Package, TrendingUp, Upload } from "lucide-react";
+import { Plus, Download, Trash2, XCircle, Loader2, Package, TrendingUp, Upload, FileEdit, Clock, Archive, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { Product } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -109,8 +109,10 @@ function ProductsPageInner() {
 
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [rejectTarget, setRejectTarget] = useState<Product | null>(null);
+  const [statusChangeTarget, setStatusChangeTarget] = useState<Product | null>(null);
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState("");
+  const [newStatus, setNewStatus] = useState<string>("");
   const [pendingProductId, setPendingProductId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -226,6 +228,23 @@ function ProductsPageInner() {
       }
     );
   }, [rejectTarget, rejectionReason, mutations.reject]);
+
+  const handleProductStatusChange = useCallback(() => {
+    if (!statusChangeTarget || !newStatus) return;
+    setPendingProductId(statusChangeTarget.id);
+    mutations.changeStatus.mutate(
+      { id: statusChangeTarget.id, status: newStatus },
+      {
+        onSuccess: () => {
+          toast.success(`Product status changed to ${newStatus}`);
+          setStatusChangeTarget(null);
+          setNewStatus("");
+        },
+        onError: (err: any) => toast.error(err.message || "Failed to change product status"),
+        onSettled: () => setPendingProductId(null),
+      }
+    );
+  }, [statusChangeTarget, newStatus, mutations.changeStatus]);
 
   const handleImportComplete = useCallback((created: number, updated: number) => {
     // Invalidate and refetch products after import
@@ -375,6 +394,7 @@ function ProductsPageInner() {
           onPageChange={handlePageChange}
           onQuickAction={handleQuickAction}
           onDelete={(product) => setDeleteTarget(product)}
+          onStatusChange={(product) => setStatusChangeTarget(product)}
           onBulkAction={handleBulkAction}
           hasActiveFilters={hasActiveFilters}
           onClearFilters={clearFilters}
@@ -467,6 +487,78 @@ function ProductsPageInner() {
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 )}
                 Send & Reject
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Status Change Dialog */}
+        <Dialog open={!!statusChangeTarget} onOpenChange={() => setStatusChangeTarget(null)}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <div className="h-10 w-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center mb-3">
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-lg font-semibold">Change Product Status</DialogTitle>
+              <DialogDescription className="text-sm pt-1">
+                Select a new status for{" "}
+                <span className="font-semibold text-foreground">
+                  &ldquo;{statusChangeTarget?.name}&rdquo;
+                </span>
+                .
+              </DialogDescription>
+            </DialogHeader>
+            <div className="py-4 space-y-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">New Status</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { value: "draft", label: "Draft", icon: FileEdit },
+                    { value: "pending_review", label: "Pending Review", icon: Clock },
+                    { value: "published", label: "Published", icon: CheckCircle2 },
+                    { value: "archived", label: "Archived", icon: Archive },
+                  ].map((status) => {
+                    const Icon = status.icon;
+                    const isSelected = newStatus === status.value;
+                    return (
+                      <button
+                        key={status.value}
+                        type="button"
+                        onClick={() => setNewStatus(status.value)}
+                        className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium border transition-colors ${
+                          isSelected
+                            ? "bg-primary text-primary-foreground border-primary"
+                            : "bg-card hover:bg-muted border-border"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                        {status.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+            <DialogFooter className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setStatusChangeTarget(null)}
+                disabled={mutations.changeStatus.isPending}
+                className="h-9"
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleProductStatusChange}
+                disabled={!newStatus || mutations.changeStatus.isPending}
+                className="h-9"
+              >
+                {mutations.changeStatus.isPending && (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                )}
+                Change Status
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -63,6 +63,7 @@ export function useCheckoutLogic() {
     const [showSummaryModal, setShowSummaryModal] = useState(false);
     const [isPending, setIsPending] = useState(false);
     const [orderNotes, setOrderNotes] = useState('');
+    const [pointsToRedeem, setPointsToRedeem] = useState<number>(0);
 
     // Coupon state
     const [couponCode, setCouponCode] = useState('');
@@ -395,7 +396,8 @@ export function useCheckoutLogic() {
                 shippingAddress,
                 shippingAddress, // billing same as shipping
                 orderNotes || undefined, // notes from customer input
-                orderGuestToken || undefined
+                orderGuestToken || undefined,
+                pointsToRedeem
             );
 
             const orderId = order.id;
@@ -485,5 +487,7 @@ export function useCheckoutLogic() {
         appliedCoupon,
         orderNotes,
         setOrderNotes,
+        pointsToRedeem,
+        setPointsToRedeem,
     };
 }

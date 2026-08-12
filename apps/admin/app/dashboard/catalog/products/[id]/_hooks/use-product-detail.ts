@@ -135,7 +135,7 @@ export function useProductMutations(id: string) {
   });
 
   const reject = useMutation({
-    mutationFn: ({ id, reason }: { id: string; reason: string }) => 
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       catalogService.rejectProduct(id, reason),
     onSuccess: () => {
       invalidateProduct();
@@ -144,7 +144,16 @@ export function useProductMutations(id: string) {
     onError: (err: any) => toast.error(err.message || "Failed to reject product"),
   });
 
-  return { update, verify, publish, archive, delete: deleteProduct, reject };
+  const changeStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      catalogService.changeStatus(id, status as any),
+    onSuccess: () => {
+      invalidateProduct();
+    },
+    onError: (err: any) => toast.error(err.message || "Failed to change status"),
+  });
+
+  return { update, verify, publish, archive, delete: deleteProduct, reject, changeStatus };
 }
 
 export function useImageMutations(productId: string) {

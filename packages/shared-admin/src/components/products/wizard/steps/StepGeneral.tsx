@@ -329,43 +329,6 @@ export function StepGeneral({
             </div>
           </div>
 
-          <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-
-          <div className="space-y-1.5">
-            <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">
-              Product Type Classification
-            </Label>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              {[
-                { value: "equipment", label: "Equipment", icon: Package },
-                { value: "consumables", label: "Consumables", icon: Trash2 },
-                { value: "topicals", label: "Topicals & Creams", icon: Droplet },
-                { value: "implants", label: "Implants", icon: Shield },
-                { value: "accessories", label: "Accessories", icon: Layers },
-              ].map((type) => {
-                const Icon = type.icon;
-                const isSelected = productTypeVal === type.value;
-                return (
-                  <button
-                    key={type.value}
-                    type="button"
-                    onClick={() => setValue("product_type", type.value, { shouldValidate: true })}
-                    className={`flex flex-col items-center gap-1.5 p-3 border rounded-lg transition-all text-center ${
-                      isSelected
-                        ? "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/30"
-                        : "bg-white border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
-                    }`}
-                  >
-                    <Icon className={`h-4 w-4 ${isSelected ? "text-emerald-600" : "text-zinc-400"}`} />
-                    <span className={`text-[10px] font-semibold ${isSelected ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-500"}`}>
-                      {type.label}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <Label htmlFor="model_number" className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">

@@ -56,8 +56,9 @@ export default function HybridCheckout() {
     appliedCoupon,
     orderNotes,
     setOrderNotes,
+    pointsToRedeem,
+    setPointsToRedeem,
   } = useCheckoutLogic();
-
 
   const total = subtotal + shipping + PACKAGING_FEE + SERVICES_FEE;
 
@@ -320,6 +321,9 @@ export default function HybridCheckout() {
             handleRemoveCoupon={handleRemoveCoupon}
             isApplyingCoupon={isApplyingCoupon}
             appliedCoupon={appliedCoupon}
+            pointsToRedeem={pointsToRedeem}
+            setPointsToRedeem={setPointsToRedeem}
+            isAuthenticated={isAuthenticated}
           />
         </div>
       </div>
@@ -377,6 +381,9 @@ export default function HybridCheckout() {
               handleRemoveCoupon={handleRemoveCoupon}
               isApplyingCoupon={isApplyingCoupon}
               appliedCoupon={appliedCoupon}
+              pointsToRedeem={pointsToRedeem}
+              setPointsToRedeem={setPointsToRedeem}
+              isAuthenticated={isAuthenticated}
             />
           </SheetContent>
         </Sheet>

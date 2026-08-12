@@ -1,221 +1,229 @@
 'use client';
 
-import { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
+import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { Gift, Star, TrendingUp, Award, Loader2, Gem, Medal, Shield } from 'lucide-react';
-import { toast } from 'sonner';
 import { customerLoyaltyApi } from '@/lib/api/endpoints/loyalty';
+import { 
+  Gift, 
+  ShoppingBag, 
+  History, 
+  TrendingUp, 
+  TrendingDown, 
+  Crown,
+  Shield,
+  Award,
+  Gem,
+  Info,
+  HelpCircle,
+  Sparkles,
+  CheckCircle2
+} from 'lucide-react';
+import { cn } from '@/lib/utils';
 
-const tierIcons: Record<string, React.ReactNode> = {
-  bronze: <Medal className="h-5 w-5 text-amber-600" />,
-  silver: <Shield className="h-5 w-5 text-slate-400" />,
-  gold: <Star className="h-5 w-5 text-yellow-500" />,
-  platinum: <Gem className="h-5 w-5 text-blue-400" />,
+const tierIcons: Record<string, React.ComponentType<{ className?: string }>> = {
+  bronze: Shield,
+  silver: Award,
+  gold: Crown,
+  platinum: Gem,
 };
 
 export default function LoyaltyPage() {
-  const [redeemPoints, setRedeemPoints] = useState('');
-
-  const { data: summary, isLoading } = useQuery({
+  // Fetch summary
+  const { data: summary, isLoading: summaryLoading } = useQuery({
     queryKey: ['loyalty-summary'],
     queryFn: () => customerLoyaltyApi.getSummary(),
   });
 
+  // Fetch ledger
   const { data: ledger, isLoading: ledgerLoading } = useQuery({
     queryKey: ['loyalty-ledger'],
-    queryFn: () => customerLoyaltyApi.getLedger({ limit: 20 }),
+    queryFn: () => customerLoyaltyApi.getLedger({ limit: 10 }),
   });
 
-  const redeemMutation = useMutation({
-    mutationFn: (points: number) =>
-      customerLoyaltyApi.redeem(points, 'Points redeemed'),
-    onSuccess: () => {
-      toast.success('Points redeemed successfully!');
-      setRedeemPoints('');
-    },
-    onError: (err: Error) => toast.error(err.message),
-  });
-
-  const handleRedeem = () => {
-    const points = parseInt(redeemPoints);
-    if (!points || points <= 0) {
-      toast.error('Enter a valid number of points');
-      return;
-    }
-    if (summary && points > summary.total_points) {
-      toast.error('Not enough points');
-      return;
-    }
-    redeemMutation.mutate(points);
-  };
-
-  if (isLoading) {
+  if (summaryLoading || !summary) {
     return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
-        </div>
+      <div className="space-y-4 max-w-4xl mx-auto p-4">
+        <Skeleton className="h-8 w-48 mb-2" />
+        <Skeleton className="h-32 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
       </div>
     );
   }
 
+  const currentTierName = summary.current_tier?.name || 'Bronze';
+  const tierKey = currentTierName.toLowerCase();
+  const TierIcon = tierIcons[tierKey] || Shield;
+  
+  // Calculate discount value: 2 points = KES 1
+  const kesValue = Math.floor(summary.total_points / 2);
+
+  // Progress to next tier
+  const pointsToNext = summary.points_to_next_tier || 0;
+  const nextTierName = summary.next_tier?.name;
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* 1. Header */}
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Gift className="h-6 w-6 text-primary" />
-          Loyalty Program
-        </h1>
-        <p className="text-muted-foreground mt-1">Earn points with every purchase and enjoy exclusive benefits</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Loyalty Rewards</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Earn points automatically and redeem them as cash discounts at checkout.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-          <CardContent className="p-6 text-center">
-            <Award className="h-8 w-8 mx-auto mb-2 text-primary" />
-            <p className="text-3xl font-bold text-primary">{summary?.total_points ?? 0}</p>
-            <p className="text-sm text-muted-foreground mt-1">Total Points</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6 text-center">
-            <Star className="h-8 w-8 mx-auto mb-2 text-yellow-500" />
-            <p className="text-xl font-semibold capitalize">{summary?.current_tier?.name || 'Bronze'}</p>
-            <p className="text-sm text-muted-foreground mt-1">Current Tier</p>
-            {summary?.current_tier?.multiplier && summary.current_tier.multiplier > 1 && (
-              <Badge variant="secondary" className="mt-2">{summary.current_tier.multiplier}x Points</Badge>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6 text-center">
-            <TrendingUp className="h-8 w-8 mx-auto mb-2 text-blue-500" />
-            {summary?.next_tier ? (
-              <>
-                <p className="text-lg font-semibold">{summary.next_tier.name}</p>
-                <p className="text-xs text-muted-foreground mt-1">{summary.next_tier.points_needed} points to next tier</p>
-              </>
-            ) : (
-              <p className="text-lg font-semibold">Highest Tier</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {summary && summary.next_tier && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Tier Progress</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium capitalize">{summary.current_tier.name}</span>
-              <span className="text-sm font-medium">{summary.next_tier.name}</span>
+      {/* 2. Primary Hero Stat Card */}
+      <Card className="border border-border bg-card shadow-sm overflow-hidden">
+        <CardContent className="p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
+                <Gift className="h-4 w-4 text-emerald-500" />
+                <span>Your Available Points</span>
+              </div>
+              <div className="flex items-baseline gap-2">
+                <span className="text-4xl font-bold text-foreground tracking-tight">
+                  {summary.total_points.toLocaleString()}
+                </span>
+                <span className="text-sm text-muted-foreground font-medium">pts</span>
+                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 ml-2">
+                  = KES {kesValue.toLocaleString()} Checkout Discount
+                </span>
+              </div>
             </div>
-            <Progress value={summary.tier_progress} className="h-3" />
-            <p className="text-xs text-muted-foreground mt-2 text-center">
-              {summary.points_to_next_tier} points needed to reach {summary.next_tier.name}
-            </p>
-          </CardContent>
-        </Card>
-      )}
 
-      {summary?.current_tier?.benefits && summary.current_tier.benefits.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Your Benefits</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-2">
-              {summary.current_tier.benefits.map((benefit, i) => (
-                <li key={i} className="flex items-center gap-2 text-sm">
-                  <Star className="h-4 w-4 text-yellow-500 shrink-0" />
-                  {benefit}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Redeem Points</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <Label htmlFor="redeem-points">Points to Redeem</Label>
-              <Input
-                id="redeem-points"
-                type="number"
-                min={1}
-                max={summary?.total_points || 0}
-                placeholder="Enter points"
-                value={redeemPoints}
-                onChange={(e) => setRedeemPoints(e.target.value)}
-              />
-            </div>
-            <div className="flex items-end">
-              <Button
-                onClick={handleRedeem}
-                disabled={redeemMutation.isPending || !redeemPoints}
-                className="gap-2"
-              >
-                {redeemMutation.isPending ? (
-                  <><Loader2 className="h-4 w-4 animate-spin" /> Redeeming...</>
-                ) : (
-                  <><Gift className="h-4 w-4" /> Redeem</>
-                )}
-              </Button>
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-muted/40 border border-border shrink-0 self-start sm:self-auto">
+              <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                <TierIcon className="h-5 w-5" />
+              </div>
+              <div>
+                <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Tier Level</span>
+                <span className="text-sm font-bold capitalize text-foreground">{currentTierName}</span>
+              </div>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">
-            You have {summary?.total_points ?? 0} points available
-          </p>
+
+          {/* Tier Progress */}
+          {nextTierName && pointsToNext > 0 && (
+            <div className="mt-6 pt-4 border-t border-border/60 space-y-1.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Progress to <strong className="text-foreground">{nextTierName}</strong></span>
+                <span className="font-medium text-foreground">{pointsToNext.toLocaleString()} pts remaining</span>
+              </div>
+              <Progress value={Math.max(5, 100 - (pointsToNext / 1000) * 100)} className="h-1.5" />
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Points History</CardTitle>
+      {/* 3. Program Rules & How to Earn */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* How to Earn */}
+        <Card className="border border-border bg-card shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <ShoppingBag className="h-4 w-4 text-primary" />
+              How You Earn Points
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs text-muted-foreground">
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/40">
+              <span className="font-medium text-foreground">Complete an Order</span>
+              <span className="font-bold text-primary">1 pt / KES 100</span>
+            </div>
+
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/40">
+              <span className="font-medium text-foreground">Write a Verified Review</span>
+              <span className="font-bold text-primary">+25 pts</span>
+            </div>
+
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/40">
+              <span className="font-medium text-foreground">Redemption Rate</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">2 pts = KES 1</span>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tips & Program Guidelines */}
+        <Card className="border border-border bg-card shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-sm font-semibold flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-amber-500" />
+              Tips & Guidelines
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2.5 text-xs text-muted-foreground">
+            <div className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20">
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-foreground block font-medium">Automatic Checkout Discounts</strong>
+                No coupon codes needed! Simply toggle "Apply Loyalty Points" on the payment summary step at checkout.
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20">
+              <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-foreground block font-medium">Tier Multipliers</strong>
+                Higher tiers earn faster points! Silver earns 1.25×, Gold earns 1.5×, and Platinum earns 2× points on every purchase.
+              </div>
+            </div>
+
+            <div className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20">
+              <HelpCircle className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
+              <div>
+                <strong className="text-foreground block font-medium">Points Validity</strong>
+                Points earned remain active on your account with any purchase activity within 12 months.
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 4. Recent Activity */}
+      <Card className="border border-border bg-card shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <History className="h-4 w-4 text-primary" />
+              Points History & Activity Log
+            </span>
+            <span className="text-[11px] font-normal text-muted-foreground">Last transactions</span>
+          </CardTitle>
         </CardHeader>
         <CardContent>
           {ledgerLoading ? (
-            <Skeleton className="h-32 w-full" />
-          ) : !ledger?.items?.length ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <Gift className="h-8 w-8 mx-auto mb-2 opacity-50" />
-              <p>No points history yet</p>
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-full" />
+              <Skeleton className="h-8 w-full" />
             </div>
+          ) : !ledger?.items || ledger.items.length === 0 ? (
+            <p className="text-xs text-muted-foreground py-4 text-center">
+              No activity recorded yet. Earn points on your next purchase!
+            </p>
           ) : (
-            <div className="space-y-1">
-              {ledger.items.map((entry) => (
-                <div key={entry.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                  <div className="flex items-center gap-2">
-                    <Badge variant={entry.transaction_type === 'earn' ? 'default' : 'secondary'} className="capitalize">
-                      {entry.transaction_type}
-                    </Badge>
-                    <span className="text-sm">{entry.description}</span>
+            <div className="divide-y divide-border/60">
+              {ledger.items.slice(0, 5).map((entry: any) => {
+                const isEarn = entry.points > 0;
+                return (
+                  <div key={entry.id} className="py-2.5 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2.5 truncate pr-2">
+                      {isEarn ? (
+                        <TrendingUp className="h-4 w-4 text-emerald-500 shrink-0" />
+                      ) : (
+                        <TrendingDown className="h-4 w-4 text-rose-500 shrink-0" />
+                      )}
+                      <span className="truncate text-foreground font-medium">
+                        {entry.description || (isEarn ? 'Points Earned' : 'Points Redeemed')}
+                      </span>
+                    </div>
+                    <span className={cn("font-semibold shrink-0", isEarn ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+                      {isEarn ? `+${entry.points}` : entry.points} pts
+                    </span>
                   </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-medium ${entry.points > 0 ? 'text-green-600' : 'text-red-500'}`}>
-                      {entry.points > 0 ? '+' : ''}{entry.points}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(entry.created_at).toLocaleDateString()}
-                    </p>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>

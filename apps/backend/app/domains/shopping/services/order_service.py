@@ -1,5 +1,7 @@
 import uuid
 from typing import Optional, List, Tuple, Any
+from decimal import Decimal
+from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, func, case
 from sqlalchemy.orm import selectinload
@@ -28,7 +30,8 @@ class CheckoutService:
         shipping_address: dict = None,
         notes: Optional[str] = None,
         idempotency_key: Optional[str] = None,
-        guest_token: Optional[str] = None
+        guest_token: Optional[str] = None,
+        points_to_redeem: Optional[int] = 0
     ) -> Order:
         """Atomic conversion of a cart to an order with idempotency support."""
         # Check for existing order with the same idempotency key (prevent duplicate orders)
@@ -82,6 +85,27 @@ class CheckoutService:
             max_order_num = max_order_num_result.scalar() or 100000
             next_order_num = max_order_num + 1
 
+            # Handle loyalty points redemption
+            loyalty_discount = Decimal(0)
+            loyalty_points_used = 0
+            if points_to_redeem and points_to_redeem > 0 and user_id:
+                from app.domains.customers.services.loyalty_service import LoyaltyService
+                loyalty = LoyaltyService(self.db)
+                profile = await loyalty._get_or_create_profile(user_id)
+                if profile.loyalty_points < points_to_redeem:
+                    raise HTTPException(status_code=400, detail="Insufficient loyalty points")
+                # Conversion: 2 points = 1 KES
+                loyalty_discount = min(
+                    Decimal(points_to_redeem) / 2,
+                    Decimal(totals.get("subtotal", 0.0))  # Never exceed order subtotal
+                )
+                loyalty_points_used = points_to_redeem
+                await loyalty.redeem_points(
+                    customer_id=user_id,
+                    points=points_to_redeem,
+                    description=f"Applied to Order #{next_order_num}",
+                )
+
             # Auto-assign nearest active driver if company rider delivery
             assigned_driver_id = None
             if totals.get("logistics_type") == "company_rider":
@@ -114,6 +138,10 @@ class CheckoutService:
 
             # 3. Create Order record (Fix 3.2: Precision handling for total amount)
             total_amt = round(float(totals["total"]), 2)
+            total_amt = round(total_amt - float(loyalty_discount), 2)
+            if total_amt < 0:
+                total_amt = 0.0
+                
             order = Order(
                 id=uuid.uuid4(),
                 order_number=next_order_num,
@@ -121,6 +149,8 @@ class CheckoutService:
                 guest_token=guest_token,
                 status=OrderStatus.PENDING,
                 total_amount=total_amt,
+                loyalty_discount=loyalty_discount,
+                loyalty_points_redeemed=loyalty_points_used,
                 currency="KES",
                 shipping_address=updated_shipping_address,
                 notes=notes,
@@ -393,6 +423,31 @@ class OrderService:
                 message=f"Order status updated to {new_status}"
             )
             self.db.add(timeline_event)
+
+        # Award loyalty points on payment
+        if new_status == "paid" and order.user_id:
+            try:
+                from app.domains.customers.services.loyalty_service import LoyaltyService
+                loyalty = LoyaltyService(self.db)
+                # 1 point per KES 100 spent
+                base_points = int(order.total_amount / 100)
+                if base_points > 0:
+                    # Apply tier multiplier
+                    profile = await loyalty._get_or_create_profile(order.user_id)
+                    tier_config = loyalty.TIERS.get(profile.loyalty_tier, {})
+                    multiplier = tier_config.get("multiplier", 1.0)
+                    final_points = max(1, int(base_points * multiplier))
+                    await loyalty.earn_points(
+                        customer_id=order.user_id,
+                        points=final_points,
+                        description=f"Earned from Order #{order.order_number}",
+                        reference_type="order",
+                        reference_id=order.id,
+                    )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to award loyalty points for order {order.id}: {e}")
 
         await self.db.commit()
         return await self.get_order(order_id)

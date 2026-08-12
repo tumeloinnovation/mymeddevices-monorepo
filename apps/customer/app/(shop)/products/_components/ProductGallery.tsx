@@ -13,7 +13,7 @@ export default function ProductGallery({ images, selected = 0, onSelect }: Props
   if (images.length === 0) {
     return (
       <div className="bg-white dark:bg-card rounded-lg p-4 shadow-sm border border-gray-200 dark:border-border">
-        <div className="aspect-square flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-md">
+        <div className="aspect-[4/3] flex items-center justify-center bg-gray-100 dark:bg-gray-800 rounded-md">
           <Image src="/logos/logo-portrait.png" alt="No image" width={200} height={200} className="opacity-50" />
         </div>
       </div>
@@ -21,22 +21,10 @@ export default function ProductGallery({ images, selected = 0, onSelect }: Props
   }
 
   return (
-    <div className="bg-white dark:bg-card rounded-lg overflow-hidden shadow-sm border border-gray-200 dark:border-border">
-      {/* Main Image */}
-      <div className="aspect-square flex items-center justify-center bg-gray-50 dark:bg-gray-900/20 p-8">
-        <Image
-          src={images[clampedSelected] || '/logos/logo-portrait.png'}
-          alt={`Product image ${clampedSelected + 1}`}
-          width={800}
-          height={800}
-          className="max-h-full max-w-full object-contain"
-          priority
-        />
-      </div>
-
-      {/* Thumbnails */}
+    <div className="flex gap-3">
+      {/* Thumbnails - Left Side */}
       {images.length > 1 && (
-        <div className="flex gap-2 p-4 overflow-x-auto">
+        <div className="flex flex-col gap-2 flex-shrink-0">
           {images.map((src, i) => (
             <button
               key={i}
@@ -58,6 +46,20 @@ export default function ProductGallery({ images, selected = 0, onSelect }: Props
           ))}
         </div>
       )}
+
+      {/* Main Image */}
+      <div className="flex-1 bg-white dark:bg-card rounded-lg overflow-hidden shadow-sm border border-gray-200 dark:border-border">
+        <div className="aspect-[4/3] flex items-center justify-center bg-gray-50 dark:bg-gray-900/20 p-6">
+          <Image
+            src={images[clampedSelected] || '/logos/logo-portrait.png'}
+            alt={`Product image ${clampedSelected + 1}`}
+            width={800}
+            height={600}
+            className="max-h-full max-w-full object-contain"
+            priority
+          />
+        </div>
+      </div>
     </div>
   )
 }

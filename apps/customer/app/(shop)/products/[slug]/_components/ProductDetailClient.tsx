@@ -10,9 +10,9 @@ import ProductSection from '@/components/common/ProductSection'
 import ProductInfo from '@/app/(shop)/products/_components/ProductInfo'
 import ReviewsTab from '@/app/(shop)/products/[slug]/_components/ReviewsTab'
 import SpecsTab from '@/app/(shop)/products/_components/SpecsTab'
-import AccessoriesTab from '@/app/(shop)/products/[slug]/_components/AccessoriesTab'
+import BundleConfigurator from '@/app/(shop)/products/[slug]/_components/BundleConfigurator'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { FileText, MessageSquare, Sliders, Tag, Package } from 'lucide-react'
+import { FileText, MessageSquare, Sliders, Package } from 'lucide-react'
 import ProductNotFound from '../../_components/ProductNotFound'
 import { ProductJsonLd, BreadcrumbJsonLd } from '@/components/seo'
 
@@ -63,8 +63,13 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
       <div className="container mx-auto px-4 py-6">
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
-          <div className="sticky top-8">
-            <ProductGallery images={images} selected={selectedImage} onSelect={setSelectedImage} />
+          <div className="space-y-6">
+            <div className="sticky top-8">
+              <ProductGallery images={images} selected={selectedImage} onSelect={setSelectedImage} />
+            </div>
+
+            {/* Bundle & Accessories Section */}
+            <BundleConfigurator product={product} relatedProducts={relatedProducts} />
           </div>
 
           <div>
@@ -86,9 +91,6 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
                 <TabsTrigger value="reviews" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
                   <MessageSquare className="h-4 w-4" /> Reviews
                 </TabsTrigger>
-                <TabsTrigger value="accessories" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-                  <Tag className="h-4 w-4" /> Accessories
-                </TabsTrigger>
               </TabsList>
 
               <div className="p-4">
@@ -109,9 +111,6 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
                 </TabsContent>
                 <TabsContent value="reviews">
                   <ReviewsTab productId={String(product.id)} productSlug={product.slug} productName={product.name} />
-                </TabsContent>
-                <TabsContent value="accessories">
-                  <AccessoriesTab product={product} relatedProducts={relatedProducts} />
                 </TabsContent>
               </div>
             </Tabs>

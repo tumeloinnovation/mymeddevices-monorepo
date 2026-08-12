@@ -1,50 +1,36 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { CreditCard, Lock } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { CreditCard, Plus, ShieldCheck } from 'lucide-react';
 
 interface PaymentMethodsEmptyStateProps {
   onAdd: () => void;
 }
 
-/**
- * Empty state for payment methods page
- * Shows when user has no payment methods saved
- */
 export function PaymentMethodsEmptyState({ onAdd }: PaymentMethodsEmptyStateProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="flex flex-col items-center justify-center py-16 px-4"
-    >
-      <Card className="w-full max-w-md p-8 text-center">
-        {/* Illustration */}
-        <div className="flex items-center justify-center w-24 h-24 mx-auto mb-6 rounded-full bg-primary/5">
-          <CreditCard className="h-12 w-12 text-muted-foreground" />
+    <Card className="border border-border/80 bg-card shadow-sm">
+      <CardContent className="flex flex-col items-center justify-center p-8 sm:p-12 text-center max-w-md mx-auto">
+        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary mb-4 border border-primary/20 shadow-xs">
+          <CreditCard className="h-7 w-7" />
         </div>
 
-        {/* Message */}
-        <h3 className="text-xl font-semibold mb-2">No payment methods yet</h3>
-        <p className="text-muted-foreground mb-6">
-          Add a payment method for faster checkout. We support M-Pesa, cards, and bank transfers.
+        <h3 className="text-base font-bold tracking-tight text-foreground">No payment methods saved</h3>
+        <p className="text-xs text-muted-foreground mt-1.5 mb-6 max-w-xs leading-relaxed">
+          Save your M-Pesa phone number, debit/credit cards, or bank accounts for express checkout.
         </p>
 
-        {/* CTA */}
-        <Button onClick={onAdd} className="gap-2">
-          <CreditCard className="h-4 w-4" />
+        <Button onClick={onAdd} size="sm" className="gap-2 text-xs font-medium h-9 px-4">
+          <Plus className="h-4 w-4" />
           Add Payment Method
         </Button>
 
-        {/* Security notice */}
-        <div className="flex items-center justify-center gap-2 mt-6 text-xs text-muted-foreground">
-          <Lock className="h-3 w-3" />
-          <span>Your payment information is encrypted and secure</span>
+        <div className="flex items-center justify-center gap-1.5 mt-6 text-[11px] text-muted-foreground/80 pt-4 border-t border-border/50 w-full">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+          <span>PCI-DSS 256-bit encrypted checkout guarantee</span>
         </div>
-      </Card>
-    </motion.div>
+      </CardContent>
+    </Card>
   );
 }

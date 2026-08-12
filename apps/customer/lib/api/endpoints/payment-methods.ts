@@ -12,6 +12,7 @@ export interface PaymentMethod {
   is_default: boolean;
   is_active: boolean;
   display_name?: string;
+  usage_count?: number;
 
   // M-Pesa fields
   phone_number?: string;

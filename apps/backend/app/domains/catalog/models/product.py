@@ -57,14 +57,18 @@ class Product(Base, IDMixin, AuditMixin, SoftDeleteMixin):
     sku: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
 
     # ===============================
-    # PRICING
+    # PRICING & TAX
     # ===============================
-    base_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    base_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)  # Vendor payout
     markup_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
     commission_fee: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
-    price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
-    cost_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)  # Final customer retail price
+    cost_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)  # Internal vendor cost
+    wholesale_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)  # B2B bulk price
+    compare_at_price: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)  # Slash-through price
     currency: Mapped[str] = mapped_column(String(3), default="KES")
+    has_vat: Mapped[bool] = mapped_column(Boolean, default=True)
+    vat_rate: Mapped[float] = mapped_column(Numeric(5, 2), default=16.0)
 
     # ===============================
     # INVENTORY

@@ -29,4 +29,4 @@ class BundleItem(Base, IDMixin, AuditMixin):
 
     # Relationships
     bundle_product: Mapped["Product"] = relationship("Product", foreign_keys=[bundle_product_id], back_populates="bundle_items")
-    component_product: Mapped["Product"] = relationship("Product", foreign_keys=[component_product_id])
+    component_product: Mapped["Product"] = relationship("Product", foreign_keys=[component_product_id], lazy="selectin")

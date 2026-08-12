@@ -80,7 +80,7 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
     return { min, max };
   }, [variants, product.price]);
 
-  const requiresVariantSelection = (product as any).product_type === 'variable' && variants.length > 0 && !selectedVariant;
+  const requiresVariantSelection = product.product_type === 'variable' && variants.length > 0 && !selectedVariant;
 
   const handleWishlistToggle = () => {
     if (isInWishlist(product.id)) {
@@ -179,12 +179,22 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
     },
   ]
 
+  if (!product) return null
+
   return (
     <div className="space-y-5">
       {/* Product Title */}
-      <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
-        {product.name}
-      </h1>
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
+          {product.name}
+        </h1>
+        {/* Brand */}
+        {product.brands && product.brands.length > 0 && (
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            by <span className="font-medium text-gray-900 dark:text-gray-100">{product.brands[0].name}</span>
+          </p>
+        )}
+      </div>
 
       {/* Stock Status, Rating & Reviews - Combined Row */}
       <div className="flex items-center flex-wrap gap-3">
@@ -226,13 +236,6 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
           </span>
         </div>
       </div>
-
-      {/* Brand */}
-      {product.brands && product.brands.length > 0 && (
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          by <span className="font-medium text-gray-900 dark:text-gray-100">{product.brands[0].name}</span>
-        </p>
-      )}
 
       {/* Price Section */}
       <div className="space-y-1">

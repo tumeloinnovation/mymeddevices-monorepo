@@ -117,6 +117,7 @@ class OrderCreate(BaseModel):
     notes: Optional[str] = None
     idempotency_key: Optional[str] = None
     guest_token: Optional[str] = None
+    points_to_redeem: Optional[int] = 0
 
 class OrderStatusUpdate(BaseModel):
     status: str

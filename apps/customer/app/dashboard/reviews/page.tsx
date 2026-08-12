@@ -91,89 +91,34 @@ export default function CustomerReviewsPage() {
     : reviews.filter(r => r.moderation_status === filter)
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 max-w-4xl mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold">My Product Reviews</h1>
-          <p className="text-muted-foreground">Manage reviews you've written for products</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">My Product Reviews</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Manage and track reviews you've submitted for purchased items.</p>
         </div>
-        <Button onClick={fetchReviews} variant="outline">
+        <Button onClick={fetchReviews} variant="outline" size="sm" className="text-xs h-9 gap-1.5 shrink-0 self-start sm:self-auto">
           Refresh
         </Button>
       </div>
 
-      {/* Summary Cards */}
-      {summary && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Total Reviews</CardDescription>
-              <CardTitle className="text-2xl">{summary.total_reviews}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                {summary.average_rating} avg rating
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Verified Purchases</CardDescription>
-              <CardTitle className="text-2xl text-green-600">{summary.verified_purchases}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm text-muted-foreground">Confirmed buyers</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Visible Reviews</CardDescription>
-              <CardTitle className="text-2xl text-emerald-600">
-                {reviews.filter(r => r.moderation_status === 'visible').length}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm text-muted-foreground">Publicly visible</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardDescription>Hidden/Removed</CardDescription>
-              <CardTitle className="text-2xl text-orange-600">
-                {reviews.filter(r => r.moderation_status !== 'visible').length}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-sm text-muted-foreground">Not publicly visible</div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
-
       {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
-            <span className="text-sm font-medium">Status:</span>
-            <div className="flex gap-1">
-              {(['all', 'visible', 'hidden'] as const).map((f) => (
-                <Button
-                  key={f}
-                  variant={filter === f ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setFilter(f)}
-                >
-                  {f === 'all' ? 'All Reviews' : f.charAt(0).toUpperCase() + f.slice(1)}
-                </Button>
-              ))}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center gap-3">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Status:</span>
+        <div className="flex gap-1.5">
+          {(['all', 'visible', 'hidden'] as const).map((f) => (
+            <Button
+              key={f}
+              variant={filter === f ? 'default' : 'outline'}
+              size="sm"
+              className="text-xs h-8 px-3"
+              onClick={() => setFilter(f)}
+            >
+              {f === 'all' ? 'All Reviews' : f.charAt(0).toUpperCase() + f.slice(1)}
+            </Button>
+          ))}
+        </div>
+      </div>
 
       {/* Reviews List */}
       <div className="space-y-4">

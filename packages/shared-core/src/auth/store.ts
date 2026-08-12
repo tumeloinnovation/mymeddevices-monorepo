@@ -124,6 +124,12 @@ export interface AuthState {
 function normalizeUser(user: Record<string, any> | null | undefined): AuthUser | null {
   if (!user || typeof user !== 'object') return null;
   const normalized = { ...user } as Record<string, any>;
+
+  // Convert roles array to role string (proxy.ts converts role to roles array)
+  if ('roles' in normalized && Array.isArray(normalized.roles) && !('role' in normalized)) {
+    normalized.role = normalized.roles[0];
+  }
+
   if ('is_vendor_verified' in normalized && !('isVendorVerified' in normalized)) {
     normalized.isVendorVerified = normalized.is_vendor_verified;
   }
@@ -189,7 +195,7 @@ export const useAuthStore = create<AuthState>()(
 
       setHydrated: () => set({ hydrated: true }),
 
-      setUser: (user) => set({ user, isAuthenticated: true }),
+      setUser: (user) => set({ user: normalizeUser(user), isAuthenticated: true }),
 
       updateUser: (updates) =>
         set((state) => ({
@@ -743,19 +749,22 @@ export const useAuthStore = create<AuthState>()(
 
       setOTPVerified: (user) => {
         if (user) {
+          const normalizedUser = normalizeUser(user);
           const displayName =
-            user.displayName ||
-            `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
-            user.email?.split('@')[0] ||
+            normalizedUser?.displayName ||
+            `${normalizedUser?.firstName || ''} ${normalizedUser?.lastName || ''}`.trim() ||
+            normalizedUser?.email?.split('@')[0] ||
             'Guest User';
 
-          set({
-            user: { ...user, displayName },
-            checkoutStep: 'complete',
-            isAuthenticated: true,
-            isDemo: true,
-            error: null,
-          });
+          if (normalizedUser) {
+            set({
+              user: { ...normalizedUser, displayName } as any,
+              checkoutStep: 'complete',
+              isAuthenticated: true,
+              isDemo: true,
+              error: null,
+            });
+          }
         } else {
           set({ checkoutStep: 'profile', error: null });
         }
@@ -882,6 +891,19 @@ export const useAuthStore = create<AuthState>()(
           userEmail: state?.user?.email,
           isDemo: state?.isDemo,
         });
+
+        // Normalize rehydrated user data to ensure field names are correct
+        if (state?.user) {
+          const normalized = normalizeUser(state.user);
+          if (normalized) {
+            state.user = normalized;
+            logger.log('🔧 [AuthStore] Normalized rehydrated user data:', {
+              email: normalized.email,
+              role: normalized.role,
+              hasRole: 'role' in normalized,
+            });
+          }
+        }
 
         // CRITICAL FIX: Check if refresh token exists before considering user authenticated
         // If isAuthenticated is true but no refresh token exists, clear auth to prevent redirect loops

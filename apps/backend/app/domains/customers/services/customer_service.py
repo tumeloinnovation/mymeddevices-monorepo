@@ -293,6 +293,24 @@ class CustomerService:
             **data.model_dump()
         )
         created = await self.review_repo.create(review)
+
+        # Award 25 loyalty points for non-profane, visible reviews
+        if created.moderation_status == "visible" and not created.contains_profanity:
+            try:
+                from app.domains.customers.services.loyalty_service import LoyaltyService
+                loyalty = LoyaltyService(self.db)
+                await loyalty.earn_points(
+                    customer_id=user_id,
+                    points=25,
+                    description="Bonus for product review",
+                    reference_type="review",
+                    reference_id=created.id,
+                )
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Failed to award review loyalty points: {e}")
+
         return await self.review_repo.get_with_details(created.id)
 
     async def update_review(self, user_id: uuid.UUID, review_id: uuid.UUID, data: ReviewUpdate) -> Review:

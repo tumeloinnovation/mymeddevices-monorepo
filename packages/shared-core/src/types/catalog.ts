@@ -139,14 +139,16 @@ export interface Product {
   description?: string;
   short_description?: string;
   sku?: string;
-  price?: number;
-  regular_price?: number;
-  sale_price?: number;
-  wholesale_price?: number;
-  vendor_payout?: number;
+  base_price?: number;
   markup_price?: number;
   commission_fee?: number;
+  price?: number;
+  cost_price?: number;
+  wholesale_price?: number;
+  compare_at_price?: number;
   currency: string;
+  has_vat?: boolean;
+  vat_rate?: number;
   stock_quantity: number;
   stock_status?: StockStatus;
   low_stock_threshold: number;
@@ -188,9 +190,11 @@ export interface LegacyCSVRow {
   id: string;
   name: string;
   sku?: string;
+  base_price?: string;
   price?: string;
   regular_price?: string;
   sale_price?: string;
+  compare_at_price?: string;
   on_sale?: string;
   in_stock?: string;
   categories?: string;
@@ -226,7 +230,9 @@ export interface ProductCreate {
   tags?: string[];
 }
 
-export interface ProductUpdate extends Partial<ProductCreate> {}
+export interface ProductUpdate extends Partial<ProductCreate> {
+  status?: ProductStatus;
+}
 
 export interface ProductListResponse {
   products: Product[];

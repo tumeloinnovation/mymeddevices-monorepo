@@ -96,7 +96,7 @@ const productSchema = z.object({
 });
 
 function calculatePlatformMarkup(basePrice: number) {
-  if (!basePrice || basePrice <= 0) return { markup: 0, percent: 5, total: 0 };
+  if (!basePrice || basePrice <= 0) return { markup: 0, percent: 5, commission: 0, commissionPercent: 2, total: 0 };
   let percent = 2.0;
   if (basePrice <= 10000) {
     percent = 5.0;
@@ -104,10 +104,13 @@ function calculatePlatformMarkup(basePrice: number) {
     percent = 3.0;
   }
   const markup = basePrice * (percent / 100);
-  const total = basePrice + markup;
+  const commission = basePrice * 0.02;
+  const total = basePrice + markup + commission;
   return {
     markup: Math.round(markup * 100) / 100,
     percent,
+    commission: Math.round(commission * 100) / 100,
+    commissionPercent: 2,
     total: Math.round(total * 100) / 100
   };
 }
@@ -360,7 +363,7 @@ export function ProductWizard({ productId }: { productId?: string }) {
       const draftData = methods.getValues();
       const productData = {
         ...draftData,
-        status: "draft"
+        status: "draft" as const
       };
 
       let product;
@@ -417,7 +420,7 @@ export function ProductWizard({ productId }: { productId?: string }) {
 
       const productData = {
         ...draftData,
-        status: "draft"
+        status: "draft" as const
       };
 
       let product;
@@ -935,7 +938,26 @@ function StepPricing() {
             </div>
           </div>
 
-
+          {watchedBasePrice > 0 && (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground font-medium">Your Base Payout (Net):</span>
+                <span className="font-semibold text-foreground">KES {Number(watchedBasePrice).toLocaleString("en-KE")}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Platform Tier Markup ({pricingBreakdown.percent}%):</span>
+                <span>+ KES {pricingBreakdown.markup.toLocaleString("en-KE")}</span>
+              </div>
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>Platform Commission Fee (2%):</span>
+                <span>+ KES {pricingBreakdown.commission.toLocaleString("en-KE")}</span>
+              </div>
+              <div className="border-t border-primary/20 pt-2 flex items-center justify-between text-base font-bold text-primary">
+                <span>Customer Retail List Price:</span>
+                <span>KES {pricingBreakdown.total.toLocaleString("en-KE")}</span>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

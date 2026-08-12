@@ -55,6 +55,7 @@ export interface CheckoutRequest {
   notes?: string;
   idempotency_key?: string;
   guest_token?: string;
+  points_to_redeem?: number;
 }
 
 export interface PaymentRequest {
@@ -227,7 +228,8 @@ export const orderService = {
     shippingAddress: Address | Record<string, any>,
     billingAddress?: Address | Record<string, any>,
     notes?: string,
-    guestToken?: string
+    guestToken?: string,
+    pointsToRedeem?: number
   ): Promise<Order> {
     try {
       if (!cart || !cart.items || cart.items.length === 0) {
@@ -243,6 +245,7 @@ export const orderService = {
         notes,
         idempotency_key: idempotencyKey,
         guest_token: guestToken,
+        points_to_redeem: pointsToRedeem,
       });
     } catch (error: any) {
       if (error.message !== 'Your cart is empty. Please add items before checkout.') {

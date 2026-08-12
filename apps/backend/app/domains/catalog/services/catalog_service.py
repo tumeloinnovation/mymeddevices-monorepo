@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional, List, Tuple, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, and_
+from sqlalchemy import select, func, or_, and_, cast, String, delete as sql_delete
 from sqlalchemy.orm import selectinload
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.product_image import ProductImage
@@ -15,6 +15,8 @@ from app.domains.catalog.models.category import Category
 from app.domains.catalog.models.brand import Brand
 from app.domains.catalog.models.tag import Tag
 from app.domains.vendor.models.vendor_profile import VendorProfile
+from app.domains.shopping.models.cart import CartItem
+from app.domains.customers.models.wishlist import WishlistItem
 from app.core.logging import logger
 from app.domains.catalog.config import settings as catalog_settings
 import asyncio
@@ -53,7 +55,7 @@ class CatalogService:
     def _calculate_pricing(self, base_price: float) -> Tuple[float, float, float]:
         """
         Calculate markup_price, commission_fee, and final customer price.
-        Uses range-based markups from settings.
+        price = base_price + markup_price + commission_fee
         """
         if not base_price or base_price <= 0:
             return 0.0, 0.0, 0.0
@@ -67,9 +69,33 @@ class CatalogService:
             
         markup_price = base_price * (markup_percent / 100.0)
         commission_fee = base_price * (catalog_settings.COMMISSION_FEE_PERCENT / 100.0)
-        price = base_price + markup_price
+        price = base_price + markup_price + commission_fee
         
         return round(markup_price, 2), round(commission_fee, 2), round(price, 2)
+
+    def _calculate_from_retail_price(self, price: float) -> Tuple[float, float, float]:
+        """
+        Reverse calculate base_price (vendor payout), markup_price, and commission_fee from target retail price.
+        """
+        if not price or price <= 0:
+            return 0.0, 0.0, 0.0
+
+        low_threshold_price = catalog_settings.MARKUP_THRESHOLD_LOW * (1 + (catalog_settings.MARKUP_PERCENT_LOW + catalog_settings.COMMISSION_FEE_PERCENT) / 100.0)
+        med_threshold_price = catalog_settings.MARKUP_THRESHOLD_MEDIUM * (1 + (catalog_settings.MARKUP_PERCENT_MEDIUM + catalog_settings.COMMISSION_FEE_PERCENT) / 100.0)
+
+        if price <= low_threshold_price:
+            markup_pct = catalog_settings.MARKUP_PERCENT_LOW
+        elif price <= med_threshold_price:
+            markup_pct = catalog_settings.MARKUP_PERCENT_MEDIUM
+        else:
+            markup_pct = catalog_settings.MARKUP_PERCENT_HIGH
+
+        total_multiplier = 1.0 + (markup_pct + catalog_settings.COMMISSION_FEE_PERCENT) / 100.0
+        base_price = price / total_multiplier
+        markup_price = base_price * (markup_pct / 100.0)
+        commission_fee = base_price * (catalog_settings.COMMISSION_FEE_PERCENT / 100.0)
+
+        return round(base_price, 2), round(markup_price, 2), round(commission_fee, 2)
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -81,6 +107,9 @@ class CatalogService:
 
     async def create_product(self, vendor_id: str, name: str, **kwargs) -> Product:
         """Create a new draft product."""
+        # Clean legacy keys
+        kwargs.pop("vendor_payout", None)
+
         # Verify vendor exists
         vendor = await self.db.execute(
             select(VendorProfile).where(VendorProfile.id == vendor_id)
@@ -100,15 +129,21 @@ class CatalogService:
         base_slug = generate_slug(name)
         slug = await self._ensure_unique_slug(base_slug)
 
-        # Calculate pricing if base_price, vendor_payout, or price is provided
-        base_val = kwargs.get("base_price") or kwargs.get("vendor_payout")
-        if base_val is not None and ("price" not in kwargs or kwargs["price"] is None):
+        # Calculate pricing: bi-directional
+        base_val = kwargs.get("base_price")
+        price_val = kwargs.get("price")
+
+        if base_val is not None and base_val > 0:
             markup, commission, calculated_price = self._calculate_pricing(base_val)
             kwargs["markup_price"] = kwargs.get("markup_price") or markup
             kwargs["commission_fee"] = kwargs.get("commission_fee") or commission
-            kwargs["price"] = calculated_price
+            kwargs["price"] = price_val or calculated_price
             kwargs["currency"] = kwargs.get("currency") or catalog_settings.DEFAULT_CURRENCY
-        elif "price" in kwargs and kwargs["price"] is not None:
+        elif price_val is not None and price_val > 0:
+            calc_base, markup, commission = self._calculate_from_retail_price(price_val)
+            kwargs["base_price"] = calc_base
+            kwargs["markup_price"] = kwargs.get("markup_price") or markup
+            kwargs["commission_fee"] = kwargs.get("commission_fee") or commission
             kwargs["currency"] = kwargs.get("currency") or catalog_settings.DEFAULT_CURRENCY
 
         product = Product(
@@ -133,6 +168,7 @@ class CatalogService:
 
     async def update_product(self, vendor_id: str, product_id: str, **kwargs) -> Product:
         """Update a product. Recalculates completeness."""
+        kwargs.pop("vendor_payout", None)
         product = await self._get_vendor_product(vendor_id, product_id)
 
         # Check SKU uniqueness if updated
@@ -147,13 +183,21 @@ class CatalogService:
             if sku_check.scalar_one_or_none():
                 raise ValueError(f"Product with SKU '{kwargs['sku']}' already exists.")
 
-        # Recalculate pricing if base_price or vendor_payout is updated without explicit price
-        base_val = kwargs.get("base_price") or kwargs.get("vendor_payout")
-        if base_val is not None and ("price" not in kwargs or kwargs["price"] is None):
+        # Recalculate pricing if base_price or price is updated
+        base_val = kwargs.get("base_price")
+        price_val = kwargs.get("price")
+
+        if base_val is not None and base_val > 0:
             markup, commission, calculated_price = self._calculate_pricing(base_val)
-            kwargs["markup_price"] = kwargs.get("markup_price") or markup
-            kwargs["commission_fee"] = kwargs.get("commission_fee") or commission
-            kwargs["price"] = calculated_price
+            kwargs["markup_price"] = markup
+            kwargs["commission_fee"] = commission
+            if "price" not in kwargs or kwargs["price"] is None:
+                kwargs["price"] = calculated_price
+        elif price_val is not None and price_val > 0 and ("base_price" not in kwargs or kwargs["base_price"] is None):
+            calc_base, markup, commission = self._calculate_from_retail_price(price_val)
+            kwargs["base_price"] = calc_base
+            kwargs["markup_price"] = markup
+            kwargs["commission_fee"] = commission
 
         for key, value in kwargs.items():
             if value is not None and hasattr(product, key):
@@ -209,17 +253,27 @@ class CatalogService:
         if product.status != "draft":
             raise ValueError("Only draft products can be deleted. Archive published products instead.")
 
+        # Delete associated cart items
+        await self.db.execute(
+            sql_delete(CartItem).where(CartItem.product_id == product_id)
+        )
+
+        # Delete associated wishlist items
+        await self.db.execute(
+            sql_delete(WishlistItem).where(WishlistItem.product_id == product_id)
+        )
+
         # Perform soft delete
         product.is_deleted = True
         product.deleted_at = datetime.now(timezone.utc)
-        
+
         await self.db.commit()
-        
+
         # Sync deletion with Typesense
         if self.typesense.client is not None:
             await asyncio.to_thread(self.typesense.delete_product, product.id)
-            
-        logger.info(f"Product soft deleted: {product_id}")
+
+        logger.info(f"Product soft deleted: {product_id} (with cart items and wishlist items)")
 
     # ========================================================================
     # PRODUCT LIFECYCLE
@@ -254,13 +308,11 @@ class CatalogService:
         """Publish a verified product to the storefront."""
         product = await self._get_vendor_product(vendor_id, product_id)
 
-        if not product.is_verified:
-            raise ValueError("Product must be verified before publishing.")
-
-        if product.status not in ("pending_review", "draft"):
-            raise ValueError(f"Cannot publish product with status '{product.status}'.")
-
+        # Admin or direct publishing sets both is_verified and published status
+        product.is_verified = True
         product.status = "published"
+        if not product.verified_at:
+            product.verified_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         product = await self._get_vendor_product(vendor_id, product_id)
@@ -348,7 +400,12 @@ class CatalogService:
 
         query = select(Product).options(
             selectinload(Product.images),
-            selectinload(Product.category)
+            selectinload(Product.category),
+            selectinload(Product.variants),
+            selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
+            selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
+            selectinload(Product.brand_relation),
+            selectinload(Product.tags_relation)
         ).where(*conditions)
 
         if status_filter:
@@ -440,7 +497,8 @@ class CatalogService:
         # Database Fallback
         query = select(Product).options(
             selectinload(Product.images),
-            selectinload(Product.category)
+            selectinload(Product.category),
+            selectinload(Product.brand_relation)
         ).where(
             Product.status == "published",
             Product.is_verified == True,
@@ -539,9 +597,12 @@ class CatalogService:
             select(Product).options(
                 selectinload(Product.images),
                 selectinload(Product.category),
-                selectinload(Product.variants)
+                selectinload(Product.variants),
+                selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
+                selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
+                selectinload(Product.brand_relation)
             ).where(
-                Product.slug == slug,
+                or_(Product.slug == slug, Product.sku == slug, cast(Product.id, String) == slug),
                 Product.status == "published",
                 Product.is_verified == True,
                 Product.is_deleted == False
@@ -560,7 +621,10 @@ class CatalogService:
             select(Product).options(
                 selectinload(Product.images),
                 selectinload(Product.category),
-                selectinload(Product.variants)
+                selectinload(Product.variants),
+                selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
+                selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
+                selectinload(Product.brand_relation)
             ).where(
                 Product.id == product.id
             )
@@ -1157,7 +1221,12 @@ class CatalogService:
         result = await self.db.execute(
             select(Product).options(
                 selectinload(Product.images),
-                selectinload(Product.category)
+                selectinload(Product.category),
+                selectinload(Product.variants),
+                selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
+                selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
+                selectinload(Product.brand_relation),
+                selectinload(Product.tags_relation)
             ).where(*conditions)
         )
         product = result.scalar_one_or_none()

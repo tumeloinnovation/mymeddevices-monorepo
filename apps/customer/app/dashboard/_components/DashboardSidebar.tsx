@@ -48,6 +48,7 @@ import {
     ShoppingCart,
     Truck,
     Lock,
+    Shield,
     Eye,
     Bell,
     MessageSquare,
@@ -108,6 +109,12 @@ export function DashboardSidebar() {
                     isActive: pathname?.startsWith('/dashboard/profile'),
                 },
                 {
+                    label: 'Loyalty Rewards',
+                    href: '/dashboard/loyalty',
+                    icon: Gift,
+                    isActive: pathname?.startsWith('/dashboard/loyalty'),
+                },
+                {
                     label: 'Payment Methods',
                     href: '/dashboard/payment-methods',
                     icon: CreditCard,
@@ -118,12 +125,6 @@ export function DashboardSidebar() {
                     href: '/dashboard/addresses',
                     icon: MapPin,
                     isActive: pathname?.startsWith('/dashboard/addresses'),
-                },
-                {
-                    label: 'Communication',
-                    href: '/dashboard/communication',
-                    icon: Bell,
-                    isActive: pathname?.startsWith('/dashboard/communication'),
                 },
             ],
         },
@@ -178,22 +179,16 @@ export function DashboardSidebar() {
             label: 'Settings',
             items: [
                 {
-                    label: 'Preferences',
-                    href: '/dashboard/preferences',
-                    icon: Settings,
-                    isActive: pathname?.startsWith('/dashboard/preferences'),
-                },
-                {
-                    label: 'Security',
+                    label: 'Security & Auth',
                     href: '/dashboard/security',
-                    icon: Lock,
-                    isActive: pathname?.startsWith('/dashboard/security'),
+                    icon: Shield,
+                    isActive: pathname === '/dashboard/security',
                 },
                 {
-                    label: 'Privacy',
-                    href: '/dashboard/privacy',
-                    icon: Eye,
-                    isActive: pathname?.startsWith('/dashboard/privacy'),
+                    label: 'Communication',
+                    href: '/dashboard/communication',
+                    icon: Bell,
+                    isActive: pathname === '/dashboard/communication',
                 },
             ],
         },
@@ -231,9 +226,10 @@ export function DashboardSidebar() {
                                             asChild
                                             isActive={item.isActive}
                                             tooltip={item.label}
+                                            className={item.isActive ? "relative font-semibold bg-primary/10 text-primary border-l-2 border-primary rounded-l-none pl-2.5" : ""}
                                         >
                                             <Link href={item.href}>
-                                                <item.icon />
+                                                <item.icon className={item.isActive ? "text-primary" : ""} />
                                                 <span>{item.label}</span>
                                                 {'badge' in item && item.badge !== undefined && item.badge > 0 && (
                                                     <span className="ml-auto flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] text-primary-foreground">
@@ -337,7 +333,7 @@ export function DashboardSidebar() {
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem asChild>
-                                            <Link href="/dashboard/preferences" className="flex items-center w-full cursor-pointer text-xs">
+                                            <Link href="/dashboard/security" className="flex items-center w-full cursor-pointer text-xs">
                                                 <Settings className="mr-2 h-3.5 w-3.5 text-slate-500" />
                                                 Account Settings
                                             </Link>

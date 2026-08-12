@@ -16,6 +16,7 @@ import {
 import { Bell, Mail, Phone, Save, Loader2, BellOff, Info } from 'lucide-react';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
+import { cn } from '@/lib/utils';
 
 interface NotificationType {
   id: string;
@@ -186,10 +187,34 @@ export default function CommunicationPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Communication Preferences</h1>
-        <p className="text-muted-foreground mt-2">Choose how you want to hear from us</p>
+    <div className="space-y-6 max-w-4xl mx-auto">
+      {/* Top Header with Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Communication Preferences</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Choose how and when you want to receive updates.</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0 self-start sm:self-auto">
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs h-9"
+            onClick={() => {
+              setPrefs(defaultPreferences);
+              setLoaded(true);
+            }}
+          >
+            Reset to Defaults
+          </Button>
+          <Button size="sm" className="text-xs h-9 gap-1.5" onClick={handleSave} disabled={updateMutation.isPending}>
+            {updateMutation.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Save className="h-3.5 w-3.5" />
+            )}
+            Save Changes
+          </Button>
+        </div>
       </div>
 
       {/* Pause All */}
@@ -294,42 +319,74 @@ export default function CommunicationPage() {
       </Card>
 
       {/* Email Frequency */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Email Frequency</CardTitle>
-          <CardDescription>How often you receive non-essential emails</CardDescription>
+      <Card className="border border-border bg-card shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold">Email Frequency</CardTitle>
+          <CardDescription className="text-xs">How often you want to receive non-essential updates and digests</CardDescription>
         </CardHeader>
         <CardContent>
-          <Select value={prefs.emailFrequency} onValueChange={(v) => update('emailFrequency', v)} disabled={prefs.paused}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="instant">Instant (as they happen)</SelectItem>
-              <SelectItem value="daily">Daily Digest</SelectItem>
-              <SelectItem value="weekly">Weekly Digest</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {[
+              {
+                id: 'instant',
+                title: 'Instant',
+                subtitle: 'As events happen',
+                description: 'Receive real-time notifications immediately.',
+              },
+              {
+                id: 'daily',
+                title: 'Daily Digest',
+                subtitle: 'Once per day',
+                description: 'A single summary email delivered every evening.',
+              },
+              {
+                id: 'weekly',
+                title: 'Weekly Digest',
+                subtitle: 'Once per week',
+                description: 'A weekly rollup sent every Monday morning.',
+              },
+            ].map((option) => {
+              const isSelected = prefs.emailFrequency === option.id;
+              const isDisabled = prefs.paused;
+
+              return (
+                <button
+                  key={option.id}
+                  type="button"
+                  disabled={isDisabled}
+                  onClick={() => update('emailFrequency', option.id)}
+                  className={cn(
+                    'relative p-4 rounded-xl border text-left transition-all flex flex-col justify-between gap-3',
+                    isSelected
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border bg-card hover:border-primary/40 hover:bg-muted/30',
+                    isDisabled && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  <div className="flex items-start justify-between w-full">
+                    <div>
+                      <p className="font-semibold text-sm text-foreground">{option.title}</p>
+                      <p className="text-[11px] font-medium text-primary">{option.subtitle}</p>
+                    </div>
+                    <div
+                      className={cn(
+                        'h-4 w-4 rounded-full border flex items-center justify-center transition-colors shrink-0 mt-0.5',
+                        isSelected
+                          ? 'border-primary bg-primary text-primary-foreground'
+                          : 'border-muted-foreground/30'
+                      )}
+                    >
+                      {isSelected && <div className="h-1.5 w-1.5 rounded-full bg-primary-foreground" />}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{option.description}</p>
+                </button>
+              );
+            })}
+          </div>
         </CardContent>
       </Card>
 
-      {/* Save Button */}
-      <div className="flex justify-end gap-4">
-        <Button
-          variant="outline"
-          onClick={() => {
-            setPrefs(defaultPreferences);
-            setLoaded(true);
-          }}
-        >
-          Reset to Defaults
-        </Button>
-        <Button onClick={handleSave} disabled={updateMutation.isPending}>
-          {updateMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          <Save className="mr-2 h-4 w-4" />
-          Save Changes
-        </Button>
-      </div>
     </div>
   );
 }

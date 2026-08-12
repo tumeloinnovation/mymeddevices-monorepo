@@ -51,9 +51,10 @@ interface ProductCardProps {
   const name = product?.name || '';
   // Try multiple possible category field structures
   const category = product?.categories?.[0]?.name || (product as any)?.category_name || (product as any)?.category || '';
+  const brandName = (product as any)?.brands?.[0]?.name || (product as any)?.brand || '';
   const price = product ? parseFloat(product.on_sale ? product.sale_price : product.price) : 0;
   const originalPrice = product?.on_sale ? parseFloat(product.regular_price) : undefined;
-  const slug = product?.slug || '';
+  const slug = product?.slug || (product as any)?.sku || (product as any)?.id || '';
 
   const hasDiscount =
     typeof originalPrice === "number" && originalPrice > price;
@@ -148,7 +149,7 @@ interface ProductCardProps {
     <>
       <Card className="group w-[220px] sm:w-[240px] md:w-[260px] rounded-xl overflow-hidden shadow-sm hover:shadow-lg transition-all duration-300 flex flex-col bg-card border border-border h-full">
         {/* Image Section */}
-        <div className="relative bg-white dark:bg-muted/30 h-40 sm:h-44">
+        <div onClick={handleNavigateToDetails} className="relative bg-white dark:bg-muted/30 h-40 sm:h-44 cursor-pointer">
           <Image
             fill
             src={imgSrc}
@@ -296,6 +297,11 @@ interface ProductCardProps {
             <h3 className="text-sm font-medium leading-tight text-foreground line-clamp-2 mt-0.5">
               {name}
             </h3>
+            {brandName && (
+              <p className="text-[11px] font-normal text-muted-foreground mt-0.5">
+                by {brandName}
+              </p>
+            )}
           </div>
 
           {/* Price Section */}
