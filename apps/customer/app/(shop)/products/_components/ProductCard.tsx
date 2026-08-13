@@ -102,6 +102,11 @@ interface ProductCardProps {
   };
 
   const handleAddToCart = () => {
+    // Bundles require configuration on the detail page
+    if (product?.type === 'bundle') {
+      router.push(`/products/${slug}`);
+      return;
+    }
     addToCart(product as any, quantity);
   };
 
@@ -162,14 +167,9 @@ interface ProductCardProps {
 
           {/* Status Badges */}
           <div className="absolute left-2 top-2 flex flex-col gap-1 z-10">
-            {(product as any)?.product_type === 'variable' && (
+            {product?.type === 'variable' && (
               <div className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wider">
                 {product.variants?.length ? `${product.variants.length} Options` : 'Variable'}
-              </div>
-            )}
-            {(product as any)?.product_type === 'bundle' && (
-              <div className="bg-amber-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wider">
-                Kit · {(product as any)?.bundle_items?.length || 'Package'}
               </div>
             )}
             {hasDiscount && (
@@ -289,11 +289,9 @@ interface ProductCardProps {
         {/* Content Section */}
         <div className="px-3 sm:px-4 py-2 flex flex-col justify-between flex-1">
           <div onClick={handleNavigateToDetails} className="cursor-pointer min-h-[2.5rem]">
-            {category && (
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
-                {category}
-              </p>
-            )}
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+              {category || 'Medical Device'}
+            </p>
             <h3 className="text-sm font-medium leading-tight text-foreground line-clamp-2 mt-0.5">
               {name}
             </h3>
@@ -336,6 +334,15 @@ interface ProductCardProps {
                         aria-label="Out of stock"
                       >
                         Out of stock
+                      </Button>
+                    ) : product?.type === 'bundle' ? (
+                      <Button
+                        onClick={() => router.push(`/products/${slug}`)}
+                        className="w-full h-full rounded-md shadow-sm text-xs font-medium bg-amber-600 hover:bg-amber-500 text-white flex items-center justify-center gap-1.5"
+                        aria-label="Configure bundle"
+                      >
+                        <ShoppingCart className="h-4 w-4" />
+                        Configure Bundle
                       </Button>
                     ) : (
                       <Button

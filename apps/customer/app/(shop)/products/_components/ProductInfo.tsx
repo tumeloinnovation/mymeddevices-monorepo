@@ -81,6 +81,7 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
   }, [variants, product.price]);
 
   const requiresVariantSelection = product.product_type === 'variable' && variants.length > 0 && !selectedVariant;
+  const isBundle = product.product_type === 'bundle';
 
   const handleWishlistToggle = () => {
     if (isInWishlist(product.id)) {
@@ -211,6 +212,11 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
         {product.on_sale && (
           <Badge className="bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-900/40 dark:text-red-400 border-red-200 dark:border-red-800">
             SALE
+          </Badge>
+        )}
+        {isBundle && (
+          <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 dark:bg-amber-900/40 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+            BUNDLE KIT
           </Badge>
         )}
 
@@ -383,51 +389,55 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
         </Popover>
       </div>
 
-      {/* Quantity Selector with Add to Cart */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center border rounded-lg overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setQuantity(Math.max(1, quantity - 1))}
-            className="px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            aria-label="Decrease quantity"
-          >
-            -
-          </button>
-          <div className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100 min-w-[50px] text-center">
-            {quantity}
+      {/* Quantity Selector with Add to Cart — hidden for bundles (BundleConfigurator owns this CTA) */}
+      {!isBundle && (
+        <div className="flex items-center gap-3">
+          <div className="flex items-center border rounded-lg overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setQuantity(Math.max(1, quantity - 1))}
+              className="px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              aria-label="Decrease quantity"
+            >
+              -
+            </button>
+            <div className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100 min-w-[50px] text-center">
+              {quantity}
+            </div>
+            <button
+              type="button"
+              onClick={() => setQuantity(quantity + 1)}
+              className="px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              aria-label="Increase quantity"
+            >
+              +
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setQuantity(quantity + 1)}
-            className="px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-            aria-label="Increase quantity"
+          <Button
+            onClick={() => {
+              addToCart()
+              setAdded(true)
+            }}
+            className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium"
+            size="lg"
           >
-            +
-          </button>
+            {added ? 'Added to Cart' : 'Add to Cart'}
+          </Button>
         </div>
-        <Button
-          onClick={() => {
+      )}
+
+      {/* Buy Now Button — hidden for bundles */}
+      {!isBundle && (
+        <DirectCheckout
+          productName={product.name}
+          price={currentPrice}
+          quantity={quantity}
+          onAddToCart={() => {
             addToCart()
             setAdded(true)
           }}
-          className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium"
-          size="lg"
-        >
-          {added ? 'Added to Cart' : 'Add to Cart'}
-        </Button>
-      </div>
-
-      {/* Buy Now Button */}
-      <DirectCheckout
-        productName={product.name}
-        price={currentPrice}
-        quantity={quantity}
-        onAddToCart={() => {
-          addToCart()
-          setAdded(true)
-        }}
-      />
+        />
+      )}
 
       {/* Trust Signals */}
       <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-200 dark:border-gray-800">

@@ -3,7 +3,7 @@ from typing import Optional, List, Tuple, Any
 from decimal import Decimal
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, func, case
+from sqlalchemy import select, update, func, case, or_, String
 from sqlalchemy.orm import selectinload
 
 from app.core.logging import logger
@@ -340,6 +340,7 @@ class OrderService:
         user_id: Optional[uuid.UUID] = None,
         vendor_id: Optional[uuid.UUID] = None,
         status: Optional[str] = None,
+        search: Optional[str] = None,
         offset: int = 0,
         limit: int = 20
     ) -> Tuple[List[Order], int]:
@@ -358,6 +359,17 @@ class OrderService:
 
         if status:
             conditions.append(Order.status == status)
+
+        if search and search.strip():
+            clean_search = search.strip()
+            search_pattern = f"%{clean_search}%"
+            search_conditions = [
+                func.cast(Order.order_number, String).ilike(search_pattern),
+                func.cast(Order.id, String).ilike(search_pattern),
+            ]
+            if clean_search.isdigit():
+                search_conditions.append(Order.order_number == int(clean_search))
+            conditions.append(or_(*search_conditions))
 
         # Build count query
         count_stmt = select(func.count(Order.id))

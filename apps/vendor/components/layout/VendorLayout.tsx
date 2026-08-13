@@ -51,13 +51,12 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
       ],
     },
     {
-      label: 'Store Management',
+      label: 'Catalog & Operations',
       icon: Store,
       items: [
-        { label: 'Products Catalog', href: '/vendor/products', icon: Package },
+        { label: 'Products & Inventory', href: '/vendor/products', icon: Package },
+        { label: 'Product Performance', href: '/vendor/analytics/products', icon: BarChart3 },
         { label: 'Product Reviews', href: '/vendor/reviews', icon: Star },
-        { label: 'Media Library', href: '/vendor/media', icon: Image },
-        { label: 'Inventory', href: '/vendor/inventory', icon: Warehouse },
       ],
     },
     {
@@ -117,7 +116,6 @@ export default function VendorLayout({ children }: VendorLayoutProps) {
         { label: 'Sales Analytics', href: '/vendor/analytics/sales', icon: TrendingUp },
         { label: 'Performance Metrics', href: '/vendor/analytics/performance', icon: BarChart3 },
         { label: 'Customer Insights', href: '/vendor/analytics/customers', icon: Users },
-        { label: 'Product Performance', href: '/vendor/analytics/products', icon: Package },
         { label: 'Revenue Reports', href: '/vendor/analytics/revenue', icon: DollarSign },
       ],
     },

@@ -138,13 +138,9 @@ const CompareProducts: FC = () => {
                     </div>
 
                     <div className="space-y-2 w-full text-xs mb-4">
-                      <Badge variant="outline" className="w-full justify-center gap-1 border-primary/30 text-primary bg-primary/5 py-1">
-                        <ShieldCheck className="w-3.5 h-3.5" /> PPB / KMPDB Certified
-                      </Badge>
-
                       <div className="text-muted-foreground flex items-center justify-center gap-1">
                         <span className={`w-2 h-2 rounded-full ${(n.raw as any)?.stock_status === 'instock' ? 'bg-emerald-500' : 'bg-amber-500'}`} />
-                        {(n.raw as any)?.stock_status === 'instock' ? 'In Stock (Central Warehouse)' : 'Special Order / In Stock'}
+                        {(n.raw as any)?.stock_status === 'instock' ? 'In Stock' : 'Special Order / In Stock'}
                       </div>
                     </div>
 
@@ -240,19 +236,6 @@ const CompareProducts: FC = () => {
                 </tr>
 
                 <tr>
-                  <td className="p-4 font-medium text-muted-foreground bg-muted/10">Regulatory Standard</td>
-                  {products.map((p) => {
-                    return (
-                      <td key={String(p.id)} className="p-4 border-l">
-                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-200 text-xs gap-1">
-                          <ShieldCheck className="w-3 h-3" /> PPB / KMPDB Certified
-                        </Badge>
-                      </td>
-                    );
-                  })}
-                </tr>
-
-                <tr>
                   <td className="p-4 font-medium text-muted-foreground bg-muted/10">Stock Availability</td>
                   {products.map((p) => {
                     const status = (p as any)?.stock_status || "instock";
@@ -261,7 +244,7 @@ const CompareProducts: FC = () => {
                       <td key={String(p.id)} className={`p-4 border-l ${isDiff ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
                         <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${status === "instock" ? "text-emerald-600" : "text-amber-600"}`}>
                           <span className={`w-2 h-2 rounded-full ${status === "instock" ? "bg-emerald-500" : "bg-amber-500"}`} />
-                          {status === "instock" ? "In Stock (Central Warehouse)" : "Available on Request"}
+                          {status === "instock" ? "In Stock" : "Available on Request"}
                         </span>
                       </td>
                     );

@@ -213,21 +213,6 @@ export default function AdminOrderDetailPage() {
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            <div className="w-44">
-              <Select defaultValue={order.status} onValueChange={handleStatusUpdate} disabled={actionLoading}>
-                <SelectTrigger className="h-9 text-xs">
-                  <SelectValue placeholder="Update status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="paid">Paid</SelectItem>
-                  <SelectItem value="processing">Processing</SelectItem>
-                  <SelectItem value="shipped">Shipped</SelectItem>
-                  <SelectItem value="delivered">Delivered</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
           </div>
         </div>
 
@@ -348,6 +333,119 @@ export default function AdminOrderDetailPage() {
 
           {/* Sidebar Info */}
           <div className="space-y-6">
+            {/* Order Status & Actions */}
+            <Card className="border shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-primary" />
+                    Order Status & Lifecycle
+                  </span>
+                  {actionLoading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Update order stage intuitively with one-click transitions
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Active Status Highlight */}
+                <div className={`p-3 rounded-lg border flex items-center justify-between ${statusMeta.color}`}>
+                  <div className="flex items-center gap-2">
+                    {statusMeta.icon}
+                    <span className="font-semibold text-xs tracking-wide uppercase">{statusMeta.label}</span>
+                  </div>
+                  <span className="text-[11px] font-medium opacity-80">Current State</span>
+                </div>
+
+                {/* Main Progress Steps */}
+                <div className="space-y-1.5">
+                  <div className="text-xs font-medium text-muted-foreground">Standard Fulfillment Flow</div>
+                  <div className="grid grid-cols-1 gap-1.5">
+                    {(() => {
+                      const steps = [
+                        { key: "pending", label: "Mark as Pending", icon: Clock },
+                        { key: "paid", label: "Mark as Paid", icon: CheckCircle2 },
+                        { key: "processing", label: "Start Processing", icon: Clock },
+                        { key: "shipped", label: "Mark Shipped", icon: Truck },
+                        { key: "delivered", label: "Mark Delivered", icon: CheckCircle2 },
+                      ];
+                      const stepOrder = ["pending", "paid", "processing", "shipped", "delivered"];
+                      const currentIdx = stepOrder.indexOf(order.status);
+                      const isTerminal = order.status === "delivered" || order.status === "cancelled" || order.status === "refunded";
+
+                      return steps.map((step, idx) => {
+                        const Icon = step.icon;
+                        const isCurrent = order.status === step.key;
+                        const isPassed = currentIdx !== -1 && idx < currentIdx;
+                        const isDisabled = actionLoading || isCurrent || isPassed || isTerminal;
+
+                        return (
+                          <button
+                            key={step.key}
+                            type="button"
+                            onClick={() => handleStatusUpdate(step.key)}
+                            disabled={isDisabled}
+                            className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium transition-all ${
+                              isCurrent
+                                ? "bg-primary text-primary-foreground shadow-xs font-semibold"
+                                : isPassed
+                                ? "bg-muted/60 text-muted-foreground/70 border border-transparent cursor-not-allowed opacity-65"
+                                : isDisabled
+                                ? "bg-muted/30 text-muted-foreground/50 border border-transparent cursor-not-allowed opacity-50"
+                                : "bg-muted/40 hover:bg-muted text-foreground border border-border/50"
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <Icon className="h-3.5 w-3.5" />
+                              {step.label}
+                            </span>
+                            {isCurrent ? (
+                              <span className="text-[10px] bg-primary-foreground/20 px-1.5 py-0.5 rounded text-primary-foreground font-bold">
+                                Active
+                              </span>
+                            ) : isPassed ? (
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                                <CheckCircle2 className="h-3 w-3" /> Completed
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">Next</span>
+                            )}
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+
+                {/* Exceptional Status Actions */}
+                <div className="pt-2 border-t space-y-1.5">
+                  <div className="text-xs font-medium text-muted-foreground">Exception Actions</div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      variant={order.status === "cancelled" ? "destructive" : "outline"}
+                      size="sm"
+                      onClick={() => handleStatusUpdate("cancelled")}
+                      disabled={actionLoading || order.status === "cancelled" || order.status === "delivered" || order.status === "refunded"}
+                      className="text-xs justify-start h-8 gap-1.5 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/20 disabled:opacity-50"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      {order.status === "cancelled" ? "Cancelled" : "Cancel Order"}
+                    </Button>
+                    <Button
+                      variant={order.status === "refunded" ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => handleStatusUpdate("refunded")}
+                      disabled={actionLoading || order.status === "refunded"}
+                      className="text-xs justify-start h-8 gap-1.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 disabled:opacity-50"
+                    >
+                      <XCircle className="h-3.5 w-3.5" />
+                      {order.status === "refunded" ? "Refunded" : "Refund Order"}
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
             {/* Customer Details */}
             <Card className="border shadow-sm">
               <CardHeader className="pb-3">
@@ -369,7 +467,16 @@ export default function AdminOrderDetailPage() {
                 </div>
                 <div>
                   <div className="text-muted-foreground">Phone</div>
-                  <div className="font-medium">{order.user?.phone_number || address?.phone_number || "N/A"}</div>
+                  <div className="font-medium">
+                    {order.user?.phone ||
+                      order.user?.phone_number ||
+                      order.customer_phone ||
+                      order.phone ||
+                      address?.phone ||
+                      address?.phone_number ||
+                      address?.mobile ||
+                      "N/A"}
+                  </div>
                 </div>
               </CardContent>
             </Card>

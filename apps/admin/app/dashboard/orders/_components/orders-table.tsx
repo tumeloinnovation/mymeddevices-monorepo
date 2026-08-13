@@ -474,7 +474,7 @@ export function OrdersTable({
             </thead>
             <tbody>
               {Array.from({ length: 8 }).map((_, i) => (
-                <tr key={i} className="h-[36px] border-b last:border-0 hover:bg-muted/30">
+                <tr key={i} className="h-[52px] border-b last:border-0 hover:bg-muted/30">
                   <td className="px-4 text-center">
                     <Skeleton className="h-4 w-4 rounded mx-auto" />
                   </td>
@@ -539,11 +539,11 @@ export function OrdersTable({
         <table className="w-full">
           <thead>
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="h-[34px] bg-muted/30 border-b">
+              <tr key={headerGroup.id} className="h-[42px] bg-muted/40 border-b">
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
-                    className={`px-4 text-left ${
+                    className={`px-4 py-2.5 text-left ${
                       header.id === "total_amount" ? "text-right" : ""
                     } ${
                       header.id === "status" ? "text-center" : ""
@@ -561,12 +561,12 @@ export function OrdersTable({
             {table.getRowModel().rows.map((row) => (
               <tr
                 key={row.id}
-                className="h-[36px] border-b last:border-0 hover:bg-muted/10 transition-colors"
+                className="h-[52px] border-b last:border-0 hover:bg-muted/20 transition-colors"
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
                     key={cell.id}
-                    className={`px-4 ${
+                    className={`px-4 py-3 ${
                       cell.column.id === "total_amount" ? "text-right" : ""
                     } ${
                       cell.column.id === "status" ? "text-center" : ""

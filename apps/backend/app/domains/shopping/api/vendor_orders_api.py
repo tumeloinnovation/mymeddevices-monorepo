@@ -155,10 +155,12 @@ async def vendor_list_orders(
     current_user: Annotated[User, Depends(require_role("vendor"))],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
+    status_filter: Optional[str] = Query(None, alias="status"),
+    search: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    List orders containing products from this vendor.
+    List orders containing products from this vendor with status filtering and search.
 
     Returns only the order items that belong to this vendor, with totals
     recalculated to reflect only the vendor's portion.
@@ -178,6 +180,8 @@ async def vendor_list_orders(
     service = OrderService(db)
     orders, total = await service.list_orders(
         vendor_id=vendor_profile.id,
+        status=status_filter,
+        search=search,
         offset=(page - 1) * page_size,
         limit=page_size
     )

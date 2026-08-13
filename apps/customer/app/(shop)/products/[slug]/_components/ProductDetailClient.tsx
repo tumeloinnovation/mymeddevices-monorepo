@@ -63,17 +63,14 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
       <div className="container mx-auto px-4 py-6">
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
-          <div className="space-y-6">
-            <div className="sticky top-8">
-              <ProductGallery images={images} selected={selectedImage} onSelect={setSelectedImage} />
-            </div>
-
-            {/* Bundle & Accessories Section */}
-            <BundleConfigurator product={product} relatedProducts={relatedProducts} />
+          <div className="lg:sticky lg:top-8">
+            <ProductGallery images={images} selected={selectedImage} onSelect={setSelectedImage} />
           </div>
 
-          <div>
+          <div className="space-y-6">
             <ProductInfo product={product} quantity={quantity} setQuantity={setQuantity} />
+            {/* Bundle items — rendered here for spatial proximity to the CTA */}
+            <BundleConfigurator product={product} relatedProducts={relatedProducts} />
           </div>
         </div>
 
@@ -117,13 +114,21 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
           </div>
         </div>
 
-        {/* You Might Also Like Section */}
-        {(relatedProducts.length > 0 || recentlyViewedItems.length > 0) ? (
+        {/* Recommendations — show related first, fall back to recently viewed, else placeholder */}
+        {relatedProducts.length > 0 ? (
           <section className="py-4 mt-12">
             <ProductSection
               title="You Might Also Like"
               description="Discover similar products and accessories."
-              items={relatedProducts.length > 0 ? relatedProducts : recentlyViewedItems.slice(0, 4)}
+              items={relatedProducts}
+            />
+          </section>
+        ) : recentlyViewedItems.length > 0 ? (
+          <section className="py-4 mt-12">
+            <ProductSection
+              title="Recently Viewed"
+              description="Products you browsed recently."
+              items={recentlyViewedItems.slice(0, 4)}
             />
           </section>
         ) : (
@@ -137,16 +142,6 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
                 We're constantly updating our catalog. Check back later for more great products.
               </p>
             </div>
-          </section>
-        )}
-
-        {recentlyViewedItems.length > 0 && relatedProducts.length > 0 && (
-          <section className="py-4 mt-8">
-            <ProductSection
-              title="Recently Viewed"
-              description="Products you browsed recently."
-              items={recentlyViewedItems}
-            />
           </section>
         )}
       </div>
