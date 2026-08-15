@@ -1,6 +1,5 @@
-import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
@@ -17,20 +16,22 @@ env = Environment(
 )
 
 
-def render_email_template(template_name: str, context: Dict[str, Any]) -> str:
+def render_email_template(template_name: str, context: dict[str, Any]) -> str:
     """Helper to render a compiled MJML template with Jinja2."""
     template = env.get_template(template_name)
-    
+
     # Add common variables if not present
     if "logo_url" not in context:
         context["logo_url"] = settings.EMAIL_LOGO_URL or ""
     if "site_url" not in context:
         context["site_url"] = settings.SITE_URL or ""
-        
+
     return template.render(**context)
 
 
-def otp_html(code: str, title: str, lead_text: str, footer_note: str, expiry_minutes: int, reset_url: Optional[str] = None) -> str:
+def otp_html(
+    code: str, title: str, lead_text: str, footer_note: str, expiry_minutes: int, reset_url: str | None = None
+) -> str:
     return render_email_template(
         "otp.html",
         {
@@ -45,7 +46,7 @@ def otp_html(code: str, title: str, lead_text: str, footer_note: str, expiry_min
     )
 
 
-def vendor_notification_html(title: str, message: str, detail: Optional[str] = None) -> str:
+def vendor_notification_html(title: str, message: str, detail: str | None = None) -> str:
     return render_email_template(
         "vendor_notification.html",
         {
@@ -56,7 +57,7 @@ def vendor_notification_html(title: str, message: str, detail: Optional[str] = N
     )
 
 
-def vendor_approved_html(company_name: str, dashboard_url: Optional[str] = None) -> str:
+def vendor_approved_html(company_name: str, dashboard_url: str | None = None) -> str:
     return render_email_template(
         "vendor_approved.html",
         {
@@ -71,9 +72,9 @@ def vendor_approved_html(company_name: str, dashboard_url: Optional[str] = None)
 def vendor_rejected_html(
     company_name: str,
     rejection_reason: str,
-    user_name: Optional[str] = None,
-    resubmit_url: Optional[str] = None,
-    support_email: Optional[str] = None,
+    user_name: str | None = None,
+    resubmit_url: str | None = None,
+    support_email: str | None = None,
 ) -> str:
     return render_email_template(
         "vendor_rejected.html",
@@ -91,9 +92,9 @@ def vendor_rejected_html(
 def vendor_suspended_html(
     company_name: str,
     suspension_reason: str,
-    user_name: Optional[str] = None,
-    support_url: Optional[str] = None,
-    support_email: Optional[str] = None,
+    user_name: str | None = None,
+    support_url: str | None = None,
+    support_email: str | None = None,
 ) -> str:
     return render_email_template(
         "vendor_suspended.html",
@@ -109,17 +110,14 @@ def vendor_suspended_html(
     )
 
 
-
-
-
 def vendor_order_items_html(
     order_number: str,
     order_total: str,
     item_count: int,
-    items: List[Dict[str, Any]],
-    customer_name: Optional[str] = None,
-    customer_phone: Optional[str] = None,
-    dashboard_url: Optional[str] = None,
+    items: list[dict[str, Any]],
+    customer_name: str | None = None,
+    customer_phone: str | None = None,
+    dashboard_url: str | None = None,
 ) -> str:
     return render_email_template(
         "vendor_order_items.html",
@@ -141,7 +139,7 @@ def new_device_login_html(
     browser: str,
     location: str,
     time: str,
-    security_url: Optional[str] = None,
+    security_url: str | None = None,
 ) -> str:
     return render_email_template(
         "new_device_login.html",
@@ -161,7 +159,7 @@ def new_device_login_html(
 def password_changed_html(
     user_name: str,
     change_time: str,
-    reset_url: Optional[str] = None,
+    reset_url: str | None = None,
 ) -> str:
     return render_email_template(
         "password_changed.html",
@@ -196,7 +194,7 @@ def order_confirmation_html(
     user_name: str,
     order_id: str,
     order_date: str,
-    items: List[Dict[str, str]],
+    items: list[dict[str, str]],
     estimated_delivery: str,
     total: str,
     track_url: str,
@@ -224,7 +222,7 @@ def order_shipped_html(
     carrier: str,
     estimated_delivery: str,
     track_url: str,
-    support_url: Optional[str] = None,
+    support_url: str | None = None,
 ) -> str:
     return render_email_template(
         "order_shipped.html",
@@ -245,8 +243,8 @@ def order_shipped_html(
 def delivery_confirmation_html(
     user_name: str,
     order_id: str,
-    support_url: Optional[str] = None,
-    instructions_url: Optional[str] = None,
+    support_url: str | None = None,
+    instructions_url: str | None = None,
 ) -> str:
     return render_email_template(
         "delivery_confirmation.html",

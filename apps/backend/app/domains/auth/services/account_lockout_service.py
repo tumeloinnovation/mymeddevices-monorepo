@@ -5,22 +5,37 @@ Implements progressive delays and temporary account lockouts
 after multiple failed authentication attempts.
 """
 
-import time
 import sys
-from datetime import datetime, timedelta, timezone
-from typing import Tuple, Optional
-from dataclasses import dataclass
+import time
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.core.logging import logger
+
 from app.core.config import settings
+from app.core.logging import logger
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
+
+
+def _default_thresholds() -> dict[int, dict[str, Any]]:
+    """Progressive delay strategy."""
+    return {
+        3: {"delay": 0, "message": "Multiple failed attempts detected"},
+        5: {"delay": 30, "message": "Account temporarily locked (30 seconds)"},
+        7: {"delay": 300, "message": "Account locked (5 minutes)"},
+        10: {"delay": 1800, "message": "Account locked (30 minutes)"},
+        15: {"delay": 3600, "message": "Account locked (1 hour)"},
+    }
 
 
 @dataclass
 class LockoutPolicy:
     """Configurable lockout policy settings."""
+
     # Attempt thresholds and delays (in seconds)
-    attempt_thresholds: dict = None
+    attempt_thresholds: dict[int, dict[str, Any]] = field(default_factory=_default_thresholds)
 
     # Maximum lockout duration (1 hour)
     max_lockout_minutes: int = 60
@@ -28,24 +43,14 @@ class LockoutPolicy:
     # Lockout cleanup interval (in seconds)
     cleanup_interval: int = 3600
 
-    def __post_init__(self):
-        if self.attempt_thresholds is None:
-            # Progressive delay strategy
-            self.attempt_thresholds = {
-                3: {"delay": 0, "message": "Multiple failed attempts detected"},
-                5: {"delay": 30, "message": "Account temporarily locked (30 seconds)"},
-                7: {"delay": 300, "message": "Account locked (5 minutes)"},
-                10: {"delay": 1800, "message": "Account locked (30 minutes)"},
-                15: {"delay": 3600, "message": "Account locked (1 hour)"},
-            }
-
 
 @dataclass
 class LockoutStatus:
     """Current lockout status for an identifier."""
+
     is_locked: bool
     remaining_seconds: int
-    message: Optional[str] = None
+    message: str | None = None
     attempt_count: int = 0
 
 
@@ -63,10 +68,10 @@ class AccountLockoutService:
     Uses Redis for production with in-memory fallback for development.
     """
 
-    def __init__(self, db: AsyncSession, policy: LockoutPolicy = None):
+    def __init__(self, db: AsyncSession, policy: LockoutPolicy | None = None):
         self.db = db
         self.policy = policy or LockoutPolicy()
-        self.redis_client = None
+        self.redis_client: Redis | None = None
 
         # Detect testing environment
         is_testing = "pytest" in sys.modules or "unittest" in sys.modules
@@ -77,6 +82,7 @@ class AccountLockoutService:
                 raise ValueError("REDIS_URL must be configured when running in a production environment.")
             try:
                 import redis.asyncio as aioredis
+
                 self.redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
                 logger.info("Redis account lockout storage initialized for production.")
             except Exception as e:
@@ -85,6 +91,7 @@ class AccountLockoutService:
         elif not is_testing and settings.REDIS_URL:
             try:
                 import redis.asyncio as aioredis
+
                 self.redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
                 logger.info("Redis account lockout storage initialized.")
             except Exception as e:
@@ -95,18 +102,12 @@ class AccountLockoutService:
         now = time.time()
 
         # Clean up lockouts
-        expired_lockouts = [
-            k for k, v in _in_memory_lockouts.items()
-            if v.get("locked_until", 0) < now
-        ]
+        expired_lockouts = [k for k, v in _in_memory_lockouts.items() if v.get("locked_until", 0) < now]
         for k in expired_lockouts:
             del _in_memory_lockouts[k]
 
         # Clean up attempts
-        expired_attempts = [
-            k for k, exp in _in_memory_expiry.items()
-            if exp < now
-        ]
+        expired_attempts = [k for k, exp in _in_memory_expiry.items() if exp < now]
         for k in expired_attempts:
             _in_memory_attempts.pop(k, None)
             _in_memory_expiry.pop(k, None)
@@ -128,15 +129,18 @@ class AccountLockoutService:
 
     async def _get_redis_status(self, identifier: str) -> LockoutStatus:
         """Get lockout status from Redis."""
+        redis = self.redis_client
+        if redis is None:
+            raise RuntimeError("Redis client is not initialized")
         try:
             # Get attempt count
             attempts_key = f"auth_attempts:{identifier}"
-            attempts = await self.redis_client.get(attempts_key)
+            attempts = await redis.get(attempts_key)
             attempt_count = int(attempts) if attempts else 0
 
             # Get lockout info
             lockout_key = f"auth_lockout:{identifier}"
-            locked_until = await self.redis_client.get(lockout_key)
+            locked_until = await redis.get(lockout_key)
 
             if locked_until:
                 locked_until_ts = float(locked_until)
@@ -147,17 +151,13 @@ class AccountLockoutService:
                         is_locked=True,
                         remaining_seconds=remaining,
                         message=f"Account is locked. Try again in {remaining // 60} minutes.",
-                        attempt_count=attempt_count
+                        attempt_count=attempt_count,
                     )
                 else:
                     # Lockout expired, clean up
-                    await self.redis_client.delete(lockout_key)
+                    await redis.delete(lockout_key)
 
-            return LockoutStatus(
-                is_locked=False,
-                remaining_seconds=0,
-                attempt_count=attempt_count
-            )
+            return LockoutStatus(is_locked=False, remaining_seconds=0, attempt_count=attempt_count)
 
         except Exception as e:
             logger.error(f"Error getting Redis lockout status: {e}")
@@ -182,19 +182,15 @@ class AccountLockoutService:
                     is_locked=True,
                     remaining_seconds=remaining,
                     message=f"Account is locked. Try again in {remaining // 60} minutes.",
-                    attempt_count=attempt_count
+                    attempt_count=attempt_count,
                 )
             else:
                 # Lockout expired
                 del _in_memory_lockouts[identifier]
 
-        return LockoutStatus(
-            is_locked=False,
-            remaining_seconds=0,
-            attempt_count=attempt_count
-        )
+        return LockoutStatus(is_locked=False, remaining_seconds=0, attempt_count=attempt_count)
 
-    async def record_failed_attempt(self, identifier: str, user_email: Optional[str] = None) -> LockoutStatus:
+    async def record_failed_attempt(self, identifier: str, user_email: str | None = None) -> LockoutStatus:
         """
         Record a failed authentication attempt and apply lockout if needed.
 
@@ -210,14 +206,17 @@ class AccountLockoutService:
         else:
             return self._record_in_memory_attempt(identifier, user_email)
 
-    async def _record_redis_attempt(self, identifier: str, user_email: Optional[str]) -> LockoutStatus:
+    async def _record_redis_attempt(self, identifier: str, user_email: str | None) -> LockoutStatus:
         """Record failed attempt in Redis."""
+        redis = self.redis_client
+        if redis is None:
+            raise RuntimeError("Redis client is not initialized")
         try:
             attempts_key = f"auth_attempts:{identifier}"
             lockout_key = f"auth_lockout:{identifier}"
 
             # Increment attempt counter
-            pipe = self.redis_client.pipeline()
+            pipe = redis.pipeline()
             pipe.incr(attempts_key)
             pipe.expire(attempts_key, 3600)  # 1 hour window
             results = await pipe.execute()
@@ -235,11 +234,7 @@ class AccountLockoutService:
             if delay > 0:
                 # Apply lockout
                 locked_until = time.time() + delay
-                await self.redis_client.setex(
-                    lockout_key,
-                    delay,
-                    str(locked_until)
-                )
+                await redis.setex(lockout_key, delay, str(locked_until))
 
                 logger.warning(
                     f"Account lockout applied for {identifier} "
@@ -248,10 +243,7 @@ class AccountLockoutService:
                 )
 
                 return LockoutStatus(
-                    is_locked=True,
-                    remaining_seconds=delay,
-                    message=message,
-                    attempt_count=attempt_count
+                    is_locked=True, remaining_seconds=delay, message=message, attempt_count=attempt_count
                 )
 
             # Warning threshold reached
@@ -261,18 +253,13 @@ class AccountLockoutService:
                     f"(user: {user_email or 'unknown'}) - {attempt_count} attempts"
                 )
 
-            return LockoutStatus(
-                is_locked=False,
-                remaining_seconds=0,
-                message=message,
-                attempt_count=attempt_count
-            )
+            return LockoutStatus(is_locked=False, remaining_seconds=0, message=message, attempt_count=attempt_count)
 
         except Exception as e:
             logger.error(f"Error recording Redis failed attempt: {e}")
             return LockoutStatus(is_locked=False, remaining_seconds=0)
 
-    def _record_in_memory_attempt(self, identifier: str, user_email: Optional[str]) -> LockoutStatus:
+    def _record_in_memory_attempt(self, identifier: str, user_email: str | None) -> LockoutStatus:
         """Record failed attempt in memory."""
         self._cleanup_in_memory()
         now = time.time()
@@ -298,10 +285,7 @@ class AccountLockoutService:
 
         if delay > 0:
             # Apply lockout
-            _in_memory_lockouts[identifier] = {
-                "locked_until": now + delay,
-                "attempts": attempt_count
-            }
+            _in_memory_lockouts[identifier] = {"locked_until": now + delay, "attempts": attempt_count}
 
             logger.warning(
                 f"Account lockout applied for {identifier} "
@@ -309,12 +293,7 @@ class AccountLockoutService:
                 f"{attempt_count} attempts, locked for {delay}s"
             )
 
-            return LockoutStatus(
-                is_locked=True,
-                remaining_seconds=delay,
-                message=message,
-                attempt_count=attempt_count
-            )
+            return LockoutStatus(is_locked=True, remaining_seconds=delay, message=message, attempt_count=attempt_count)
 
         # Warning threshold
         if attempt_count >= 3:
@@ -323,12 +302,7 @@ class AccountLockoutService:
                 f"(user: {user_email or 'unknown'}) - {attempt_count} attempts"
             )
 
-        return LockoutStatus(
-            is_locked=False,
-            remaining_seconds=0,
-            message=message,
-            attempt_count=attempt_count
-        )
+        return LockoutStatus(is_locked=False, remaining_seconds=0, message=message, attempt_count=attempt_count)
 
     async def reset_attempts(self, identifier: str) -> None:
         """

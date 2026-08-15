@@ -1,42 +1,48 @@
 import uuid
-from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.responses import success_response, ApiSuccessResponse
-from app.domains.catalog.services.catalog_service import CatalogService
-from app.domains.catalog.schemas.product_schemas import (
-    StorefrontProductResponse,
-    StorefrontProductListResponse,
-    RelatedProductResponse,
-)
+from app.core.rate_limiting import RateLimiterDependency
+from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.catalog.schemas.category_schemas import CategoryTreeResponse
+from app.domains.catalog.schemas.product_schemas import (
+    RelatedProductResponse,
+    StorefrontProductListResponse,
+    StorefrontProductResponse,
+)
+from app.domains.catalog.services.catalog_service import CatalogService
 from app.domains.customers.repositories.customer_repository import ReviewRepository
 from app.domains.customers.schemas.customer_schemas import PublicReviewResponse
-from app.core.rate_limiting import RateLimiterDependency
 
 router = APIRouter(prefix="", tags=["Public Storefront"])
 
 
-@router.get("/products", response_model=StorefrontProductListResponse, dependencies=[Depends(RateLimiterDependency("products_get"))])
+@router.get(
+    "/products",
+    response_model=StorefrontProductListResponse,
+    dependencies=[Depends(RateLimiterDependency("products_get"))],
+)
 async def get_storefront_products(
-    category_id: Optional[str] = Query(None, description="Filter by category ID"),
-    category_slug: Optional[str] = Query(None, description="Filter by category slug"),
-    search: Optional[str] = Query(None, description="Search term for products"),
-    price_min: Optional[float] = Query(None, ge=0, description="Minimum price"),
-    price_max: Optional[float] = Query(None, ge=0, description="Maximum price"),
-    is_featured: Optional[bool] = Query(None, description="Filter by featured status"),
-    is_clinical_pick: Optional[bool] = Query(None, description="Filter by clinical pick status"),
-    care_setting: Optional[str] = Query(None, description="Filter by care setting tag (e.g. care_setting:icu)"),
-    condition: Optional[str] = Query(None, description="Filter by condition tag (e.g. condition:respiratory)"),
-    is_on_sale: Optional[bool] = Query(None, description="Filter by on sale status"),
-    in_stock: Optional[bool] = Query(None, description="Filter by stock availability"),
-    sort_by: str = Query("newest", description="Sorting options: newest, price_asc, price_desc, popular, name_asc, trending"),
+    category_id: str | None = Query(None, description="Filter by category ID"),
+    category_slug: str | None = Query(None, description="Filter by category slug"),
+    search: str | None = Query(None, description="Search term for products"),
+    price_min: float | None = Query(None, ge=0, description="Minimum price"),
+    price_max: float | None = Query(None, ge=0, description="Maximum price"),
+    is_featured: bool | None = Query(None, description="Filter by featured status"),
+    is_clinical_pick: bool | None = Query(None, description="Filter by clinical pick status"),
+    care_setting: str | None = Query(None, description="Filter by care setting tag (e.g. care_setting:icu)"),
+    condition: str | None = Query(None, description="Filter by condition tag (e.g. condition:respiratory)"),
+    is_on_sale: bool | None = Query(None, description="Filter by on sale status"),
+    in_stock: bool | None = Query(None, description="Filter by stock availability"),
+    sort_by: str = Query(
+        "newest", description="Sorting options: newest, price_asc, price_desc, popular, name_asc, trending"
+    ),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Browse published and verified products on the storefront.
@@ -57,7 +63,7 @@ async def get_storefront_products(
         in_stock=in_stock,
         sort_by=sort_by,
         page=page,
-        page_size=page_size
+        page_size=page_size,
     )
 
     # Convert to storefront response model
@@ -71,19 +77,15 @@ async def get_storefront_products(
         p_dict.in_stock = p.stock_quantity > 0
         storefront_products.append(p_dict)
 
-    return {
-        "products": storefront_products,
-        "total": total,
-        "page": page,
-        "page_size": page_size
-    }
+    return {"products": storefront_products, "total": total, "page": page, "page_size": page_size}
 
 
-@router.get("/products/{slug}", response_model=StorefrontProductResponse, dependencies=[Depends(RateLimiterDependency("products_get"))])
-async def get_storefront_product(
-    slug: str,
-    db: AsyncSession = Depends(get_db)
-):
+@router.get(
+    "/products/{slug}",
+    response_model=StorefrontProductResponse,
+    dependencies=[Depends(RateLimiterDependency("products_get"))],
+)
+async def get_storefront_product(slug: str, db: AsyncSession = Depends(get_db)):
     """
     Get detailed product by slug for public storefront view.
     Increments page view count. Hides vendor identity and internal pricing.
@@ -98,7 +100,7 @@ async def get_storefront_product(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
-@router.get("/categories", response_model=List[CategoryTreeResponse])
+@router.get("/categories", response_model=list[CategoryTreeResponse])
 async def get_storefront_categories(db: AsyncSession = Depends(get_db)):
     """List category taxonomy tree for navigation."""
     service = CatalogService(db)
@@ -106,16 +108,20 @@ async def get_storefront_categories(db: AsyncSession = Depends(get_db)):
     return categories
 
 
-@router.get("/categories/{slug}/products", response_model=StorefrontProductListResponse, dependencies=[Depends(RateLimiterDependency("products_get"))])
+@router.get(
+    "/categories/{slug}/products",
+    response_model=StorefrontProductListResponse,
+    dependencies=[Depends(RateLimiterDependency("products_get"))],
+)
 async def get_storefront_products_by_category(
     slug: str,
-    price_min: Optional[float] = Query(None, ge=0),
-    price_max: Optional[float] = Query(None, ge=0),
-    in_stock: Optional[bool] = Query(None),
+    price_min: float | None = Query(None, ge=0),
+    price_max: float | None = Query(None, ge=0),
+    in_stock: bool | None = Query(None),
     sort_by: str = Query("newest"),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get storefront products belonging to a specific category slug."""
     service = CatalogService(db)
@@ -126,7 +132,7 @@ async def get_storefront_products_by_category(
         in_stock=in_stock,
         sort_by=sort_by,
         page=page,
-        page_size=page_size
+        page_size=page_size,
     )
 
     storefront_products = []
@@ -135,24 +141,21 @@ async def get_storefront_products_by_category(
         p_dict.in_stock = p.stock_quantity > 0
         storefront_products.append(p_dict)
 
-    return {
-        "products": storefront_products,
-        "total": total,
-        "page": page,
-        "page_size": page_size
-    }
+    return {"products": storefront_products, "total": total, "page": page, "page_size": page_size}
 
 
-@router.get("/products/{slug}/reviews", response_model=ApiSuccessResponse[List[PublicReviewResponse]], dependencies=[Depends(RateLimiterDependency("products_get"))])
-async def get_product_reviews(
-    slug: str,
-    db: AsyncSession = Depends(get_db)
-):
+@router.get(
+    "/products/{slug}/reviews",
+    response_model=ApiSuccessResponse[list[PublicReviewResponse]],
+    dependencies=[Depends(RateLimiterDependency("products_get"))],
+)
+async def get_product_reviews(slug: str, db: AsyncSession = Depends(get_db)):
     """
     Get visible reviews for a product by slug.
     Returns only reviews with moderation_status='visible'.
     """
     from app.domains.catalog.models.product import Product
+
     # Check if slug is a valid UUID or product slug
     is_uuid = False
     try:
@@ -186,23 +189,29 @@ async def get_product_reviews(
             last = review.customer.user.last_name or ""
             customer_name = f"{first[0]}. {last}" if first and last else (first or last or "Customer")
 
-        public_reviews.append({
-            "id": str(review.id),
-            "rating": review.rating,
-            "comment": review.comment,
-            "is_verified_purchase": review.is_verified_purchase,
-            "created_at": review.created_at,
-            "reviewer_name": customer_name
-        })
+        public_reviews.append(
+            {
+                "id": str(review.id),
+                "rating": review.rating,
+                "comment": review.comment,
+                "is_verified_purchase": review.is_verified_purchase,
+                "created_at": review.created_at,
+                "reviewer_name": customer_name,
+            }
+        )
 
     return success_response(public_reviews)
 
 
-@router.get("/products/{slug}/related", response_model=List[RelatedProductResponse], dependencies=[Depends(RateLimiterDependency("products_get"))])
+@router.get(
+    "/products/{slug}/related",
+    response_model=list[RelatedProductResponse],
+    dependencies=[Depends(RateLimiterDependency("products_get"))],
+)
 async def get_storefront_related_products(
     slug: str,
-    relation_type: Optional[str] = Query(None, description="cross_sell, upsell, accessory, spare_part"),
-    db: AsyncSession = Depends(get_db)
+    relation_type: str | None = Query(None, description="cross_sell, upsell, accessory, spare_part"),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get related products for a product slug on the public storefront.
@@ -214,4 +223,3 @@ async def get_storefront_related_products(
         return related
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
-

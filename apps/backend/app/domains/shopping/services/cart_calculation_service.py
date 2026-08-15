@@ -1,27 +1,30 @@
-import uuid
 import math
-from typing import List, Optional
+import uuid
 from decimal import Decimal
-from sqlalchemy import select, and_, func
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.core.exceptions import NotFoundError
+from app.domains.catalog.models.product import Product
 from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.models.cart_discount import CartDiscount
-from app.domains.catalog.models.product import Product
 from app.domains.shopping.models.coupon import Coupon
 
 OFFICE_LAT = -1.3011758537859464
 OFFICE_LON = 36.800690681948126
+
 
 def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     """Calculate distance in km between two lat/lon coordinates."""
     R = 6371.0  # Earth's radius in km
     dlat = math.radians(lat2 - lat1)
     dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2) ** 2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
+
 
 class CartCalculationService:
     """Service for cart calculations."""
@@ -29,20 +32,18 @@ class CartCalculationService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def calculate_totals(self, cart_id: uuid.UUID, shipping_address: Optional[dict] = None) -> dict:
+    async def calculate_totals(self, cart_id: uuid.UUID, shipping_address: dict | None = None) -> dict:
         """Calculate cart totals with discounts.
 
         Returns:
             dict with keys: subtotal, discount_amount, tax_amount, shipping_amount, total, currency, item_count
         """
         # Get cart with items and discounts - eager load products to avoid N+1 queries
-        stmt = select(Cart).where(Cart.id == cart_id).options(
-            selectinload(Cart.items).selectinload(CartItem.product)
-        )
+        stmt = select(Cart).where(Cart.id == cart_id).options(selectinload(Cart.items).selectinload(CartItem.product))
         result = await self.db.execute(stmt)
         cart = result.scalar_one_or_none()
         if not cart:
-            raise ValueError("Cart not found")
+            raise NotFoundError("Cart", cart_id)
 
         items = cart.items
 
@@ -59,10 +60,7 @@ class CartCalculationService:
 
         # Get applied discounts
         discount_stmt = select(CartDiscount).where(
-            and_(
-                CartDiscount.cart_id == cart_id,
-                CartDiscount.is_applied == True
-            )
+            and_(CartDiscount.cart_id == cart_id, CartDiscount.is_applied == True)
         )
         discount_result = await self.db.execute(discount_stmt)
         discounts = list(discount_result.scalars().all())
@@ -71,10 +69,12 @@ class CartCalculationService:
         discount_amount = 0.0
         for discount in discounts:
             # Query coupon to see its scope and restrictions
-            coupon_stmt = select(Coupon).where(func.lower(Coupon.code) == discount.coupon_code.lower()).options(
-                selectinload(Coupon.restrictions),
-                selectinload(Coupon.categories),
-                selectinload(Coupon.products)
+            coupon_stmt = (
+                select(Coupon)
+                .where(func.lower(Coupon.code) == (discount.coupon_code or "").lower())
+                .options(
+                    selectinload(Coupon.restrictions), selectinload(Coupon.categories), selectinload(Coupon.products)
+                )
             )
             coupon_res = await self.db.execute(coupon_stmt)
             coupon = coupon_res.scalar_one_or_none()
@@ -86,15 +86,27 @@ class CartCalculationService:
                     allowed_categories = {c.category for c in coupon.categories}
                     applicable_subtotal = 0.0
                     for item in items:
-                        if item.product and item.product.category_id and str(item.product.category_id) in allowed_categories:
-                            price = float(item.unit_price) if item.unit_price is not None else float(item.product.price or 0.0)
+                        if (
+                            item.product
+                            and item.product.category_id
+                            and str(item.product.category_id) in allowed_categories
+                        ):
+                            price = (
+                                float(item.unit_price)
+                                if item.unit_price is not None
+                                else float(item.product.price or 0.0)
+                            )
                             applicable_subtotal += price * item.quantity
                 elif coupon.discount_scope == "specific_products":
                     allowed_products = {p.product_id for p in coupon.products}
                     applicable_subtotal = 0.0
                     for item in items:
                         if item.product_id in allowed_products:
-                            price = float(item.unit_price) if item.unit_price is not None else float(item.product.price or 0.0)
+                            price = (
+                                float(item.unit_price)
+                                if item.unit_price is not None
+                                else float(item.product.price or 0.0)
+                            )
                             applicable_subtotal += price * item.quantity
 
             # Calculate the discount
@@ -111,8 +123,7 @@ class CartCalculationService:
             discount_amount += disc
             discount.discount_amount = Decimal(str(round(disc, 2)))
 
-        # Commit the updated discount amounts to database (if any were calculated)
-        await self.db.commit()
+        # Discount updates already applied via ORM attribute mutation
 
         # Calculate subtotal after discount
         discounted_subtotal = max(0.0, subtotal - discount_amount)
@@ -149,33 +160,20 @@ class CartCalculationService:
                     "id": str(d.id),
                     "coupon_code": d.coupon_code,
                     "description": d.description,
-                    "discount_amount": float(d.discount_amount)
+                    "discount_amount": float(d.discount_amount),
                 }
                 for d in discounts
-            ]
+            ],
         }
 
-    async def calculate_tax(
-        self,
-        cart_id: uuid.UUID,
-        subtotal: float
-    ) -> float:
+    async def calculate_tax(self, cart_id: uuid.UUID, subtotal: float) -> float:
         """Calculate tax for cart. Placeholder implementation."""
         return 0.0
 
-    async def calculate_shipping_details(
-        self,
-        cart: Cart,
-        shipping_address: Optional[dict] = None
-    ) -> dict:
+    async def calculate_shipping_details(self, cart: Cart, shipping_address: dict | None = None) -> dict:
         """Calculate shipping amount and logistics routing details."""
         if not shipping_address:
-            return {
-                "amount": 0.0,
-                "logistics_type": "courier",
-                "calculated_distance_km": 0.0,
-                "route_coordinates": []
-            }
+            return {"amount": 0.0, "logistics_type": "courier", "calculated_distance_km": 0.0, "route_coordinates": []}
 
         # Extract customer coordinates
         customer_lat = shipping_address.get("latitude") or shipping_address.get("lat")
@@ -187,7 +185,7 @@ class CartCalculationService:
                 "amount": 250.0,
                 "logistics_type": "courier",
                 "calculated_distance_km": 0.0,
-                "route_coordinates": []
+                "route_coordinates": [],
             }
 
         try:
@@ -198,19 +196,15 @@ class CartCalculationService:
                 "amount": 250.0,
                 "logistics_type": "courier",
                 "calculated_distance_km": 0.0,
-                "route_coordinates": []
+                "route_coordinates": [],
             }
 
         # Load settings from DB
         from app.domains.admin.services import SystemSettingService
+
         settings = await SystemSettingService.get_setting(self.db, "shipping_settings")
         if not settings:
-            settings = {
-                "flat_fee": 200.0,
-                "rate_per_km": 20.0,
-                "max_radius_km": 50.0,
-                "courier_fee": 450.0
-            }
+            settings = {"flat_fee": 200.0, "rate_per_km": 20.0, "max_radius_km": 50.0, "courier_fee": 450.0}
 
         flat_fee = float(settings.get("flat_fee", 200.0))
         rate_per_km = float(settings.get("rate_per_km", 20.0))
@@ -218,10 +212,7 @@ class CartCalculationService:
         courier_fee = float(settings.get("courier_fee", 450.0))
 
         # Check distance from Office to Customer
-        dist_office_customer = calculate_haversine_distance(
-            OFFICE_LAT, OFFICE_LON,
-            customer_lat, customer_lon
-        )
+        dist_office_customer = calculate_haversine_distance(OFFICE_LAT, OFFICE_LON, customer_lat, customer_lon)
 
         if dist_office_customer > max_radius_km:
             # Outside Nairobi surroundings -> use Courier
@@ -229,14 +220,12 @@ class CartCalculationService:
                 "amount": courier_fee,
                 "logistics_type": "courier",
                 "calculated_distance_km": dist_office_customer,
-                "route_coordinates": [
-                    [OFFICE_LAT, OFFICE_LON],
-                    [customer_lat, customer_lon]
-                ]
+                "route_coordinates": [[OFFICE_LAT, OFFICE_LON], [customer_lat, customer_lon]],
             }
 
         # Nairobi surroundings -> Company Rider route
         from app.domains.vendor.models.vendor_profile import VendorProfile
+
         vendor_ids = {item.product.vendor_id for item in cart.items if item.product and item.product.vendor_id}
 
         vendor_coords = []
@@ -260,10 +249,7 @@ class CartCalculationService:
         # Calculate total distance along the route
         total_distance = 0.0
         for i in range(len(route) - 1):
-            total_distance += calculate_haversine_distance(
-                route[i][0], route[i][1],
-                route[i+1][0], route[i+1][1]
-            )
+            total_distance += calculate_haversine_distance(route[i][0], route[i][1], route[i + 1][0], route[i + 1][1])
 
         shipping_fee = flat_fee + (total_distance * rate_per_km)
 
@@ -271,7 +257,7 @@ class CartCalculationService:
             "amount": round(shipping_fee),
             "logistics_type": "company_rider",
             "calculated_distance_km": round(total_distance, 2),
-            "route_coordinates": route
+            "route_coordinates": route,
         }
 
     async def get_item_price(self, item: CartItem) -> float:

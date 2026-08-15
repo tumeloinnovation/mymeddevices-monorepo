@@ -1,71 +1,88 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
-import asyncio
-from datetime import datetime, timezone
-from fastapi import FastAPI, Depends
+from datetime import UTC, datetime
+from typing import Any
+
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from app.core.logging import logger
-from app.core.middleware import RequestLoggingMiddleware, ContentLengthLimitMiddleware
-from app.core.security_headers import SecurityHeadersMiddleware, APIProtectionMiddleware, NoCacheMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.config import settings
 from app.core.database import get_db
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.domains.auth.api.auth_api import router as auth_router
-from app.domains.auth.api.otp_api import router as otp_router
-from app.domains.users.api.users_api import router as users_router
-from app.domains.customers.api.customer_api import router as customer_router
-from app.domains.vendor.api.vendor_api import router as vendor_router
-from app.domains.vendor.api.vendor_analytics_api import router as vendor_analytics_router
-from app.domains.vendor.api.vendor_earnings_api import router as vendor_earnings_router
-from app.domains.vendor.api.vendor_reviews_api import router as vendor_reviews_router
-from app.domains.catalog.api.catalog_api import router as catalog_router
-from app.domains.catalog.api.storefront_api import router as storefront_router
-from app.domains.shopping.api.cart_api import router as cart_router
-from app.domains.shopping.api.cart_share_api import router as cart_share_router
-from app.domains.shopping.api.coupons_api import router as coupons_router
-from app.domains.shopping.api.vendor_coupons_api import router as vendor_coupons_router
-from app.domains.shopping.api.saved_cart_api import router as saved_cart_router
-from app.domains.shopping.api.admin_shopping_api import router as admin_shopping_router
-from app.domains.shopping.api.checkout_api import router as checkout_router
-from app.domains.shopping.api.order_api import router as order_router
-from app.domains.shopping.api.payment_api import router as payment_router
-from app.domains.shopping.api.shipping_api import router as shipping_router
-from app.domains.payments.api import payments_router as mpesa_payments_router
-from app.domains.payments.api.simple_payments_api import router as simple_payments_router
-from app.domains.shopping.api.admin_orders_api import router as admin_orders_router
-from app.domains.shopping.api.vendor_orders_api import router as vendor_orders_router
-from app.domains.shopping.api.banner_api import router as admin_banners_router
-from app.domains.shopping.api.banner_api import public_router as public_banners_router
+from app.core.logging import logger
+from app.core.middleware import ContentLengthLimitMiddleware, RequestLoggingMiddleware
+from app.core.security_headers import APIProtectionMiddleware, NoCacheMiddleware, SecurityHeadersMiddleware
+from app.core.tasks import start_cleanup_scheduler, start_outbox_relay_scheduler
+from app.domains.admin.api.reviews_moderation_api import router as admin_reviews_router
 from app.domains.admin.api.system_api import router as system_router
 from app.domains.admin.api.users_management_api import router as users_management_router
-from app.domains.admin.api.reviews_moderation_api import router as admin_reviews_router
+from app.domains.auth.api.auth_api import router as auth_router
+from app.domains.auth.api.otp_api import router as otp_router
+from app.domains.catalog.api.catalog_api import router as catalog_router
+from app.domains.catalog.api.storefront_api import router as storefront_router
+from app.domains.customers.api.customer_api import router as customer_router
 from app.domains.recommendations.api.recommendations_api import router as recommendations_router
-from app.domains.tickets.api.tickets_api import router as tickets_router
 from app.domains.returns.api.returns_api import router as returns_router
-from app.domains.payments.api.payment_methods_api import router as payment_methods_router
-from app.core.tasks import start_cleanup_scheduler
+from app.domains.shopping.api.admin_orders_api import router as admin_orders_router
+from app.domains.shopping.api.admin_shopping_api import router as admin_shopping_router
+from app.domains.shopping.api.banner_api import public_router as public_banners_router
+from app.domains.shopping.api.banner_api import router as admin_banners_router
+from app.domains.shopping.api.cart_api import router as cart_router
+from app.domains.shopping.api.cart_share_api import router as cart_share_router
+from app.domains.shopping.api.checkout_api import router as checkout_router
+from app.domains.shopping.api.coupons_api import router as coupons_router
+from app.domains.shopping.api.mobile_money_api import router as mobile_money_router
+from app.domains.shopping.api.mpesa_stk_api import router as mpesa_stk_router
+from app.domains.shopping.api.order_api import router as order_router
+from app.domains.shopping.api.saved_cart_api import router as saved_cart_router
+from app.domains.shopping.api.shipping_api import router as shipping_router
+from app.domains.shopping.api.vendor_coupons_api import router as vendor_coupons_router
+from app.domains.shopping.api.vendor_orders_api import router as vendor_orders_router
+from app.domains.tickets.api.tickets_api import router as tickets_router
+from app.domains.users.api.users_api import router as users_router
+from app.domains.vendor.api.vendor_analytics_api import router as vendor_analytics_router
+from app.domains.vendor.api.vendor_api import router as vendor_router
+from app.domains.vendor.api.vendor_earnings_api import router as vendor_earnings_router
+from app.domains.vendor.api.vendor_reviews_api import router as vendor_reviews_router
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Start cleanup scheduler as a background task
     cleanup_task = asyncio.create_task(start_cleanup_scheduler())
+    # Start outbox relay scheduler to process pending domain events
+    outbox_task = asyncio.create_task(start_outbox_relay_scheduler())
+
     yield
-    # Cancel task on shutdown
-    cleanup_task.cancel()
-    try:
-        await cleanup_task
-    except asyncio.CancelledError:
-        pass
+
+    # Cancel tasks on shutdown
+    for task in (cleanup_task, outbox_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
 
 tags_metadata = [
-    {"name": "Authentication", "description": "Operations for user registration, login, refresh, password reset, and account deletion."},
+    {
+        "name": "Authentication",
+        "description": "Operations for user registration, login, refresh, password reset, and account deletion.",
+    },
     {"name": "OTP", "description": "One-Time Password generation and verification for MFA and identity verification."},
     {"name": "Users", "description": "User profile management and user detail queries."},
     {"name": "Vendor", "description": "Vendor profiles, verification status, store settings, and admin approvals."},
     {"name": "Catalog", "description": "Product catalog listings, categories, file uploads, and pricing markups."},
-    {"name": "Storefront", "description": "Public catalog API endpoints for customers browsing and purchasing devices."},
+    {
+        "name": "Storefront",
+        "description": "Public catalog API endpoints for customers browsing and purchasing devices.",
+    },
 ]
+
+SHOW_DOCS_ENVS = {"development", "dev", "local", "staging", "testing"}
+show_docs = settings.ENVIRONMENT.lower() in SHOW_DOCS_ENVS
 
 app = FastAPI(
     title="MyMedDevices API Portal",
@@ -73,13 +90,47 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
     openapi_tags=tags_metadata,
-    docs_url="/docs",
-    redoc_url="/redoc"
+    docs_url="/docs" if show_docs else None,
+    redoc_url="/redoc" if show_docs else None,
+    openapi_url="/openapi.json" if show_docs else None,
 )
 
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.exc import IntegrityError
-from fastapi.exceptions import RequestValidationError
+
+from app.core.exceptions import AuthorizationError, BusinessRuleError, ConflictError, DomainError, NotFoundError
+
+
+@app.exception_handler(NotFoundError)
+async def not_found_exception_handler(request, exc: NotFoundError):
+    logger.info(f"NotFound: {exc.message}")
+    return JSONResponse(status_code=404, content={"success": False, "detail": exc.message, "code": exc.code})
+
+
+@app.exception_handler(BusinessRuleError)
+async def business_rule_exception_handler(request, exc: BusinessRuleError):
+    logger.warning(f"BusinessRuleViolation: {exc.message}")
+    return JSONResponse(status_code=400, content={"success": False, "detail": exc.message, "code": exc.code})
+
+
+@app.exception_handler(ConflictError)
+async def conflict_exception_handler(request, exc: ConflictError):
+    logger.warning(f"ConflictError: {exc.message}")
+    return JSONResponse(status_code=409, content={"success": False, "detail": exc.message, "code": exc.code})
+
+
+@app.exception_handler(AuthorizationError)
+async def authorization_exception_handler(request, exc: AuthorizationError):
+    logger.warning(f"AuthorizationError: {exc.message}")
+    return JSONResponse(status_code=403, content={"success": False, "detail": exc.message, "code": exc.code})
+
+
+@app.exception_handler(DomainError)
+async def domain_exception_handler(request, exc: DomainError):
+    logger.warning(f"DomainError: {exc.message}")
+    return JSONResponse(status_code=400, content={"success": False, "detail": exc.message, "code": exc.code})
+
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc: RequestValidationError):
@@ -88,24 +139,21 @@ async def validation_exception_handler(request, exc: RequestValidationError):
         loc = " -> ".join([str(x) for x in error["loc"] if x != "body"])
         msg = error["msg"]
         errors.append(f"{loc}: {msg}")
-    
+
     # Create a friendly message for common errors
     friendly_msg = "Validation error"
     if errors:
         friendly_msg = "; ".join(errors)
         # Custom transformations for known errors
         friendly_msg = friendly_msg.replace("Value error, ", "")
-    
+
     from fastapi.encoders import jsonable_encoder
+
     logger.warning(f"Validation error: {friendly_msg}")
     return JSONResponse(
-        status_code=422,
-        content={
-            "success": False, 
-            "detail": friendly_msg,
-            "errors": jsonable_encoder(exc.errors())
-        }
+        status_code=422, content={"success": False, "detail": friendly_msg, "errors": jsonable_encoder(exc.errors())}
     )
+
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request, exc: IntegrityError):
@@ -114,32 +162,25 @@ async def integrity_error_handler(request, exc: IntegrityError):
     if "unique constraint" in err_msg.lower() or "duplicate key" in err_msg.lower():
         if "users_email_key" in err_msg or "users.email" in err_msg:
             return JSONResponse(
-                status_code=409,
-                content={"success": False, "detail": "A user with this email already exists"}
+                status_code=409, content={"success": False, "detail": "A user with this email already exists"}
             )
         return JSONResponse(
             status_code=409,
-            content={"success": False, "detail": "Resource already exists due to unique constraint violation"}
+            content={"success": False, "detail": "Resource already exists due to unique constraint violation"},
         )
     return JSONResponse(
-        status_code=400,
-        content={"success": False, "detail": "Database integrity constraint violation"}
+        status_code=400, content={"success": False, "detail": "Database integrity constraint violation"}
     )
+
 
 # Add CORS Middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "http://localhost:3002",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3001",
-        "http://127.0.0.1:3002",
-    ],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["X-Request-ID", "X-API-Version", "Content-Disposition"],
 )
 
 # Add security headers middleware (runs before logging, so headers are logged)
@@ -171,19 +212,17 @@ app.include_router(vendor_coupons_router, prefix="/api/v1/shopping")
 app.include_router(saved_cart_router, prefix="/api/v1/shopping")
 app.include_router(checkout_router, prefix="/api/v1/shopping")
 app.include_router(order_router, prefix="/api/v1/shopping")
-app.include_router(payment_router, prefix="/api/v1/shopping")
 app.include_router(shipping_router, prefix="/api/v1/shopping")
 app.include_router(admin_shopping_router, prefix="/api/v1")
 app.include_router(recommendations_router, prefix="/api/v1/recommendations")
 app.include_router(tickets_router, prefix="/api/v1")
 app.include_router(returns_router, prefix="/api/v1")
-app.include_router(payment_methods_router, prefix="/api/v1")
 app.include_router(admin_orders_router, prefix="/api/v1")
 app.include_router(vendor_orders_router, prefix="/api/v1")
+app.include_router(mobile_money_router, prefix="/api/v1")
+app.include_router(mpesa_stk_router, prefix="/api/v1")
 app.include_router(admin_banners_router, prefix="/api/v1")
 app.include_router(public_banners_router, prefix="/api/v1/shopping")
-app.include_router(mpesa_payments_router, prefix="/api/v1")
-app.include_router(simple_payments_router, prefix="/api/v1")
 app.include_router(system_router, prefix="/api/v1/admin")
 app.include_router(users_management_router, prefix="/api/v1/admin")
 app.include_router(admin_reviews_router, prefix="/api/v1")
@@ -193,21 +232,21 @@ os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.AVATAR_UPLOAD_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
 @app.get("/")
 async def root():
     logger.info("Hello World from root!")
     return {"message": "Welcome to MyMedDevices API"}
 
+
 @app.get("/health")
 async def health_check(db: AsyncSession = Depends(get_db)):
-    health_status = {
-        "status": "healthy",
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
+    health_status = {"status": "healthy", "timestamp": datetime.now(UTC).isoformat()}
 
     # Check database connectivity
     try:
         from sqlalchemy import text
+
         await db.execute(text("SELECT 1"))
         health_status["database"] = "up"
     except Exception as e:
@@ -217,6 +256,7 @@ async def health_check(db: AsyncSession = Depends(get_db)):
 
     # Check Redis connectivity
     from app.core.rate_limiting import rate_limiter
+
     if rate_limiter.redis_client:
         try:
             await rate_limiter.redis_client.ping()
@@ -240,18 +280,17 @@ async def reset_rate_limits():
     - Clears in-memory rate limit storage
     - Clears Redis rate limit keys if Redis is configured
     - Only works in development/staging environments
+    - DISABLED in production
 
     Returns: Summary of what was cleared
     """
     from app.core.rate_limiting import rate_limiter
 
-    if settings.ENVIRONMENT == "production":
-        return JSONResponse(
-            status_code=403,
-            content={"error": "Rate limit reset is not allowed in production"}
-        )
+    # SECURITY: Disable debug endpoints in production (case-insensitive check)
+    if settings.ENVIRONMENT.lower() == "production":
+        return JSONResponse(status_code=403, content={"error": "Rate limit reset is not allowed in production"})
 
-    result = {"cleared": {}}
+    result: dict[str, Any] = {"cleared": {}}
 
     # Clear in-memory storage
     if rate_limiter._requests:

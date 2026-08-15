@@ -1,5 +1,4 @@
 import re
-from pydantic import field_validator
 
 
 class PasswordValidator:
@@ -13,9 +12,9 @@ class PasswordValidator:
     REQUIRE_SPECIAL = True
 
     # Regex patterns
-    UPPERCASE_PATTERN = re.compile(r'[A-Z]')
-    LOWERCASE_PATTERN = re.compile(r'[a-z]')
-    DIGIT_PATTERN = re.compile(r'\d')
+    UPPERCASE_PATTERN = re.compile(r"[A-Z]")
+    LOWERCASE_PATTERN = re.compile(r"[a-z]")
+    DIGIT_PATTERN = re.compile(r"\d")
     SPECIAL_PATTERN = re.compile(r'[!@#$%^&*()_+\-=\[\]{};\'\\:"|<>,./?`~]')
 
     @classmethod
@@ -48,9 +47,7 @@ class PasswordValidator:
     @classmethod
     def get_requirements(cls) -> list[str]:
         """Return a list of password requirements for display"""
-        requirements = [
-            f"At least {cls.MIN_LENGTH} characters long"
-        ]
+        requirements = [f"At least {cls.MIN_LENGTH} characters long"]
         if cls.REQUIRE_UPPERCASE:
             requirements.append("One uppercase letter")
         if cls.REQUIRE_LOWERCASE:

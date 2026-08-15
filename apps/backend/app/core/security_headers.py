@@ -6,8 +6,8 @@ against various web vulnerabilities and attacks.
 """
 
 from fastapi import Request, Response
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.middleware.base import RequestResponseEndpoint
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
+
 from app.core.config import settings
 from app.core.logging import logger
 
@@ -66,56 +66,61 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
 
         # Content-Security-Policy
-        csp_directives = self._get_csp_directives()
+        path = request.url.path
+        csp_directives = self._get_csp_directives(path=path)
         response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
 
-        # Strict-Transport-Security (HTTPS only, production only)
-        if settings.ENVIRONMENT == "production":
-            # 1 year max-age, include subdomains
+        # Strict-Transport-Security (HTTPS only, production and staging)
+        if settings.ENVIRONMENT.lower() in ("production", "staging"):
+            # 1 year max-age, include subdomains, preload
             response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
         else:
-            logger.debug("Skipping HSTS in development environment")
+            logger.debug("Skipping HSTS in development/testing environment")
+
+        # Mask server signature
+        response.headers["Server"] = "MyMedAPI"
+        if "X-Powered-By" in response.headers:
+            del response.headers["X-Powered-By"]
 
         return response
 
-    def _get_csp_directives(self) -> list[str]:
+    def _get_csp_directives(self, path: str = "") -> list[str]:
         """
-        Build CSP directives based on environment.
+        Build CSP directives based on environment and requested path.
 
-        Development: Allow localhost, inline scripts for dev tools
-        Production: Strict policy, block all external resources except approved
+        Development / Docs: Allow localhost, Swagger UI / ReDoc CDNs, inline scripts
+        Production: Strict policy, block unauthorized external resources
         """
-        is_dev = settings.ENVIRONMENT in ("development", "testing")
+        is_dev = settings.ENVIRONMENT.lower() in ("development", "testing", "local", "dev")
+        is_docs = path in ("/docs", "/redoc", "/openapi.json") or path.startswith("/docs") or path.startswith("/redoc")
 
-        if is_dev:
-            # Development CSP - allows more for debugging
+        if is_dev or is_docs:
+            # Development & API Docs CSP - allows Swagger UI, ReDoc, and local dev
             return [
                 "default-src 'self'",
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* http://127.0.0.1:*",
-                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-                "font-src 'self' https://fonts.gstatic.com",
-                "img-src 'self' data: blob: https:",
-                "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*",
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com http://localhost:* http://127.0.0.1:*",
+                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com",
+                "font-src 'self' https://fonts.gstatic.com data:",
+                "img-src 'self' data: blob: https: https://fastapi.tiangolo.com https://cdn.jsdelivr.net",
+                "worker-src 'self' blob:",
+                "connect-src 'self' http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:* https:",
                 "frame-ancestors 'none'",
                 "form-action 'self'",
                 "base-uri 'self'",
-                "upgrade-insecure-requests",
             ]
         else:
-            # Production CSP - strict
+            # Production CSP - strict policy
             return [
                 "default-src 'self'",
-                "script-src 'self' 'nonce-{RANDOM}' 'strict-dynamic'",  # Requires nonce implementation
+                "script-src 'self'",
                 "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-                "font-src 'self' https://fonts.gstatic.com",
-                "img-src 'self' data: blob: https: 'self'",
+                "font-src 'self' https://fonts.gstatic.com data:",
+                "img-src 'self' data: blob: https:",
                 "connect-src 'self' https:",
                 "frame-ancestors 'none'",
                 "form-action 'self'",
                 "base-uri 'self'",
-                "require-trusted-types-for 'script'",
                 "upgrade-insecure-requests",
-                "block-all-mixed-content",
             ]
 
 
@@ -136,6 +141,7 @@ class APIProtectionMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         # Add unique request ID for tracing
         import uuid
+
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
 

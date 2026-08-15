@@ -3,20 +3,21 @@ Admin Review Moderation API
 
 Endpoints for admins to view and moderate all reviews across the platform.
 """
+
 import uuid
-from typing import Annotated, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.responses import success_response, ApiSuccessResponse
 from app.core.dependencies import require_role
+from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.auth.models.user import User
 from app.domains.customers.repositories.customer_repository import ReviewRepository
 from app.domains.customers.schemas.customer_schemas import (
-    ReviewResponse,
-    VendorReviewResponse,
     ReviewModerationRequest,
+    ReviewResponse,
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin Reviews"])
@@ -47,7 +48,8 @@ def format_admin_review(review) -> dict:
         "customer_email": customer_user.email if customer_user else None,
         "customer_name": (
             f"{customer_user.first_name} {customer_user.last_name}".strip()
-            if customer_user and (getattr(customer_user, "first_name", None) or getattr(customer_user, "last_name", None))
+            if customer_user
+            and (getattr(customer_user, "first_name", None) or getattr(customer_user, "last_name", None))
             else (customer_user.email if customer_user else None)
         ),
         # Add product info
@@ -60,13 +62,13 @@ def format_admin_review(review) -> dict:
 @router.get("/reviews", response_model=ApiSuccessResponse[dict])
 async def get_all_reviews(
     current_user: Annotated[User, Depends(require_role("admin"))],
-    moderation_status: Optional[str] = Query(None, description="Filter by moderation status"),
-    contains_profanity: Optional[bool] = Query(None, description="Filter by profanity flag"),
-    vendor_id: Optional[str] = Query(None, description="Filter by vendor ID"),
-    product_id: Optional[str] = Query(None, description="Filter by product ID"),
+    moderation_status: str | None = Query(None, description="Filter by moderation status"),
+    contains_profanity: bool | None = Query(None, description="Filter by profanity flag"),
+    vendor_id: str | None = Query(None, description="Filter by vendor ID"),
+    product_id: str | None = Query(None, description="Filter by product ID"),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get all reviews across the platform with filtering and pagination.
@@ -79,17 +81,17 @@ async def get_all_reviews(
         reviews, total = await review_repo.get_flagged_reviews(
             contains_profanity=contains_profanity if contains_profanity is not None else True,
             limit=limit,
-            offset=(page - 1) * limit
+            offset=(page - 1) * limit,
         )
     else:
         # Get all reviews (vendor-specific method works for getting reviews)
         # For now, let's implement a simpler approach
-        from sqlalchemy import select, and_
-        from app.domains.customers.models.review import Review
+        from sqlalchemy import func, select
+        from sqlalchemy.orm import selectinload
+
         from app.domains.catalog.models.product import Product
         from app.domains.customers.models.customer_profile import CustomerProfile
-        from sqlalchemy.orm import selectinload
-        from sqlalchemy import func
+        from app.domains.customers.models.review import Review
 
         # Build base query
         stmt = (
@@ -125,12 +127,7 @@ async def get_all_reviews(
     # Format reviews
     formatted_reviews = [format_admin_review(r) for r in reviews]
 
-    return success_response({
-        "reviews": formatted_reviews,
-        "total": total,
-        "page": page,
-        "limit": limit
-    })
+    return success_response({"reviews": formatted_reviews, "total": total, "page": page, "limit": limit})
 
 
 @router.put("/reviews/{review_id}/moderate", response_model=ApiSuccessResponse[ReviewResponse])
@@ -138,7 +135,7 @@ async def moderate_review_admin(
     review_id: uuid.UUID,
     data: ReviewModerationRequest,
     current_user: Annotated[User, Depends(require_role("admin"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Moderate any review on the platform.
@@ -149,17 +146,14 @@ async def moderate_review_admin(
     # Get the review
     review = await review_repo.get_with_details(review_id)
     if not review:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Review not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
 
     # Moderate the review
     moderated_review = await review_repo.moderate_review(
         review_id=review_id,
         moderation_status=data.moderation_status,
         moderated_by_id=current_user.id,
-        reason=data.reason
+        reason=data.reason,
     )
 
     return success_response(format_admin_review(moderated_review))
@@ -167,13 +161,13 @@ async def moderate_review_admin(
 
 @router.get("/reviews/summary", response_model=ApiSuccessResponse[dict])
 async def get_reviews_summary_admin(
-    current_user: Annotated[User, Depends(require_role("admin"))],
-    db: AsyncSession = Depends(get_db)
+    current_user: Annotated[User, Depends(require_role("admin"))], db: AsyncSession = Depends(get_db)
 ):
     """
     Get platform-wide review statistics.
     """
-    from sqlalchemy import select, func
+    from sqlalchemy import func, select
+
     from app.domains.customers.models.review import Review
 
     # Get counts
@@ -209,15 +203,17 @@ async def get_reviews_summary_admin(
         rating_result = await db.execute(rating_stmt)
         rating_distribution[str(i)] = rating_result.scalar_one()
 
-    return success_response({
-        "total_reviews": total,
-        "average_rating": round(avg_rating, 1),
-        "visible_reviews": visible_count,
-        "hidden_reviews": hidden_count,
-        "removed_reviews": removed_count,
-        "flagged_profanity": profanity_count,
-        "rating_distribution": rating_distribution
-    })
+    return success_response(
+        {
+            "total_reviews": total,
+            "average_rating": round(avg_rating, 1),
+            "visible_reviews": visible_count,
+            "hidden_reviews": hidden_count,
+            "removed_reviews": removed_count,
+            "flagged_profanity": profanity_count,
+            "rating_distribution": rating_distribution,
+        }
+    )
 
 
 @router.get("/reviews/flagged", response_model=ApiSuccessResponse[dict])
@@ -225,7 +221,7 @@ async def get_flagged_reviews(
     current_user: Annotated[User, Depends(require_role("admin"))],
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Get reviews flagged for profanity or moderation.
@@ -234,16 +230,9 @@ async def get_flagged_reviews(
     review_repo = ReviewRepository(db)
 
     reviews, total = await review_repo.get_flagged_reviews(
-        contains_profanity=True,
-        limit=limit,
-        offset=(page - 1) * limit
+        contains_profanity=True, limit=limit, offset=(page - 1) * limit
     )
 
     formatted_reviews = [format_admin_review(r) for r in reviews]
 
-    return success_response({
-        "reviews": formatted_reviews,
-        "total": total,
-        "page": page,
-        "limit": limit
-    })
+    return success_response({"reviews": formatted_reviews, "total": total, "page": page, "limit": limit})

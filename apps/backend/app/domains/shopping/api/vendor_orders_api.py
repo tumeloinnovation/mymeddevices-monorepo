@@ -8,46 +8,51 @@ This API allows vendors to manage their orders:
 All endpoints enforce vendor data isolation - vendors can only see and modify
 their own order items.
 """
-from typing import Annotated, List, Optional
+
+from typing import Annotated
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.responses import success_response, ApiSuccessResponse
 from app.core.dependencies import require_role
+from app.core.logging import logger
+from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.auth.models.user import User
-from app.domains.vendor.models.vendor_profile import VendorProfile
+from app.domains.shopping.models.order import OrderTimelineEvent
 from app.domains.shopping.schemas.order_schemas import (
-    VendorOrderListResponse,
-    VendorOrderResponse,
+    OrderTimelineEventResponse,
     VendorOrderDetailResponse,
     VendorOrderItemResponse,
-    OrderTimelineEventResponse
+    VendorOrderListResponse,
+    VendorOrderResponse,
 )
 from app.domains.shopping.services.order_service import OrderService
 from app.domains.shopping.services.order_state_machine import InvalidStateTransitionError
-from app.domains.shopping.models.order import OrderItem, OrderTimelineEvent
-from app.domains.shopping.models.payment import Payment
-
-from pydantic import BaseModel, Field
-
+from app.domains.vendor.models.vendor_profile import VendorProfile
 
 # ============================================================================
 # SCHEMAS
 # ============================================================================
 
+
 class OrderItemStatusUpdate(BaseModel):
     """Schema for updating order item fulfillment status."""
-    status: str = Field(..., description="New fulfillment status (pending, processing, packed, shipped, delivered, cancelled, refunded)")
+
+    status: str = Field(
+        ..., description="New fulfillment status (pending, processing, packed, shipped, delivered, cancelled, refunded)"
+    )
+
 
 class OrderItemTrackingUpdate(BaseModel):
     """Schema for adding tracking information to an order item."""
+
     tracking_number: str = Field(..., description="Tracking number from shipping carrier")
-    tracking_url: str = Field(None, description="URL to track the shipment")
-    carrier: Optional[str] = Field(None, description="Shipping carrier name")
+    tracking_url: str | None = Field(None, description="URL to track the shipment")
+    carrier: str | None = Field(None, description="Shipping carrier name")
 
 
 # ============================================================================
@@ -63,11 +68,12 @@ router = APIRouter(prefix="/vendor/orders", tags=["Vendor Orders"])
 # HELPERS
 # ============================================================================
 
+
 def build_vendor_order_response(order, vendor_profile_id) -> VendorOrderResponse:
     # 1. Determine Customer Name & Email
     customer_name = "Guest User"
     customer_email = "guest@mymeddevices.com"
-    
+
     if order.user:
         first = order.user.first_name or ""
         last = order.user.last_name or ""
@@ -80,15 +86,15 @@ def build_vendor_order_response(order, vendor_profile_id) -> VendorOrderResponse
             first = order.shipping_address.get("first_name") or ""
             last = order.shipping_address.get("last_name") or ""
             customer_name = f"{first} {last}".strip()
-            
+
         if order.guest_token:
             customer_email = f"guest-{order.guest_token[:8]}@mymeddevices.com"
-            
+
     # 2. Get Vendor Items
     vendor_items = [item for item in order.items if item.vendor_id == vendor_profile_id]
     vendor_amount = sum(item.subtotal for item in vendor_items)
     item_count = sum(item.quantity for item in vendor_items)
-    
+
     return VendorOrderResponse(
         id=order.id,
         order_number=order.order_number,
@@ -100,33 +106,29 @@ def build_vendor_order_response(order, vendor_profile_id) -> VendorOrderResponse
         item_count=int(item_count),
         created_at=order.created_at,
         customer_notes=order.notes,
-        items=[VendorOrderItemResponse.model_validate(item) for item in vendor_items]
+        items=[VendorOrderItemResponse.model_validate(item) for item in vendor_items],
     )
 
 
 async def build_vendor_order_detail_response(order, vendor_profile_id, db: AsyncSession) -> VendorOrderDetailResponse:
     base = build_vendor_order_response(order, vendor_profile_id)
-    
-    # Get payments for this order
-    stmt = select(Payment).where(Payment.order_id == order.id)
-    result = await db.execute(stmt)
-    payment = result.scalars().first()
-    
-    payment_method = payment.payment_method if payment else "M-Pesa"
-    payment_status = payment.status if payment else "Paid"
-    
+
+    # COD-only payment method
+    payment_method = order.payment_method or "cod"
+    payment_status = "pending"  # COD is always pending until delivery
+
     vendor_items = [item for item in order.items if item.vendor_id == vendor_profile_id]
-    
+
     # Construct items response
     items_response = []
     for item in vendor_items:
         items_response.append(VendorOrderItemResponse.model_validate(item))
-        
+
     # Construct timeline response
     timeline_response = []
     for evt in order.timeline_events:
         timeline_response.append(OrderTimelineEventResponse.model_validate(evt))
-        
+
     return VendorOrderDetailResponse(
         id=base.id,
         order_number=base.order_number,
@@ -142,7 +144,7 @@ async def build_vendor_order_detail_response(order, vendor_profile_id, db: Async
         items=items_response,
         payment_method=payment_method,
         payment_status=payment_status,
-        timeline=timeline_response
+        timeline=timeline_response,
     )
 
 
@@ -150,14 +152,15 @@ async def build_vendor_order_detail_response(order, vendor_profile_id, db: Async
 # ENDPOINTS
 # ============================================================================
 
+
 @router.get("", response_model=ApiSuccessResponse[VendorOrderListResponse])
 async def vendor_list_orders(
     current_user: Annotated[User, Depends(require_role("vendor"))],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    status_filter: Optional[str] = Query(None, alias="status"),
-    search: Optional[str] = Query(None),
-    db: AsyncSession = Depends(get_db)
+    status_filter: str | None = Query(None, alias="status"),
+    search: str | None = Query(None),
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List orders containing products from this vendor with status filtering and search.
@@ -171,19 +174,12 @@ async def vendor_list_orders(
     vendor_profile = result.scalar_one_or_none()
 
     if not vendor_profile:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Vendor profile not found"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vendor profile not found")
 
     # Get orders containing this vendor's items
     service = OrderService(db)
     orders, total = await service.list_orders(
-        vendor_id=vendor_profile.id,
-        status=status_filter,
-        search=search,
-        offset=(page - 1) * page_size,
-        limit=page_size
+        vendor_id=vendor_profile.id, status=status_filter, search=search, offset=(page - 1) * page_size, limit=page_size
     )
 
     secured_orders = []
@@ -191,26 +187,23 @@ async def vendor_list_orders(
         try:
             secured_order = build_vendor_order_response(order, vendor_profile.id)
             secured_orders.append(secured_order)
-        except Exception:
+        except Exception as exc:
+            logger.error(
+                f"Failed to build vendor order response for order {order.id} (vendor {vendor_profile.id}): {exc}",
+                exc_info=True,
+            )
             continue
 
     import math
+
     pages = math.ceil(total / page_size) if page_size > 0 else 1
 
-    return success_response({
-        "items": secured_orders,
-        "total": total,
-        "page": page,
-        "limit": page_size,
-        "pages": pages
-    })
+    return success_response({"items": secured_orders, "total": total, "page": page, "limit": page_size, "pages": pages})
 
 
 @router.get("/{order_id}", response_model=ApiSuccessResponse[VendorOrderDetailResponse])
 async def vendor_get_order(
-    order_id: UUID,
-    current_user: Annotated[User, Depends(require_role("vendor"))],
-    db: AsyncSession = Depends(get_db)
+    order_id: UUID, current_user: Annotated[User, Depends(require_role("vendor"))], db: AsyncSession = Depends(get_db)
 ):
     """
     Get details of a specific order.
@@ -223,27 +216,20 @@ async def vendor_get_order(
     vendor_profile = result.scalar_one_or_none()
 
     if not vendor_profile:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Vendor profile not found"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vendor profile not found")
 
     # Get the order
     service = OrderService(db)
     order = await service.get_order(order_id)
 
     if not order:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     # Check if there are any items belonging to this vendor
     vendor_items = [item for item in order.items if item.vendor_id == vendor_profile.id]
     if not vendor_items:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No items from this vendor found in this order"
+            status_code=status.HTTP_404_NOT_FOUND, detail="No items from this vendor found in this order"
         )
 
     response_dto = await build_vendor_order_detail_response(order, vendor_profile.id, db)
@@ -256,7 +242,7 @@ async def vendor_update_item_status(
     item_id: UUID,
     data: OrderItemStatusUpdate,
     current_user: Annotated[User, Depends(require_role("vendor"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Update fulfillment status for a specific order item with validation.
@@ -270,19 +256,13 @@ async def vendor_update_item_status(
     vendor_profile = result.scalar_one_or_none()
 
     if not vendor_profile:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Vendor profile not found"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vendor profile not found")
 
     try:
         # Use service with validation and auto-rollup
         service = OrderService(db)
         await service.update_order_item_status(
-            item_id=item_id,
-            new_status=data.status,
-            vendor_id=vendor_profile.id,
-            auto_rollup=True
+            item_id=item_id, new_status=data.status, vendor_id=vendor_profile.id, auto_rollup=True
         )
 
         # Get updated order
@@ -291,15 +271,9 @@ async def vendor_update_item_status(
         return success_response(response_dto)
 
     except InvalidStateTransitionError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid status transition: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status transition: {str(e)}")
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
 
 
 @router.post("/{order_id}/items/{item_id}/tracking", response_model=ApiSuccessResponse[VendorOrderDetailResponse])
@@ -308,7 +282,7 @@ async def vendor_add_tracking_info(
     item_id: UUID,
     data: OrderItemTrackingUpdate,
     current_user: Annotated[User, Depends(require_role("vendor"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     Add tracking information for a specific order item.
@@ -321,33 +295,28 @@ async def vendor_add_tracking_info(
     vendor_profile = result.scalar_one_or_none()
 
     if not vendor_profile:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Vendor profile not found"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Vendor profile not found")
 
     # Get the order to confirm and log transition
     service = OrderService(db)
     order = await service.get_order(order_id)
     if not order:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
     # Find the specific order item in order.items
-    order_item = next((item for item in order.items if item.id == item_id and item.vendor_id == vendor_profile.id), None)
+    order_item = next(
+        (item for item in order.items if item.id == item_id and item.vendor_id == vendor_profile.id), None
+    )
     if not order_item:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Order item not found or does not belong to this vendor"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Order item not found or does not belong to this vendor"
         )
 
     # Update tracking information
     order_item.tracking_number = data.tracking_number
     if data.tracking_url:
         order_item.tracking_url = data.tracking_url
-        
+
     # Write timeline event
     carrier_name = data.carrier or "Courier"
     timeline_event = OrderTimelineEvent(
@@ -355,10 +324,10 @@ async def vendor_add_tracking_info(
         order_id=order_id,
         status=order.status.value if hasattr(order.status, "value") else str(order.status),
         message=f"Tracking details added for '{order_item.product.name}': Shipped via {carrier_name}, Tracking #{data.tracking_number}",
-        created_by=current_user.id
+        created_by=current_user.id,
     )
     db.add(timeline_event)
-    
+
     await db.commit()
     order = await service.get_order(order_id)
 

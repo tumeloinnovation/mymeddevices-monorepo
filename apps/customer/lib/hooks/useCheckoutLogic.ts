@@ -425,9 +425,10 @@ export function useCheckoutLogic() {
 
             toast.success(`Order #${orderNumber} placed successfully!`);
 
-            // Clear cart locally and redirect
+            // Clear cart locally and redirect (include guest_token param for guest orders)
             clearLocalOnly();
-            router.push(`/orders/${orderId}`);
+            const guestParam = orderGuestToken ? `?guest_token=${encodeURIComponent(orderGuestToken)}` : '';
+            router.push(`/orders/${orderId}${guestParam}`);
         } catch (error: any) {
             console.error('Checkout error:', error);
             let errorMessage = error?.message || 'Failed to place order. Please try again.';

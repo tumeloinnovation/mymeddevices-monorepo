@@ -1,23 +1,25 @@
 import sys
 import time
-from typing import Dict
+
 from app.core.config import settings
 from app.core.logging import logger
+
 
 class TokenBlacklist:
     def __init__(self):
         self.redis_client = None
         # In-memory blacklist fallback: {jti: expiry_timestamp}
-        self._in_memory_blacklist: Dict[str, float] = {}
+        self._in_memory_blacklist: dict[str, float] = {}
 
         # Detect testing environment
         is_testing = "pytest" in sys.modules or "unittest" in sys.modules
 
-        if settings.ENVIRONMENT == "production":
+        if settings.ENVIRONMENT.lower() == "production":
             if not settings.REDIS_URL:
                 raise ValueError("REDIS_URL must be configured when running in a production environment.")
             try:
                 import redis.asyncio as aioredis
+
                 self.redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
                 logger.info("Redis token blacklist initialized for production.")
             except Exception as e:
@@ -26,6 +28,7 @@ class TokenBlacklist:
         elif not is_testing and settings.REDIS_URL:
             try:
                 import redis.asyncio as aioredis
+
                 self.redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
                 logger.info("Redis token blacklist initialized.")
             except Exception as e:
@@ -92,6 +95,7 @@ class TokenBlacklist:
     def clear(self) -> None:
         """Clear the in-memory blacklist (mainly for testing cleanup)."""
         self._in_memory_blacklist.clear()
+
 
 # Global singleton instance
 token_blacklist = TokenBlacklist()

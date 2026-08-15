@@ -19,7 +19,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal
-from app.core.logging import logger
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.services.typesense_client import TypesenseClient
 
@@ -73,7 +72,7 @@ async def reindex():
 
     print()
     print("─" * 50)
-    print(f"✅  Reindex complete.")
+    print("✅  Reindex complete.")
     print(f"   Indexed:       {ok}")
     print(f"   Failed:        {failed}")
     print(f"   No category:   {no_category}  ← these products have no category in the DB")

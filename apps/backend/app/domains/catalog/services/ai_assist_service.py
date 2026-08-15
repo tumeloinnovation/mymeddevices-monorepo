@@ -1,10 +1,12 @@
 import json
+from typing import Any
+
 import httpx
-from typing import Optional, Dict, List, Any
-from app.domains.catalog.models.product import Product
-from app.domains.catalog.models.category import Category
+
 from app.core.logging import logger
 from app.domains.catalog.config import settings as catalog_settings
+from app.domains.catalog.models.category import Category
+from app.domains.catalog.models.product import Product
 
 
 class AIAssistService:
@@ -14,11 +16,8 @@ class AIAssistService:
     """
 
     async def generate_descriptions_from_name_brand(
-        self,
-        product_name: str,
-        brand: str,
-        category: Optional[str] = None
-    ) -> Dict[str, Any]:
+        self, product_name: str, brand: str, category: str | None = None
+    ) -> dict[str, Any]:
         """
         Generate AI descriptions from product name and brand (before product creation).
 
@@ -67,12 +66,8 @@ class AIAssistService:
         )
 
         payload = {
-            "systemInstruction": {
-                "parts": [{"text": system_instruction}]
-            },
-            "contents": [
-                {"parts": [{"text": prompt}]}
-            ],
+            "systemInstruction": {"parts": [{"text": system_instruction}]},
+            "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "responseMimeType": "application/json",
                 "responseSchema": {
@@ -81,11 +76,11 @@ class AIAssistService:
                         "description": {"type": "STRING"},
                         "short_description": {"type": "STRING"},
                         "meta_title": {"type": "STRING"},
-                        "meta_description": {"type": "STRING"}
+                        "meta_description": {"type": "STRING"},
                     },
-                    "required": ["description", "short_description", "meta_title", "meta_description"]
-                }
-            }
+                    "required": ["description", "short_description", "meta_title", "meta_description"],
+                },
+            },
         }
 
         try:
@@ -98,27 +93,24 @@ class AIAssistService:
                 text_out = data["candidates"][0]["content"]["parts"][0]["text"]
                 suggestions = json.loads(text_out)
 
-                logger.info(f"AI assist successfully generated descriptions for product '{product_name}' using Gemini API")
+                logger.info(
+                    f"AI assist successfully generated descriptions for product '{product_name}' using Gemini API"
+                )
                 return {
                     "suggestions": suggestions,
                     "confidence": {
                         "description": 0.9,
                         "short_description": 0.9,
                         "meta_title": 0.9,
-                        "meta_description": 0.9
-                    }
+                        "meta_description": 0.9,
+                    },
                 }
 
         except Exception as e:
             logger.error(f"Failed to generate descriptions using Gemini API: {str(e)}. Falling back to stub.")
             return await self._generate_stub_descriptions(product_name, brand, category_name)
 
-    async def _generate_stub_descriptions(
-        self,
-        product_name: str,
-        brand: str,
-        category_name: str
-    ) -> Dict[str, Any]:
+    async def _generate_stub_descriptions(self, product_name: str, brand: str, category_name: str) -> dict[str, Any]:
         """Fallback template-based descriptions if API call fails or key is missing."""
         suggestions = {
             "short_description": (
@@ -142,25 +134,17 @@ class AIAssistService:
             "meta_description": (
                 f"Shop {product_name} by {brand}. Professional {category_name.lower()} "
                 f"for hospitals & clinics in Kenya. Quality medical equipment with warranty."
-            )
+            ),
         }
 
         return {
             "suggestions": suggestions,
-            "confidence": {
-                "description": 0.4,
-                "short_description": 0.4,
-                "meta_title": 0.5,
-                "meta_description": 0.4
-            }
+            "confidence": {"description": 0.4, "short_description": 0.4, "meta_title": 0.5, "meta_description": 0.4},
         }
 
     async def generate_suggestions(
-        self,
-        product: Product,
-        category: Optional[Category],
-        fields_to_generate: List[str]
-    ) -> Dict[str, Any]:
+        self, product: Product, category: Category | None, fields_to_generate: list[str]
+    ) -> dict[str, Any]:
         """
         Generate AI suggestions for missing/incomplete product fields.
 
@@ -218,41 +202,27 @@ class AIAssistService:
         )
 
         # Build JSON response schema for Gemini Structured Output
-        properties = {}
+        properties: dict[str, Any] = {}
         if "description" in fields_to_generate:
             properties["description"] = {"type": "STRING"}
         if "short_description" in fields_to_generate:
             properties["short_description"] = {"type": "STRING"}
         if "specifications" in fields_to_generate:
-            properties["specifications"] = {
-                "type": "OBJECT",
-                "additionalProperties": {"type": "STRING"}
-            }
+            properties["specifications"] = {"type": "OBJECT", "additionalProperties": {"type": "STRING"}}
         if "tags" in fields_to_generate:
-            properties["tags"] = {
-                "type": "ARRAY",
-                "items": {"type": "STRING"}
-            }
+            properties["tags"] = {"type": "ARRAY", "items": {"type": "STRING"}}
         if "meta_title" in fields_to_generate:
             properties["meta_title"] = {"type": "STRING"}
         if "meta_description" in fields_to_generate:
             properties["meta_description"] = {"type": "STRING"}
 
         payload = {
-            "systemInstruction": {
-                "parts": [{"text": system_instruction}]
-            },
-            "contents": [
-                {"parts": [{"text": prompt}]}
-            ],
+            "systemInstruction": {"parts": [{"text": system_instruction}]},
+            "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "responseSchema": {
-                    "type": "OBJECT",
-                    "properties": properties,
-                    "required": fields_to_generate
-                }
-            }
+                "responseSchema": {"type": "OBJECT", "properties": properties, "required": fields_to_generate},
+            },
         }
 
         try:
@@ -260,33 +230,27 @@ class AIAssistService:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 data = response.json()
-                
+
                 # Parse output
                 text_out = data["candidates"][0]["content"]["parts"][0]["text"]
                 suggestions = json.loads(text_out)
-                
+
                 # Setup default confidence scores
                 confidence = {field: 0.9 for field in fields_to_generate if field in suggestions}
-                
+
                 logger.info(f"AI assist successfully generated fields for product {product.id} using Gemini API")
-                return {
-                    "suggestions": suggestions,
-                    "confidence": confidence
-                }
+                return {"suggestions": suggestions, "confidence": confidence}
 
         except Exception as e:
             logger.error(f"Failed to generate suggestions using Gemini API: {str(e)}. Falling back to stub.")
             return await self._generate_stub_suggestions(product, category, fields_to_generate)
 
     async def _generate_stub_suggestions(
-        self,
-        product: Product,
-        category: Optional[Category],
-        fields_to_generate: List[str]
-    ) -> Dict[str, Any]:
+        self, product: Product, category: Category | None, fields_to_generate: list[str]
+    ) -> dict[str, Any]:
         """Fallback template-based suggestions if API call fails or key is missing."""
-        suggestions = {}
-        confidence = {}
+        suggestions: dict[str, Any] = {}
+        confidence: dict[str, Any] = {}
         category_name = category.name if category else "Medical Device"
         category_slug = category.slug if category else "medical-device"
 
@@ -321,54 +285,68 @@ class AIAssistService:
 
                 # Category-specific specifications
                 if any(word in category_lower for word in ["imaging", "x-ray", "ultrasound", "mri", "ct", "scanner"]):
-                    specs.update({
-                        "Power Supply": "220-240V AC, 50/60Hz",
-                        "Imaging Technology": "Digital",
-                        "Display": "High-resolution medical grade monitor",
-                        "Image Storage": "DICOM compliant",
-                        "Safety Standards": "IEC 60601-1 compliant"
-                    })
+                    specs.update(
+                        {
+                            "Power Supply": "220-240V AC, 50/60Hz",
+                            "Imaging Technology": "Digital",
+                            "Display": "High-resolution medical grade monitor",
+                            "Image Storage": "DICOM compliant",
+                            "Safety Standards": "IEC 60601-1 compliant",
+                        }
+                    )
                 elif any(word in category_lower for word in ["monitor", "patient", "ecg", "pulse", "oximeter"]):
-                    specs.update({
-                        "Display": "LCD/LED touchscreen",
-                        "Battery Backup": "Yes, minimum 4 hours",
-                        "Parameters Monitored": "Multi-parameter",
-                        "Alarm System": "Audio-visual with adjustable thresholds",
-                        "Data Export": "HL7/EMR compatible"
-                    })
+                    specs.update(
+                        {
+                            "Display": "LCD/LED touchscreen",
+                            "Battery Backup": "Yes, minimum 4 hours",
+                            "Parameters Monitored": "Multi-parameter",
+                            "Alarm System": "Audio-visual with adjustable thresholds",
+                            "Data Export": "HL7/EMR compatible",
+                        }
+                    )
                 elif any(word in category_lower for word in ["surgical", "instrument", "table", "light", "microscope"]):
-                    specs.update({
-                        "Material": "Medical-grade stainless steel",
-                        "Sterilization": "Autoclave compatible",
-                        "Dimensions": "Standard hospital size",
-                        "Weight Capacity": "Standard patient weight",
-                        "Finish": "Corrosion-resistant"
-                    })
+                    specs.update(
+                        {
+                            "Material": "Medical-grade stainless steel",
+                            "Sterilization": "Autoclave compatible",
+                            "Dimensions": "Standard hospital size",
+                            "Weight Capacity": "Standard patient weight",
+                            "Finish": "Corrosion-resistant",
+                        }
+                    )
                 elif any(word in category_lower for word in ["laboratory", "centrifuge", "analyzer", "microscope"]):
-                    specs.update({
-                        "Power Requirements": "220-240V AC",
-                        "Capacity": "Standard tube/sample size",
-                        "Speed/Range": "Variable speed control",
-                        "Temperature Control": "Ambient to specified range",
-                        "Noise Level": "Low operation noise"
-                    })
-                elif any(word in category_lower for word in ["thermometer", "bp", "blood pressure", "weighing", "scale"]):
-                    specs.update({
-                        "Measurement Range": "Standard clinical range",
-                        "Accuracy": "Clinically validated accuracy",
-                        "Display": "Digital LCD/LED",
-                        "Power Source": "Battery + AC adapter",
-                        "Response Time": "< 5 seconds"
-                    })
+                    specs.update(
+                        {
+                            "Power Requirements": "220-240V AC",
+                            "Capacity": "Standard tube/sample size",
+                            "Speed/Range": "Variable speed control",
+                            "Temperature Control": "Ambient to specified range",
+                            "Noise Level": "Low operation noise",
+                        }
+                    )
+                elif any(
+                    word in category_lower for word in ["thermometer", "bp", "blood pressure", "weighing", "scale"]
+                ):
+                    specs.update(
+                        {
+                            "Measurement Range": "Standard clinical range",
+                            "Accuracy": "Clinically validated accuracy",
+                            "Display": "Digital LCD/LED",
+                            "Power Source": "Battery + AC adapter",
+                            "Response Time": "< 5 seconds",
+                        }
+                    )
                 else:
                     # Generic specifications
-                    specs.update({
-                        "Power Supply": "220-240V AC, 50Hz",
-                        "Operating Temperature": "15-35°C",
-                        "Storage Temperature": "-10 to 50°C",
-                        "Humidity Range": "20-80% RH non-condensing",
-                        "Safety Certifications": "CE/ISO compliant"
-                    })
+                    specs.update(
+                        {
+                            "Power Supply": "220-240V AC, 50Hz",
+                            "Operating Temperature": "15-35°C",
+                            "Storage Temperature": "-10 to 50°C",
+                            "Humidity Range": "20-80% RH non-condensing",
+                            "Safety Certifications": "CE/ISO compliant",
+                        }
+                    )
 
                 suggestions["specifications"] = specs
                 confidence["specifications"] = 0.4
@@ -376,11 +354,7 @@ class AIAssistService:
             elif field == "tags" and not product.tags:
                 tags = ["medical", "healthcare", "hospital", "clinic"]
                 if category:
-                    tags.extend([
-                        category_slug,
-                        category_name.lower().replace(" ", "-"),
-                        "kenya"
-                    ])
+                    tags.extend([category_slug, category_name.lower().replace(" ", "-"), "kenya"])
                 if product.brand:
                     tags.append(product.brand.lower().replace(" ", "-"))
                 # Add category-specific tags
@@ -410,12 +384,9 @@ class AIAssistService:
                 )
                 confidence["meta_description"] = 0.5
 
-        return {
-            "suggestions": suggestions,
-            "confidence": confidence
-        }
+        return {"suggestions": suggestions, "confidence": confidence}
 
-    async def validate_product(self, product: Product) -> List[Dict[str, str]]:
+    async def validate_product(self, product: Product) -> list[dict[str, str]]:
         """
         Validate product data for common issues.
 
@@ -428,57 +399,59 @@ class AIAssistService:
         # Check base_price or price
         actual_price = product.base_price or product.price
         if actual_price and actual_price <= 0:
-            issues.append({
-                "field": "price",
-                "severity": "error",
-                "message": "Price must be greater than zero"
-            })
+            issues.append({"field": "price", "severity": "error", "message": "Price must be greater than zero"})
 
         # Description quality
         if product.description and len(product.description) < 50:
-            issues.append({
-                "field": "description",
-                "severity": "warning",
-                "message": "Description is too short. Aim for at least 50 characters for verification."
-            })
+            issues.append(
+                {
+                    "field": "description",
+                    "severity": "warning",
+                    "message": "Description is too short. Aim for at least 50 characters for verification.",
+                }
+            )
 
         # Medical device specifics
         if not product.brand:
-            issues.append({
-                "field": "brand",
-                "severity": "warning",
-                "message": "Adding brand info improves buyer trust for medical devices"
-            })
+            issues.append(
+                {
+                    "field": "brand",
+                    "severity": "warning",
+                    "message": "Adding brand info improves buyer trust for medical devices",
+                }
+            )
 
         if not product.certifications and not product.ce_marking_or_fda_clearance:
-            issues.append({
-                "field": "certifications",
-                "severity": "warning",
-                "message": "Medical devices should include certification or CE/FDA clearance details"
-            })
+            issues.append(
+                {
+                    "field": "certifications",
+                    "severity": "warning",
+                    "message": "Medical devices should include certification or CE/FDA clearance details",
+                }
+            )
 
         if not product.kmpdb_registration_number:
-            issues.append({
-                "field": "kmpdb_registration_number",
-                "severity": "warning",
-                "message": "KMPDB registration number is highly recommended for medical device classification"
-            })
+            issues.append(
+                {
+                    "field": "kmpdb_registration_number",
+                    "severity": "warning",
+                    "message": "KMPDB registration number is highly recommended for medical device classification",
+                }
+            )
 
         if not product.ppb_classification:
-            issues.append({
-                "field": "ppb_classification",
-                "severity": "warning",
-                "message": "PPB classification (Class A/B/C/D) is highly recommended for Pharmacy & Poisons Board compliance"
-            })
+            issues.append(
+                {
+                    "field": "ppb_classification",
+                    "severity": "warning",
+                    "message": "PPB classification (Class A/B/C/D) is highly recommended for Pharmacy & Poisons Board compliance",
+                }
+            )
 
         logger.info(f"Product validation found {len(issues)} issues for product {product.id}")
         return issues
 
-    async def ai_validate_product(
-        self,
-        product: Product,
-        category: Optional[Category] = None
-    ) -> Dict[str, Any]:
+    async def ai_validate_product(self, product: Product, category: Category | None = None) -> dict[str, Any]:
         """
         AI-powered validation of product data for medical device taxonomy compliance.
 
@@ -514,12 +487,12 @@ class AIAssistService:
 Please validate the following medical device product listing for taxonomy compliance and clinical accuracy:
 
 Product Name: {product.name}
-Brand: {product.brand or 'Not specified'}
+Brand: {product.brand or "Not specified"}
 Category: {category_name}
-Model Number: {product.model_number or 'Not specified'}
+Model Number: {product.model_number or "Not specified"}
 
-Description: {product.description or 'Not provided'}
-Short Description: {product.short_description or 'Not provided'}
+Description: {product.description or "Not provided"}
+Short Description: {product.short_description or "Not provided"}
 
 Pricing:
 - Retail Price: {product.price} {product.currency}
@@ -527,20 +500,20 @@ Pricing:
 - Cost Price: {product.cost_price} {product.currency}
 
 Regulatory & Compliance:
-- Certifications: {', '.join(product.certifications) if product.certifications else 'None specified'}
-- CE/FDA Clearance: {product.ce_marking_or_fda_clearance or 'Not specified'}
-- KMPDB Registration: {product.kmpdb_registration_number or 'Not specified'}
-- PPB Classification: {product.ppb_classification or 'Not specified'}
+- Certifications: {", ".join(product.certifications) if product.certifications else "None specified"}
+- CE/FDA Clearance: {product.ce_marking_or_fda_clearance or "Not specified"}
+- KMPDB Registration: {product.kmpdb_registration_number or "Not specified"}
+- PPB Classification: {product.ppb_classification or "Not specified"}
 
 Technical Details:
-- Specifications: {product.specifications or 'Not provided'}
-- Dimensions: {product.dimensions or 'Not provided'}
-- Weight: {f'{product.weight_kg} kg' if product.weight_kg else 'Not specified'}
+- Specifications: {product.specifications or "Not provided"}
+- Dimensions: {product.dimensions or "Not provided"}
+- Weight: {f"{product.weight_kg} kg" if product.weight_kg else "Not specified"}
 
 Marketing:
-- Tags: {', '.join(product.tags) if product.tags else 'None'}
-- Meta Title: {product.meta_title or 'Not provided'}
-- Meta Description: {product.meta_description or 'Not provided'}
+- Tags: {", ".join(product.tags) if product.tags else "None"}
+- Meta Title: {product.meta_title or "Not provided"}
+- Meta Description: {product.meta_description or "Not provided"}
 
 Images: {len(product.images) if product.images else 0} image(s) uploaded
 """
@@ -561,12 +534,8 @@ Images: {len(product.images) if product.images else 0} image(s) uploaded
         )
 
         payload = {
-            "systemInstruction": {
-                "parts": [{"text": system_instruction}]
-            },
-            "contents": [
-                {"parts": [{"text": prompt}]}
-            ],
+            "systemInstruction": {"parts": [{"text": system_instruction}]},
+            "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {
                 "responseMimeType": "application/json",
                 "responseSchema": {
@@ -574,12 +543,9 @@ Images: {len(product.images) if product.images else 0} image(s) uploaded
                     "properties": {
                         "is_valid": {
                             "type": "BOOLEAN",
-                            "description": "Whether the product passes critical validation checks"
+                            "description": "Whether the product passes critical validation checks",
                         },
-                        "confidence": {
-                            "type": "NUMBER",
-                            "description": "Confidence score of the validation (0-1)"
-                        },
+                        "confidence": {"type": "NUMBER", "description": "Confidence score of the validation (0-1)"},
                         "issues": {
                             "type": "ARRAY",
                             "items": {
@@ -587,24 +553,21 @@ Images: {len(product.images) if product.images else 0} image(s) uploaded
                                 "properties": {
                                     "field": {"type": "STRING"},
                                     "severity": {"type": "STRING", "enum": ["error", "warning"]},
-                                    "message": {"type": "STRING"}
+                                    "message": {"type": "STRING"},
                                 },
-                                "required": ["field", "severity", "message"]
-                            }
+                                "required": ["field", "severity", "message"],
+                            },
                         },
-                        "summary": {
-                            "type": "STRING",
-                            "description": "Overall validation summary"
-                        },
+                        "summary": {"type": "STRING", "description": "Overall validation summary"},
                         "recommendations": {
                             "type": "ARRAY",
                             "items": {"type": "STRING"},
-                            "description": "Specific recommendations for improvement"
-                        }
+                            "description": "Specific recommendations for improvement",
+                        },
                     },
-                    "required": ["is_valid", "confidence", "issues", "summary"]
-                }
-            }
+                    "required": ["is_valid", "confidence", "issues", "summary"],
+                },
+            },
         }
 
         try:
@@ -617,19 +580,19 @@ Images: {len(product.images) if product.images else 0} image(s) uploaded
                 text_out = data["candidates"][0]["content"]["parts"][0]["text"]
                 validation_result = json.loads(text_out)
 
-                logger.info(f"AI validation completed for product {product.id}. Valid: {validation_result.get('is_valid')}, Issues: {len(validation_result.get('issues', []))}")
+                logger.info(
+                    f"AI validation completed for product {product.id}. Valid: {validation_result.get('is_valid')}, Issues: {len(validation_result.get('issues', []))}"
+                )
 
                 return validation_result
 
         except Exception as e:
-            logger.error(f"Failed to perform AI validation using Gemini API: {str(e)}. Falling back to rule-based validation.")
+            logger.error(
+                f"Failed to perform AI validation using Gemini API: {str(e)}. Falling back to rule-based validation."
+            )
             return await self._rule_based_validate(product, category_name)
 
-    async def _rule_based_validate(
-        self,
-        product: Product,
-        category_name: str
-    ) -> Dict[str, Any]:
+    async def _rule_based_validate(self, product: Product, category_name: str) -> dict[str, Any]:
         """
         Fallback rule-based validation if AI API call fails or key is missing.
         """
@@ -639,73 +602,89 @@ Images: {len(product.images) if product.images else 0} image(s) uploaded
         # Critical errors
         actual_price = product.base_price or product.price
         if not actual_price or actual_price <= 0:
-            issues.append({
-                "field": "price",
-                "severity": "error",
-                "message": "Valid pricing information is required for publication"
-            })
+            issues.append(
+                {
+                    "field": "price",
+                    "severity": "error",
+                    "message": "Valid pricing information is required for publication",
+                }
+            )
 
         if not product.name or not product.slug:
-            issues.append({
-                "field": "name",
-                "severity": "error",
-                "message": "Product name and slug are required"
-            })
+            issues.append({"field": "name", "severity": "error", "message": "Product name and slug are required"})
 
         if not product.description or len(product.description) < 50:
-            issues.append({
-                "field": "description",
-                "severity": "error",
-                "message": "Description must be at least 50 characters for verification"
-            })
+            issues.append(
+                {
+                    "field": "description",
+                    "severity": "error",
+                    "message": "Description must be at least 50 characters for verification",
+                }
+            )
 
         # Warnings
         if not product.brand:
-            issues.append({
-                "field": "brand",
-                "severity": "warning",
-                "message": "Brand information improves buyer trust and searchability"
-            })
+            issues.append(
+                {
+                    "field": "brand",
+                    "severity": "warning",
+                    "message": "Brand information improves buyer trust and searchability",
+                }
+            )
             recommendations.append("Add manufacturer/brand information")
 
         if not product.certifications and not product.ce_marking_or_fda_clearance:
-            issues.append({
-                "field": "certifications",
-                "severity": "warning",
-                "message": "Medical devices should include certification or clearance details"
-            })
+            issues.append(
+                {
+                    "field": "certifications",
+                    "severity": "warning",
+                    "message": "Medical devices should include certification or clearance details",
+                }
+            )
             recommendations.append("Add regulatory certifications (CE, FDA, ISO 13485)")
 
         if not product.kmpdb_registration_number:
-            issues.append({
-                "field": "kmpdb_registration_number",
-                "severity": "warning",
-                "message": "KMPDB registration is recommended for Kenya market compliance"
-            })
+            issues.append(
+                {
+                    "field": "kmpdb_registration_number",
+                    "severity": "warning",
+                    "message": "KMPDB registration is recommended for Kenya market compliance",
+                }
+            )
             recommendations.append("Add KMPDB registration number for local compliance")
 
         if not product.ppb_classification:
-            issues.append({
-                "field": "ppb_classification",
-                "severity": "warning",
-                "message": "PPB risk classification (Class A/B/C/D) is highly recommended"
-            })
+            issues.append(
+                {
+                    "field": "ppb_classification",
+                    "severity": "warning",
+                    "message": "PPB risk classification (Class A/B/C/D) is highly recommended",
+                }
+            )
             recommendations.append("Assign PPB risk classification")
 
         if not product.images or len(product.images) == 0:
-            issues.append({
-                "field": "images",
-                "severity": "warning",
-                "message": "Product images are essential for buyer confidence"
-            })
+            issues.append(
+                {
+                    "field": "images",
+                    "severity": "warning",
+                    "message": "Product images are essential for buyer confidence",
+                }
+            )
             recommendations.append("Upload high-quality product images")
 
-        if not product.specifications or not isinstance(product.specifications, dict) or len(product.specifications) == 0:
-            issues.append({
-                "field": "specifications",
-                "severity": "warning",
-                "message": "Technical specifications help buyers compare products"
-            })
+        if (
+            not product.specifications
+            or not isinstance(product.specifications, dict)
+            or len(product.specifications) == 0
+        ):
+            issues.append(
+                {
+                    "field": "specifications",
+                    "severity": "warning",
+                    "message": "Technical specifications help buyers compare products",
+                }
+            )
             recommendations.append("Add detailed technical specifications")
 
         is_valid = all(issue["severity"] != "error" for issue in issues)
@@ -722,5 +701,5 @@ Images: {len(product.images) if product.images else 0} image(s) uploaded
             "confidence": confidence,
             "issues": issues,
             "summary": summary,
-            "recommendations": recommendations
+            "recommendations": recommendations,
         }

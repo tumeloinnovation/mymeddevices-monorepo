@@ -1,8 +1,9 @@
 import asyncio
 from logging.config import fileConfig
+
+from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
-from alembic import context
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -16,16 +17,7 @@ if config.config_file_name is not None:
 # add your model's MetaData object here
 # for 'autogenerate' support
 from app.core.database import Base
-from app.domains.auth.models import User, RefreshToken, UserDevice, OTP
-from app.domains.vendor.models import VendorProfile
-from app.domains.customers.models import CustomerProfile, Address, WishlistItem, Review
-from app.domains.catalog.models import Category, Product, ProductImage, ProductVariant, Brand, Tag
-from app.domains.shopping.models import Cart, CartItem, Coupon, CartDiscount, CartMergeLog, CartShare, SavedCart, OrderTimelineEvent
-from app.domains.admin.models import SystemSetting
-from app.domains.payments.models import Transaction, PaymentCallback, PaymentMethod, Refund, SavedPaymentMethod
-from app.domains.tickets.models import Ticket, TicketReply
-from app.domains.returns.models import ReturnRequest
-from app.domains.customers.models.loyalty_ledger import LoyaltyLedger
+
 target_metadata = Base.metadata
 
 def run_migrations_offline() -> None:
@@ -50,7 +42,7 @@ async def run_migrations_online() -> None:
     from app.core.database import settings
     configuration = config.get_section(config.config_ini_section)
     configuration["sqlalchemy.url"] = settings.DATABASE_URL
-    
+
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",

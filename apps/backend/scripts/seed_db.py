@@ -1,18 +1,20 @@
 import asyncio
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
-from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from decimal import Decimal
+
+from sqlalchemy import select
 
 from app.core.database import AsyncSessionLocal
 from app.core.security import get_password_hash
 from app.domains.auth.models.user import User
-from app.domains.vendor.models.vendor_profile import VendorProfile
 from app.domains.shopping.models.banner import Banner, BannerPlacement, BannerStatus
 from app.domains.shopping.models.coupon import Coupon, CouponRestriction
-from decimal import Decimal
-from sqlalchemy import select
+from app.domains.vendor.models.vendor_profile import VendorProfile
 
 
 async def seed():
@@ -73,9 +75,7 @@ async def seed():
 
                 if u_data["role"] == "vendor":
                     # Check if profile exists
-                    prof_result = await db.execute(
-                        select(VendorProfile).where(VendorProfile.user_id == user.id)
-                    )
+                    prof_result = await db.execute(select(VendorProfile).where(VendorProfile.user_id == user.id))
                     existing_prof = prof_result.scalar_one_or_none()
 
                     if not existing_prof:
@@ -87,7 +87,7 @@ async def seed():
                             business_email=u_data["email"],
                             business_phone=u_data["phone"],
                             approval_status="approved",
-                            approved_at=datetime.now(timezone.utc),
+                            approved_at=datetime.now(UTC),
                         )
                         db.add(profile)
                         await db.commit()
@@ -108,14 +108,14 @@ async def seed():
                             business_email=u_data["email"],
                             business_phone=u_data["phone"],
                             approval_status="approved",
-                            approved_at=datetime.now(timezone.utc),
+                            approved_at=datetime.now(UTC),
                         )
                         db.add(profile)
                         await db.commit()
                     elif existing_prof.approval_status != "approved":
                         print(f"Approving existing vendor profile for user: {existing_user.email}")
                         existing_prof.approval_status = "approved"
-                        existing_prof.approved_at = datetime.now(timezone.utc)
+                        existing_prof.approved_at = datetime.now(UTC)
                         await db.commit()
 
         # Seed Coupons
@@ -128,7 +128,7 @@ async def seed():
                 "discount_scope": "cart",
                 "is_active": True,
                 "is_stackable": False,
-                "valid_from": datetime.now(timezone.utc),
+                "valid_from": datetime.now(UTC),
                 "distribution_type": "public",
                 "min_order_value": Decimal("1000.00"),
             },
@@ -140,7 +140,7 @@ async def seed():
                 "discount_scope": "cart",
                 "is_active": True,
                 "is_stackable": False,
-                "valid_from": datetime.now(timezone.utc),
+                "valid_from": datetime.now(UTC),
                 "distribution_type": "public",
                 "min_order_value": Decimal("20000.00"),
             },
@@ -152,7 +152,7 @@ async def seed():
                 "discount_scope": "cart",
                 "is_active": True,
                 "is_stackable": False,
-                "valid_from": datetime.now(timezone.utc),
+                "valid_from": datetime.now(UTC),
                 "distribution_type": "public",
                 "min_order_value": Decimal("5000.00"),
             },
@@ -169,10 +169,7 @@ async def seed():
                 await db.commit()
                 await db.refresh(coupon)
                 if min_val:
-                    restr = CouponRestriction(
-                        coupon_id=coupon.id,
-                        min_order_value=min_val
-                    )
+                    restr = CouponRestriction(coupon_id=coupon.id, min_order_value=min_val)
                     db.add(restr)
                     await db.commit()
 
@@ -220,10 +217,7 @@ async def seed():
 
         for b_data in banners_to_seed:
             res = await db.execute(
-                select(Banner).where(
-                    Banner.title == b_data["title"],
-                    Banner.placement == b_data["placement"]
-                )
+                select(Banner).where(Banner.title == b_data["title"], Banner.placement == b_data["placement"])
             )
             existing_b = res.scalar_one_or_none()
             if not existing_b:

@@ -1,17 +1,18 @@
-from typing import Annotated, Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.responses import success_response, ApiSuccessResponse
 from app.core.dependencies import get_current_user, require_role
+from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.auth.models.user import User
 from app.domains.returns.schemas.return_schemas import (
     ReturnRequestCreate,
-    ReturnRequestUpdate,
-    ReturnRequestResponse,
     ReturnRequestListResponse,
+    ReturnRequestResponse,
+    ReturnRequestUpdate,
 )
 from app.domains.returns.services.return_service import ReturnService
 
@@ -35,7 +36,7 @@ async def list_my_returns(
     current_user: Annotated[User, Depends(get_current_user)],
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    status_filter: Optional[str] = Query(None, alias="status"),
+    status_filter: str | None = Query(None, alias="status"),
     db: AsyncSession = Depends(get_db),
 ):
     """List my return requests."""
@@ -70,15 +71,11 @@ async def get_return_details(
     return_request = await service.get_return(return_id)
 
     if not return_request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found")
 
     # Verify ownership
     if return_request.customer_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     return success_response(_return_to_response(return_request))
 
@@ -94,15 +91,11 @@ async def get_return_by_number(
     return_request = await service.get_return_by_number(return_number)
 
     if not return_request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found")
 
     # Verify ownership
     if return_request.customer_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     return success_response(_return_to_response(return_request))
 
@@ -119,15 +112,11 @@ async def update_return_request(
     return_request = await service.get_return(return_id)
 
     if not return_request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found")
 
     # Verify ownership
     if return_request.customer_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     # Only allow updates on pending returns
     if return_request.status != "pending":
@@ -151,22 +140,16 @@ async def cancel_return_request(
     return_request = await service.get_return(return_id)
 
     if not return_request:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found")
 
     # Verify ownership
     if return_request.customer_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     try:
         cancelled = await service.cancel_return(return_id)
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     return success_response(_return_to_response(cancelled))
 
@@ -175,12 +158,13 @@ async def cancel_return_request(
 # ADMIN RETURN MANAGEMENT
 # ============================================================================
 
+
 @router.get("/admin/list", response_model=ApiSuccessResponse[ReturnRequestListResponse])
 async def admin_list_all_returns(
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    status_filter: Optional[str] = Query(None, alias="status"),
+    status_filter: str | None = Query(None, alias="status"),
     db: AsyncSession = Depends(get_db),
 ):
     """Admin lists all customer return requests."""
@@ -216,7 +200,10 @@ async def admin_update_return_status(
     if not new_status:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Status is required")
 
-    updated = await service.update_status(return_id, new_status, current_user.id)
+    try:
+        updated = await service.update_status(return_id, new_status, current_user.id)
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     if not updated:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Return request not found")
 
@@ -236,16 +223,19 @@ def _return_to_response(return_request) -> ReturnRequestResponse:
         status=return_request.status,
         reason=return_request.reason,
         description=return_request.description,
-        items=[{
-            "id": item.get("id", str(uuid.uuid4())),
-            "order_item_id": item.get("order_item_id"),
-            "product_id": item.get("product_id"),
-            "product_name": item.get("product_name"),
-            "quantity": item.get("quantity", 1),
-            "reason": item.get("reason"),
-            "condition": item.get("condition", "new"),
-            "images": item.get("images"),
-        } for item in items_data],
+        items=[
+            {
+                "id": item.get("id", str(uuid.uuid4())),
+                "order_item_id": item.get("order_item_id"),
+                "product_id": item.get("product_id"),
+                "product_name": item.get("product_name"),
+                "quantity": item.get("quantity", 1),
+                "reason": item.get("reason"),
+                "condition": item.get("condition", "new"),
+                "images": item.get("images"),
+            }
+            for item in items_data
+        ],
         refund_method=return_request.refund_method,
         refund_amount=return_request.refund_amount,
         refund_transaction_id=return_request.refund_transaction_id,

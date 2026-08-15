@@ -5,11 +5,11 @@ Revises: d0e84711c147
 Create Date: 2026-06-15 19:05:34.080622
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 revision: str = '81dd38716335'
 down_revision: Union[str, Sequence[str], None] = 'd0e84711c147'

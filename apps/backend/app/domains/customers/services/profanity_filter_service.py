@@ -6,21 +6,23 @@ Uses a combination of word lists and pattern matching.
 """
 
 import re
-from typing import List, Tuple, Optional
 
 # Profanity word list - can be extended or loaded from external source
 PROFANITY_WORDS = {
     # Common swear words (sample list - should be expanded based on requirements)
-    "fuck", "shit", "damn", "hell", "ass", "bitch", "bastard",
+    "fuck",
+    "shit",
+    "damn",
+    "hell",
+    "ass",
+    "bitch",
+    "bastard",
     # Slurs and offensive terms (placeholder - should be properly curated)
     # Add more words as needed based on community guidelines
 }
 
 # Pattern for detecting obfuscated profanity with symbols (e.g., f*ck, sh!t, a$$)
-PROFANITY_PATTERN = re.compile(
-    r'\b[a-z]*[*@#$%&!]+[a-z]*\b',
-    re.IGNORECASE
-)
+PROFANITY_PATTERN = re.compile(r"\b[a-z]*[*@#$%&!]+[a-z]*\b", re.IGNORECASE)
 
 
 class ProfanityFilterService:
@@ -30,7 +32,7 @@ class ProfanityFilterService:
         self.profanity_words = PROFANITY_WORDS
         self.pattern = PROFANITY_PATTERN
 
-    def check_text(self, text: Optional[str]) -> Tuple[bool, List[str]]:
+    def check_text(self, text: str | None) -> tuple[bool, list[str]]:
         """
         Check text for profanity.
 
@@ -48,7 +50,7 @@ class ProfanityFilterService:
 
         # Check for direct word matches using word boundaries
         for word in self.profanity_words:
-            pattern = re.compile(r'\b' + re.escape(word) + r'\b', re.IGNORECASE)
+            pattern = re.compile(r"\b" + re.escape(word) + r"\b", re.IGNORECASE)
             if pattern.search(text_lower):
                 flagged_words.append(word)
 

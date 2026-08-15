@@ -60,7 +60,20 @@ export default function PublicOrderDetailPage() {
             try {
                 const urlParams = new URLSearchParams(window.location.search);
                 const urlGuestToken = urlParams.get('guest_token');
-                const localGuestToken = typeof window !== 'undefined' ? localStorage.getItem('guest_token') : null;
+                let localGuestToken = typeof window !== 'undefined' 
+                    ? (localStorage.getItem('guest_token') || localStorage.getItem('guest_cart_token')) 
+                    : null;
+                
+                if (!localGuestToken && typeof window !== 'undefined') {
+                    try {
+                        const cartStorage = localStorage.getItem('cart-storage');
+                        if (cartStorage) {
+                            const parsed = JSON.parse(cartStorage);
+                            localGuestToken = parsed?.state?.cartToken || null;
+                        }
+                    } catch (_) {}
+                }
+
                 const guestToken = urlGuestToken || localGuestToken || undefined;
 
                 const fetchedOrder = await orderService.getOrder(orderId, guestToken);

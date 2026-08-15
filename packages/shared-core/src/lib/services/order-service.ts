@@ -49,15 +49,12 @@ export interface Address {
 }
 
 export interface CheckoutRequest {
-  items: Array<{
-    product_id: string;
-    quantity: number;
-    unit_price?: string;
-  }>;
-  shipping_address: Address;
-  billing_address?: Address;
+  cart_id: string;
+  shipping_address: Address | Record<string, any>;
   notes?: string;
   idempotency_key?: string;
+  guest_token?: string;
+  points_to_redeem?: number;
 }
 
 export interface PaymentRequest {
@@ -169,11 +166,13 @@ export const orderService = {
   },
 
   /**
-   * Get single order by ID
+   * Get single order by ID (with optional guest token)
    */
-  async getOrder(id: string): Promise<Order> {
+  async getOrder(id: string, guestToken?: string): Promise<Order> {
     try {
-      const response = await apiClient.get<any>(`/shopping/orders/${id}`);
+      const params = guestToken ? { guest_token: guestToken } : {};
+      const endpoint = guestToken ? `/shopping/orders/public/${id}` : `/shopping/orders/${id}`;
+      const response = await apiClient.get<any>(endpoint, { params });
 
       if (response && response.data) {
         return mapOrder(response.data);
@@ -218,55 +217,48 @@ export const orderService = {
    */
   async createOrder(request: CheckoutRequest): Promise<Order> {
     try {
-      const response = await apiClient.post<any>('/shopping/orders/checkout', request);
+      const response = await apiClient.post<any>('/shopping/checkout', request);
 
       if (response && response.data) {
         toast.success('Order created successfully');
-        return response.data;
+        return mapOrder(response.data);
       }
 
       throw new Error('Invalid response format');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create order:', error);
-      toast.error('Failed to create order');
-      throw error;
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to create order';
+      toast.error(errorMessage);
+      throw new Error(errorMessage);
     }
   },
 
   /**
-   * Create order from cart ID (convenience method)
+   * Create order from cart (convenience method)
    */
   async createOrderFromCart(
-    cartId: string,
-    shippingAddress: Address,
-    billingAddress?: Address,
-    notes?: string
+    cart: any,
+    shippingAddress: Address | Record<string, any>,
+    billingAddress?: Address | Record<string, any>,
+    notes?: string,
+    guestToken?: string,
+    pointsToRedeem?: number
   ): Promise<Order> {
     try {
-      // First, get the cart to extract items
-      const { cartService } = await import('../services/cart-service');
-      const cart = await cartService.getCart();
-
-      if (!cart || cart.items.length === 0) {
-        throw new Error('Cart is empty');
+      if (!cart || !cart.id) {
+        throw new Error('Valid cart is required for checkout');
       }
-
-      // Transform cart items to order items
-      const items = cart.items.map((item) => ({
-        product_id: item.product_id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-      }));
 
       // Generate idempotency key for this order
       const idempotencyKey = `order-${cart.id}-${Date.now()}`;
 
       return await this.createOrder({
-        items,
+        cart_id: cart.id,
         shipping_address: shippingAddress,
-        billing_address: billingAddress || shippingAddress,
         notes,
         idempotency_key: idempotencyKey,
+        guest_token: guestToken,
+        points_to_redeem: pointsToRedeem,
       });
     } catch (error) {
       console.error('Failed to create order from cart:', error);

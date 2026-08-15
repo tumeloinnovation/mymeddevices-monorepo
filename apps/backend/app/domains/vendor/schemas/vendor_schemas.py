@@ -1,58 +1,56 @@
-from typing import Optional, List
-from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import datetime
 
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
+
+from app.core.field_types import KenyanPhone, OptionalKenyanPhone
 
 # ============================================================================
 # INITIAL REGISTRATION SCHEMAS
 # ============================================================================
 
+
 class VendorRegisterRequest(BaseModel):
     """Initial vendor registration with basic fields"""
+
     email: EmailStr
     password: str = Field(..., min_length=8)
     company_name: str = Field(..., min_length=2, max_length=255)
-    phone: str = Field(..., pattern=r"^(\+254|0)[1-9]\d{8}$")  # Kenyan phone format
-    vat_number: Optional[str] = Field(None, max_length=50)
+    phone: KenyanPhone
+    vat_number: str | None = Field(None, max_length=50)
 
-    first_name: Optional[str] = Field(None, max_length=100)
-    last_name: Optional[str] = Field(None, max_length=100)
-
-    @field_validator('phone')
-    @classmethod
-    def normalize_phone(cls, v: str) -> str:
-        """Normalize phone number to +254 format"""
-        if v.startswith('0'):
-            return '+254' + v[1:]
-        return v
+    first_name: str | None = Field(None, max_length=100)
+    last_name: str | None = Field(None, max_length=100)
 
 
 # ============================================================================
 # COMPREHENSIVE PROFILE SCHEMAS
 # ============================================================================
 
+
 class StoreInfoSchema(BaseModel):
     """Store information for vendor profile"""
-    username: Optional[str] = Field(None, max_length=100)
-    display_name: Optional[str] = Field(None, max_length=255)
+
+    username: str | None = Field(None, max_length=100)
+    display_name: str | None = Field(None, max_length=255)
     store_name: str = Field(..., min_length=2, max_length=255)
-    store_description: Optional[str] = None
-    store_logo_url: Optional[str] = None
-    business_email: Optional[EmailStr] = None
-    business_phone: Optional[str] = None
+    store_description: str | None = None
+    store_logo_url: str | None = None
+    business_email: EmailStr | None = None
+    business_phone: OptionalKenyanPhone = None
 
 
 class AddressSchema(BaseModel):
     """Store address from Google Places"""
-    street: Optional[str] = None
-    city: Optional[str] = None
-    region: Optional[str] = None
-    country: str = "KE"
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    place_id: Optional[str] = None  # Google Places ID
 
-    @field_validator('country')
+    street: str | None = None
+    city: str | None = None
+    region: str | None = None
+    country: str = "KE"
+    latitude: float | None = None
+    longitude: float | None = None
+    place_id: str | None = None  # Google Places ID
+
+    @field_validator("country")
     @classmethod
     def validate_country_code(cls, v: str) -> str:
         """Validate and normalize country code to 2-letter ISO 3166-1 alpha-2 format"""
@@ -66,140 +64,138 @@ class AddressSchema(BaseModel):
 
 class PaymentDetailsSchema(BaseModel):
     """Payment and payout details"""
+
     # M-Pesa
-    mpesa_phone: Optional[str] = None
-    mpesa_business_name: Optional[str] = None
-    mpesa_till_number: Optional[str] = None
-    mpesa_paybill_number: Optional[str] = None
+    mpesa_phone: str | None = None
+    mpesa_business_name: str | None = None
+    mpesa_till_number: str | None = None
+    mpesa_paybill_number: str | None = None
 
     # Bank Account
-    bank_account_name: Optional[str] = None
-    bank_account_number: Optional[str] = None
-    bank_name: Optional[str] = None
-    bank_branch: Optional[str] = None
-    bank_swift_code: Optional[str] = None
-    bank_iban: Optional[str] = None
+    bank_account_name: str | None = None
+    bank_account_number: str | None = None
+    bank_name: str | None = None
+    bank_branch: str | None = None
+    bank_swift_code: str | None = None
+    bank_iban: str | None = None
 
 
 class OperationalDetailsSchema(BaseModel):
     """Operational details including business hours"""
-    business_hours: Optional[dict] = None  # {"monday": {"open": "09:00", "close": "17:00"}, ...}
+
+    business_hours: dict | None = None  # {"monday": {"open": "09:00", "close": "17:00"}, ...}
 
 
 class VendorProfileUpdate(BaseModel):
     """Comprehensive vendor profile update"""
-    store_info: Optional[StoreInfoSchema] = None
-    address: Optional[AddressSchema] = None
-    payment_details: Optional[PaymentDetailsSchema] = None
-    operational_details: Optional[OperationalDetailsSchema] = None
-    document_urls: Optional[List[str]] = None  # For verification documents
+
+    store_info: StoreInfoSchema | None = None
+    address: AddressSchema | None = None
+    payment_details: PaymentDetailsSchema | None = None
+    operational_details: OperationalDetailsSchema | None = None
+    document_urls: list[str] | None = None  # For verification documents
 
 
 class VendorProfileResponse(BaseModel):
     """Complete vendor profile response"""
+
     id: str
     user_id: str
 
     # Store Info
-    username: Optional[str] = None
-    display_name: Optional[str] = None
+    username: str | None = None
+    display_name: str | None = None
     store_name: str
-    store_description: Optional[str] = None
-    store_logo_url: Optional[str] = None
-    business_email: Optional[str] = None
-    business_phone: Optional[str] = None
+    store_description: str | None = None
+    store_logo_url: str | None = None
+    business_email: str | None = None
+    business_phone: str | None = None
 
     # Address
-    address_street: Optional[str] = None
-    address_city: Optional[str] = None
-    address_region: Optional[str] = None
+    address_street: str | None = None
+    address_city: str | None = None
+    address_region: str | None = None
     address_country: str
-    latitude: Optional[float] = None
-    longitude: Optional[float] = None
-    place_id: Optional[str] = None
+    latitude: float | None = None
+    longitude: float | None = None
+    place_id: str | None = None
 
     # Payment Details
-    mpesa_phone: Optional[str] = None
-    mpesa_business_name: Optional[str] = None
-    mpesa_till_number: Optional[str] = None
-    mpesa_paybill_number: Optional[str] = None
-    bank_account_name: Optional[str] = None
-    bank_account_number: Optional[str] = None
-    bank_name: Optional[str] = None
-    bank_branch: Optional[str] = None
-    bank_swift_code: Optional[str] = None
-    bank_iban: Optional[str] = None
+    mpesa_phone: str | None = None
+    mpesa_business_name: str | None = None
+    mpesa_till_number: str | None = None
+    mpesa_paybill_number: str | None = None
+    bank_account_name: str | None = None
+    bank_account_number: str | None = None
+    bank_name: str | None = None
+    bank_branch: str | None = None
+    bank_swift_code: str | None = None
+    bank_iban: str | None = None
 
     # Operational
-    business_hours: Optional[dict] = None
+    business_hours: dict | None = None
 
     # Administrative
     approval_status: str
-    document_urls: Optional[List[str]] = None
-    company_name: Optional[str] = None
-    vat_number: Optional[str] = None
-    rejection_reason: Optional[str] = None
-    approved_at: Optional[datetime] = None
+    document_urls: list[str] | None = None
+    company_name: str | None = None
+    vat_number: str | None = None
+    rejection_reason: str | None = None
+    approved_at: datetime | None = None
 
     # User info
     user_email: str
-    user_phone: Optional[str] = None
+    user_phone: str | None = None
     is_verified: bool
 
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ============================================================================
 # ADMIN APPROVAL SCHEMAS
 # ============================================================================
 
+
 class VendorApprovalRequest(BaseModel):
     """Admin request to approve/reject vendor"""
+
     action: str = Field(..., pattern=r"^(approve|reject|suspend)$")
-    reason: Optional[str] = None  # Required for rejection
+    reason: str | None = None  # Required for rejection
 
 
 class AdminCreateVendorRequest(BaseModel):
     """Admin request to create a new vendor"""
+
     email: EmailStr
     password: str = Field(..., min_length=8)
     company_name: str = Field(..., min_length=2, max_length=255)
     store_name: str = Field(..., min_length=2, max_length=255)
-    store_description: Optional[str] = None
-    business_email: Optional[EmailStr] = None
-    business_phone: Optional[str] = None
-    phone: Optional[str] = Field(None, pattern=r"^(\+254|0)[1-9]\d{8}$")  # Kenyan phone format
-    vat_number: Optional[str] = Field(None, max_length=50)
+    store_description: str | None = None
+    business_email: EmailStr | None = None
+    business_phone: OptionalKenyanPhone = None
+    phone: OptionalKenyanPhone = None
+    vat_number: str | None = Field(None, max_length=50)
 
     # Address
-    address_street: Optional[str] = None
-    address_city: Optional[str] = None
-    address_region: Optional[str] = None
+    address_street: str | None = None
+    address_city: str | None = None
+    address_region: str | None = None
     address_country: str = "KE"
 
     # Payment details (optional)
-    mpesa_phone: Optional[str] = None
-    mpesa_business_name: Optional[str] = None
-    mpesa_till_number: Optional[str] = None
-    mpesa_paybill_number: Optional[str] = None
+    mpesa_phone: OptionalKenyanPhone = None
+    mpesa_business_name: str | None = None
+    mpesa_till_number: str | None = None
+    mpesa_paybill_number: str | None = None
 
     # Approval status (default: pending, but can be set to approved for trusted vendors)
     approval_status: str = Field("pending", pattern=r"^(pending|approved|suspended|rejected)$")
     auto_approve: bool = False  # If true, sets status to approved immediately
 
-    @field_validator('phone', 'mpesa_phone', 'business_phone')
-    @classmethod
-    def normalize_phone(cls, v: Optional[str]) -> Optional[str]:
-        """Normalize phone number to +254 format"""
-        if v and v.startswith('0'):
-            return '+254' + v[1:]
-        return v
-
-    @field_validator('address_country')
+    @field_validator("address_country")
     @classmethod
     def validate_country_code(cls, v: str) -> str:
         """Validate and normalize country code to 2-letter ISO 3166-1 alpha-2 format"""
@@ -213,22 +209,24 @@ class AdminCreateVendorRequest(BaseModel):
 
 class VendorStatusResponse(BaseModel):
     """Vendor status for checking approval state"""
+
     id: str
     approval_status: str
-    username: Optional[str] = None
-    display_name: Optional[str] = None
-    company_name: Optional[str] = None
-    store_name: Optional[str] = None
+    username: str | None = None
+    display_name: str | None = None
+    company_name: str | None = None
+    store_name: str | None = None
     email: str
-    phone: Optional[str] = None
+    phone: str | None = None
     is_verified: bool
-    rejection_reason: Optional[str] = None
+    rejection_reason: str | None = None
     created_at: datetime
 
 
 class VendorListResponse(BaseModel):
     """List of vendors for admin"""
-    vendors: List[VendorStatusResponse]
+
+    vendors: list[VendorStatusResponse]
     total: int
     page: int
     page_size: int

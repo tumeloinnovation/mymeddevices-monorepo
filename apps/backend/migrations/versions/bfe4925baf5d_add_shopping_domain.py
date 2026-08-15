@@ -5,10 +5,11 @@ Revises: 3c017dd19c21
 Create Date: 2026-06-13 15:05:56.102138
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.

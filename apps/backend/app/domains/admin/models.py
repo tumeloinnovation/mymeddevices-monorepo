@@ -1,7 +1,9 @@
-from sqlalchemy import String, JSON
+from sqlalchemy import JSON, String
 from sqlalchemy.orm import Mapped, mapped_column
+
 from app.core.database import Base
-from app.domains.shared.models.base import IDMixin, AuditMixin
+from app.domains.shared.models.base import AuditMixin, IDMixin
+
 
 class SystemSetting(Base, IDMixin, AuditMixin):
     __tablename__ = "system_settings"

@@ -1,54 +1,56 @@
 import uuid
-from typing import Optional, List
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.domains.catalog.schemas.product_schemas import ProductImageResponse
-from pydantic import BaseModel, Field, field_validator
-from datetime import datetime
 
 
 class CartItemCreate(BaseModel):
     """Schema for adding an item to cart."""
+
     product_id: uuid.UUID = Field(..., description="ID of the product to add")
     quantity: int = Field(default=1, gt=0, le=99, description="Quantity (1-99)")
-    notes: Optional[str] = Field(None, max_length=500, description="Customer notes for this item")
+    notes: str | None = Field(None, max_length=500, description="Customer notes for this item")
     substitution_allowed: bool = Field(default=True, description="Allow substitution if out of stock")
 
 
 class CartItemUpdate(BaseModel):
     """Schema for updating a cart item."""
+
     quantity: int = Field(gt=0, le=99, description="Quantity (1-99)")
-    notes: Optional[str] = Field(None, max_length=500, description="Customer notes for this item")
-    substitution_allowed: Optional[bool] = Field(default=True)
+    notes: str | None = Field(None, max_length=500, description="Customer notes for this item")
+    substitution_allowed: bool | None = Field(default=True)
 
 
 class CartProductResponse(BaseModel):
     """Product details in cart item response."""
+
     id: uuid.UUID
-    sku: Optional[str] = None
+    sku: str | None = None
     name: str
-    price: Optional[float] = None
-    images: List[ProductImageResponse] = []
+    price: float | None = None
+    images: list[ProductImageResponse] = []
     stock_quantity: int
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CartItemResponse(BaseModel):
     """Cart item response with product details."""
+
     id: uuid.UUID
     cart_id: uuid.UUID
     product_id: uuid.UUID
     quantity: int
-    unit_price: Optional[float] = None
-    notes: Optional[str] = None
+    unit_price: float | None = None
+    notes: str | None = None
     substitution_allowed: bool
     product: CartProductResponse
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 from app.domains.auth.schemas.auth_schemas import UserResponse
@@ -56,25 +58,26 @@ from app.domains.auth.schemas.auth_schemas import UserResponse
 
 class CartResponse(BaseModel):
     """Cart response with items."""
+
     id: uuid.UUID
-    user_id: Optional[uuid.UUID] = None
-    user: Optional[UserResponse] = None
-    session_id: Optional[str] = None
-    cart_token: Optional[str] = None
+    user_id: uuid.UUID | None = None
+    user: UserResponse | None = None
+    session_id: str | None = None
+    cart_token: str | None = None
     cart_type: str
     is_active: bool
-    expires_at: Optional[datetime] = None
-    items: List[CartItemResponse] = []
+    expires_at: datetime | None = None
+    items: list[CartItemResponse] = []
     item_count: int = 0
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class GuestCartResponse(BaseModel):
     """Response for guest cart creation."""
+
     cart_id: uuid.UUID
     cart_token: str
     expires_at: datetime
@@ -83,6 +86,7 @@ class GuestCartResponse(BaseModel):
 
 class CartTotalsResponse(BaseModel):
     """Cart totals with breakdown."""
+
     cart_id: uuid.UUID
     subtotal: int
     discount_amount: int = 0
@@ -91,39 +95,41 @@ class CartTotalsResponse(BaseModel):
     total: int
     currency: str = "KES"
     item_count: int
-    applied_discounts: List[dict] = []
-    logistics_type: Optional[str] = None
-    calculated_distance_km: Optional[float] = 0.0
-    route_coordinates: Optional[List[List[float]]] = []
+    applied_discounts: list[dict] = []
+    logistics_type: str | None = None
+    calculated_distance_km: float | None = 0.0
+    route_coordinates: list[list[float]] | None = []
 
 
 class CartValidationError(BaseModel):
     """Individual validation error."""
+
     item_id: uuid.UUID
     product_id: uuid.UUID
     error_type: str  # 'out_of_stock', 'price_changed', 'product_unavailable', 'quantity_limit'
     message: str
-    current_value: Optional[float] = None
-    available_quantity: Optional[int] = None
+    current_value: float | None = None
+    available_quantity: int | None = None
 
 
 class CartValidationResponse(BaseModel):
     """Cart validation result."""
+
     is_valid: bool
     cart_id: uuid.UUID
     item_count: int
-    errors: List[CartValidationError] = []
-    warnings: List[CartValidationError] = []
+    errors: list[CartValidationError] = []
+    warnings: list[CartValidationError] = []
     subtotal: int
     estimated_total: int
 
 
 class CartMergeRequest(BaseModel):
     """Request to merge guest cart into customer cart."""
+
     guest_cart_token: str
     merge_method: str = Field(
-        default="merge",
-        description="Merge strategy: 'replace' (use guest), 'merge' (combine), 'keep_both' (no merge)"
+        default="merge", description="Merge strategy: 'replace' (use guest), 'merge' (combine), 'keep_both' (no merge)"
     )
 
     @field_validator("merge_method")
@@ -136,6 +142,7 @@ class CartMergeRequest(BaseModel):
 
 class CartMergeResponse(BaseModel):
     """Response after cart merge."""
+
     success: bool
     message: str
     cart_id: uuid.UUID

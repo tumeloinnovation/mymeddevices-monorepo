@@ -1,9 +1,10 @@
-from typing import Annotated, Optional
 import uuid
+from typing import Annotated, Any
+
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import verify_access_token
@@ -14,8 +15,8 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    credentials: Annotated[Optional[HTTPAuthorizationCredentials], Depends(security)],
-    db: Annotated[AsyncSession, Depends(get_db)]
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ) -> User:
     """
     Dependency to get the current authenticated user from the JWT token.
@@ -50,6 +51,7 @@ async def get_current_user(
 
     # Check if access token is blacklisted
     from app.core.blacklist import token_blacklist
+
     jti = payload.get("jti")
     if jti and await token_blacklist.is_blacklisted(jti):
         raise HTTPException(
@@ -59,13 +61,14 @@ async def get_current_user(
         )
 
     # Extract user ID from token
-    user_id: str = payload.get("sub")
-    if user_id is None:
+    user_id_raw: Any | None = payload.get("sub")
+    if user_id_raw is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token missing user identifier",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    user_id = str(user_id_raw)
 
     # Query the user from database
     try:
@@ -88,17 +91,12 @@ async def get_current_user(
         )
 
     if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
 
     return user
 
 
-async def get_current_active_user(
-    current_user: Annotated[User, Depends(get_current_user)]
-) -> User:
+async def get_current_active_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     """
     Dependency to get the current active user.
     This is an additional check that can be used for endpoints requiring active users.
@@ -113,10 +111,7 @@ async def get_current_active_user(
         HTTPException: If user is inactive
     """
     if not current_user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
     return current_user
 
 
@@ -137,18 +132,40 @@ def require_role(*roles: str):
     Returns:
         A dependency function that checks user roles
     """
-    async def role_checker(
-        current_user: Annotated[User, Depends(get_current_user)]
-    ) -> User:
+
+    async def role_checker(current_user: Annotated[User, Depends(get_current_user)]) -> User:
         # Admin has superuser access to everything
         if current_user.role == "admin":
             return current_user
-            
+
         if current_user.role not in roles:
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied. Required role: {', '.join(roles)}"
+                status_code=status.HTTP_403_FORBIDDEN, detail=f"Access denied. Required role: {', '.join(roles)}"
             )
         return current_user
 
     return role_checker
+
+
+async def get_optional_current_user(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> User | None:
+    """
+    Dependency to get optional authenticated user from JWT token.
+    Returns None if no credentials or if token is invalid.
+    """
+    if credentials is None:
+        return None
+    try:
+        return await get_current_user(credentials, db)
+    except HTTPException:
+        return None
+
+
+get_current_user_optional = get_optional_current_user
+
+# Standardized dependency type aliases for clean route parameter declarations
+DbDep = Annotated[AsyncSession, Depends(get_db)]
+CurrentUserDep = Annotated[User, Depends(get_current_user)]
+OptionalUserDep = Annotated[User | None, Depends(get_optional_current_user)]

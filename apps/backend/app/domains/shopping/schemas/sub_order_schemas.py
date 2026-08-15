@@ -1,40 +1,44 @@
 """
 Pydantic schemas for SubOrder operations.
 """
+
 from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.domains.shopping.models.sub_order import SubOrderStatus
 
 
 class SubOrderBase(BaseModel):
     """Base SubOrder schema."""
+
     vendor_id: UUID
     subtotal_amount: Decimal = Field(..., ge=0, decimal_places=2)
 
 
 class SubOrderCreate(SubOrderBase):
     """Schema for creating a SubOrder."""
+
     parent_order_id: UUID
 
 
 class SubOrderUpdate(BaseModel):
     """Schema for updating a SubOrder."""
-    status: Optional[SubOrderStatus] = None
-    tracking_number: Optional[str] = None
-    tracking_url: Optional[str] = None
-    vendor_notes: Optional[str] = None
+
+    status: SubOrderStatus | None = None
+    tracking_number: str | None = None
+    tracking_url: str | None = None
+    vendor_notes: str | None = None
 
 
 class SubOrderItemSummary(BaseModel):
     """Summary of an order item within a sub-order."""
+
     id: UUID
     product_id: UUID
-    product_name: Optional[str] = None
+    product_name: str | None = None
     vendor_id: UUID
     quantity: int
     unit_price: Decimal
@@ -44,29 +48,30 @@ class SubOrderItemSummary(BaseModel):
 
 class SubOrderResponse(SubOrderBase):
     """Schema for SubOrder response."""
+
     id: UUID
     parent_order_id: UUID
     status: SubOrderStatus
-    tracking_number: Optional[str] = None
-    tracking_url: Optional[str] = None
-    shipped_at: Optional[datetime] = None
-    delivered_at: Optional[datetime] = None
-    vendor_notes: Optional[str] = None
+    tracking_number: str | None = None
+    tracking_url: str | None = None
+    shipped_at: datetime | None = None
+    delivered_at: datetime | None = None
+    vendor_notes: str | None = None
     created_at: datetime
     updated_at: datetime
-    items: List[SubOrderItemSummary] = []
+    items: list[SubOrderItemSummary] = []
 
     # Computed properties
     item_count: int = 0
     total_quantity: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SubOrderListResponse(BaseModel):
     """Schema for a list of SubOrders."""
-    sub_orders: List[SubOrderResponse]
+
+    sub_orders: list[SubOrderResponse]
     total: int
     page: int
     page_size: int
@@ -74,5 +79,6 @@ class SubOrderListResponse(BaseModel):
 
 class SubOrderStatusUpdate(BaseModel):
     """Schema for updating SubOrder status."""
+
     status: SubOrderStatus
-    notes: Optional[str] = None
+    notes: str | None = None

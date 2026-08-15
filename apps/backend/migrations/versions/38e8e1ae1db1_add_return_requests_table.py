@@ -5,12 +5,12 @@ Revises: 81dd38716335
 Create Date: 2026-06-15 19:30:00.000000
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 from sqlalchemy.dialects import postgresql
-
 
 revision: str = '38e8e1ae1db1'
 down_revision: Union[str, Sequence[str], None] = '81dd38716335'

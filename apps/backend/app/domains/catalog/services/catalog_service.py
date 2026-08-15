@@ -1,34 +1,34 @@
+import asyncio
 import re
-import os
 import uuid
-from datetime import datetime, timezone
-from typing import Optional, List, Tuple, Any
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_, and_, cast, String, delete as sql_delete
 from sqlalchemy.orm import selectinload
+
+from app.core.logging import logger
+from app.domains.catalog.config import settings as catalog_settings
+from app.domains.catalog.models.brand import Brand
+from app.domains.catalog.models.bundle_item import BundleItem
+from app.domains.catalog.models.category import Category
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.product_image import ProductImage
 from app.domains.catalog.models.product_variant import ProductVariant
-from app.domains.catalog.models.bundle_item import BundleItem
 from app.domains.catalog.models.related_product import RelatedProduct
-from app.domains.catalog.models.category import Category
-from app.domains.catalog.models.brand import Brand
 from app.domains.catalog.models.tag import Tag
-from app.domains.vendor.models.vendor_profile import VendorProfile
-from app.domains.shopping.models.cart import CartItem
-from app.domains.customers.models.wishlist import WishlistItem
-from app.core.logging import logger
-from app.domains.catalog.config import settings as catalog_settings
-import asyncio
 from app.domains.catalog.services.typesense_client import TypesenseClient
+from app.domains.vendor.models.vendor_profile import VendorProfile
 
 
-def generate_slug(name: str, existing_slug: Optional[str] = None) -> str:
+def generate_slug(name: str, existing_slug: str | None = None) -> str:
     """Generate a URL-friendly slug from a product name."""
     # Convert to lowercase, replace non-alphanumeric chars with dashes, strip ends
-    slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     # Collapse multiple dashes to single dashes
-    slug = re.sub(r'-+', '-', slug)
+    slug = re.sub(r"-+", "-", slug)
     if not slug:
         slug = "product"
     return slug
@@ -37,7 +37,7 @@ def generate_slug(name: str, existing_slug: Optional[str] = None) -> str:
 class CatalogService:
     """Service for managing products, categories, and catalog operations."""
 
-    COMPLETENESS_CHECKS = [
+    COMPLETENESS_CHECKS: list[dict[str, Any]] = [
         {"field": "name", "label": "Product Name", "weight": 10, "required": True},
         {"field": "category_id", "label": "Category", "weight": 10, "required": True},
         {"field": "description", "label": "Description (50+ chars)", "weight": 15, "required": True},
@@ -52,36 +52,40 @@ class CatalogService:
     ]
     MIN_COMPLETENESS = 80
 
-    def _calculate_pricing(self, base_price: float) -> Tuple[float, float, float]:
+    def _calculate_pricing(self, base_price: float) -> tuple[float, float, float]:
         """
         Calculate markup_price, commission_fee, and final customer price.
         price = base_price + markup_price + commission_fee
         """
         if not base_price or base_price <= 0:
             return 0.0, 0.0, 0.0
-            
+
         if base_price <= catalog_settings.MARKUP_THRESHOLD_LOW:
             markup_percent = catalog_settings.MARKUP_PERCENT_LOW
         elif base_price <= catalog_settings.MARKUP_THRESHOLD_MEDIUM:
             markup_percent = catalog_settings.MARKUP_PERCENT_MEDIUM
         else:
             markup_percent = catalog_settings.MARKUP_PERCENT_HIGH
-            
+
         markup_price = base_price * (markup_percent / 100.0)
         commission_fee = base_price * (catalog_settings.COMMISSION_FEE_PERCENT / 100.0)
         price = base_price + markup_price + commission_fee
-        
+
         return round(markup_price, 2), round(commission_fee, 2), round(price, 2)
 
-    def _calculate_from_retail_price(self, price: float) -> Tuple[float, float, float]:
+    def _calculate_from_retail_price(self, price: float) -> tuple[float, float, float]:
         """
         Reverse calculate base_price (vendor payout), markup_price, and commission_fee from target retail price.
         """
         if not price or price <= 0:
             return 0.0, 0.0, 0.0
 
-        low_threshold_price = catalog_settings.MARKUP_THRESHOLD_LOW * (1 + (catalog_settings.MARKUP_PERCENT_LOW + catalog_settings.COMMISSION_FEE_PERCENT) / 100.0)
-        med_threshold_price = catalog_settings.MARKUP_THRESHOLD_MEDIUM * (1 + (catalog_settings.MARKUP_PERCENT_MEDIUM + catalog_settings.COMMISSION_FEE_PERCENT) / 100.0)
+        low_threshold_price = catalog_settings.MARKUP_THRESHOLD_LOW * (
+            1 + (catalog_settings.MARKUP_PERCENT_LOW + catalog_settings.COMMISSION_FEE_PERCENT) / 100.0
+        )
+        med_threshold_price = catalog_settings.MARKUP_THRESHOLD_MEDIUM * (
+            1 + (catalog_settings.MARKUP_PERCENT_MEDIUM + catalog_settings.COMMISSION_FEE_PERCENT) / 100.0
+        )
 
         if price <= low_threshold_price:
             markup_pct = catalog_settings.MARKUP_PERCENT_LOW
@@ -105,15 +109,16 @@ class CatalogService:
     # PRODUCT CRUD
     # ========================================================================
 
-    async def create_product(self, vendor_id: str, name: str, **kwargs) -> Product:
+    async def create_product(self, vendor_id: str | uuid.UUID, name: str, **kwargs: Any) -> Product:
         """Create a new draft product."""
         # Clean legacy keys
         kwargs.pop("vendor_payout", None)
+        val_vendor_id = (
+            uuid.UUID(str(vendor_id)) if isinstance(vendor_id, (str, uuid.UUID)) and vendor_id else vendor_id
+        )
 
         # Verify vendor exists
-        vendor = await self.db.execute(
-            select(VendorProfile).where(VendorProfile.id == vendor_id)
-        )
+        vendor = await self.db.execute(select(VendorProfile).where(VendorProfile.id == val_vendor_id))
         if not vendor.scalar_one_or_none():
             raise ValueError("Vendor profile not found")
 
@@ -147,11 +152,11 @@ class CatalogService:
             kwargs["currency"] = kwargs.get("currency") or catalog_settings.DEFAULT_CURRENCY
 
         product = Product(
-            vendor_id=vendor_id,
+            vendor_id=val_vendor_id,
             name=name,
             slug=slug,
             status="draft",
-            **{k: v for k, v in kwargs.items() if v is not None}
+            **{k: v for k, v in kwargs.items() if v is not None},
         )
 
         self.db.add(product)
@@ -161,12 +166,12 @@ class CatalogService:
         product.completeness_score = await self._calculate_completeness(product)
 
         await self.db.commit()
-        product = await self._get_vendor_product(vendor_id, product.id)
+        product = await self._get_vendor_product(val_vendor_id, product.id)
 
-        logger.info(f"Product created: {product.id} by vendor {vendor_id}")
+        logger.info(f"Product created: {product.id} by vendor {val_vendor_id}")
         return product
 
-    async def update_product(self, vendor_id: str, product_id: str, **kwargs) -> Product:
+    async def update_product(self, vendor_id: str | uuid.UUID | None, product_id: str, **kwargs) -> Product:
         """Update a product. Recalculates completeness."""
         kwargs.pop("vendor_payout", None)
         product = await self._get_vendor_product(vendor_id, product_id)
@@ -175,9 +180,7 @@ class CatalogService:
         if "sku" in kwargs and kwargs["sku"]:
             sku_check = await self.db.execute(
                 select(Product).where(
-                    Product.sku == kwargs["sku"],
-                    Product.id != product.id,
-                    Product.is_deleted == False
+                    Product.sku == kwargs["sku"], Product.id != product.id, Product.is_deleted == False
                 )
             )
             if sku_check.scalar_one_or_none():
@@ -228,58 +231,55 @@ class CatalogService:
             if product.status == "published":
                 await asyncio.to_thread(self.typesense.index_product, product)
             else:
-                await asyncio.to_thread(self.typesense.delete_product, product.id)
+                await asyncio.to_thread(self.typesense.delete_product, str(product.id))
 
         logger.info(f"Product updated: {product_id}")
         return product
 
-    async def get_product(self, vendor_id: str, product_id: str) -> Product:
+    async def get_product(self, vendor_id: str | uuid.UUID | None, product_id: str) -> Product:
         """Get a single product owned by the vendor."""
         return await self._get_vendor_product(vendor_id, product_id)
 
     async def get_product_by_sku(self, sku: str) -> Product | None:
         """Get a product by SKU (admin use for bulk import)."""
-        result = await self.db.execute(
-            select(Product).where(
-                Product.sku == sku,
-                Product.is_deleted == False
-            )
-        )
+        result = await self.db.execute(select(Product).where(Product.sku == sku, Product.is_deleted == False))
         return result.scalar_one_or_none()
 
-    async def delete_product(self, vendor_id: str, product_id: str) -> None:
+    async def delete_product(self, vendor_id: str | uuid.UUID | None, product_id: str) -> None:
         """Delete a draft product. Only drafts can be deleted."""
         product = await self._get_vendor_product(vendor_id, product_id)
         if product.status != "draft":
             raise ValueError("Only draft products can be deleted. Archive published products instead.")
 
-        # Delete associated cart items
-        await self.db.execute(
-            sql_delete(CartItem).where(CartItem.product_id == product_id)
-        )
-
-        # Delete associated wishlist items
-        await self.db.execute(
-            sql_delete(WishlistItem).where(WishlistItem.product_id == product_id)
-        )
-
         # Perform soft delete
         product.is_deleted = True
-        product.deleted_at = datetime.now(timezone.utc)
+        product.deleted_at = datetime.now(UTC)
+
+        # Record domain event for outbox relay / consumers (e.g. cart/wishlist cleanup)
+        from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
+
+        outbox_event = OutboxEvent(
+            aggregate_type="Product",
+            aggregate_id=str(product.id),
+            event_type="product.deleted",
+            payload={"product_id": str(product.id), "vendor_id": str(vendor_id)},
+            status=OutboxStatus.PENDING,
+        )
+        self.db.add(outbox_event)
 
         await self.db.commit()
 
         # Sync deletion with Typesense
         if self.typesense.client is not None:
-            await asyncio.to_thread(self.typesense.delete_product, product.id)
+            await asyncio.to_thread(self.typesense.delete_product, str(product.id))
 
-        logger.info(f"Product soft deleted: {product_id} (with cart items and wishlist items)")
+        logger.info(f"Product soft deleted and outbox event emitted: {product_id}")
 
     # ========================================================================
     # PRODUCT LIFECYCLE
     # ========================================================================
 
-    async def verify_product(self, vendor_id: str, product_id: str) -> Product:
+    async def verify_product(self, vendor_id: str | uuid.UUID | None, product_id: str) -> Product:
         """Vendor verifies a product. Requires minimum completeness."""
         product = await self._get_vendor_product(vendor_id, product_id)
 
@@ -295,7 +295,7 @@ class CatalogService:
             )
 
         product.is_verified = True
-        product.verified_at = datetime.now(timezone.utc)
+        product.verified_at = datetime.now(UTC)
         product.status = "pending_review"
 
         await self.db.commit()
@@ -304,7 +304,7 @@ class CatalogService:
         logger.info(f"Product verified: {product_id}")
         return product
 
-    async def publish_product(self, vendor_id: str, product_id: str) -> Product:
+    async def publish_product(self, vendor_id: str | uuid.UUID | None, product_id: str) -> Product:
         """Publish a verified product to the storefront."""
         product = await self._get_vendor_product(vendor_id, product_id)
 
@@ -312,7 +312,7 @@ class CatalogService:
         product.is_verified = True
         product.status = "published"
         if not product.verified_at:
-            product.verified_at = datetime.now(timezone.utc)
+            product.verified_at = datetime.now(UTC)
 
         await self.db.commit()
         product = await self._get_vendor_product(vendor_id, product_id)
@@ -329,7 +329,9 @@ class CatalogService:
         product = await self._get_vendor_product(vendor_id, product_id)
 
         if product.status != "pending_review":
-            raise ValueError(f"Only products in 'pending_review' status can be rejected. Current status: {product.status}")
+            raise ValueError(
+                f"Only products in 'pending_review' status can be rejected. Current status: {product.status}"
+            )
 
         product.status = "draft"
         product.is_verified = False
@@ -342,7 +344,7 @@ class CatalogService:
         logger.info(f"Product rejected: {product_id}. Reason: {reason}")
         return product
 
-    async def archive_product(self, vendor_id: str, product_id: str) -> Product:
+    async def archive_product(self, vendor_id: str | uuid.UUID | None, product_id: str) -> Product:
         """Archive a product (removes from storefront)."""
         product = await self._get_vendor_product(vendor_id, product_id)
 
@@ -356,12 +358,12 @@ class CatalogService:
 
         # Delete from Typesense
         if self.typesense.client is not None:
-            await asyncio.to_thread(self.typesense.delete_product, product.id)
+            await asyncio.to_thread(self.typesense.delete_product, str(product.id))
 
         logger.info(f"Product archived: {product_id}")
         return product
 
-    async def unarchive_product(self, vendor_id: str, product_id: str) -> Product:
+    async def unarchive_product(self, vendor_id: str | uuid.UUID | None, product_id: str) -> Product:
         """Unarchive a product back to draft."""
         product = await self._get_vendor_product(vendor_id, product_id)
 
@@ -385,12 +387,12 @@ class CatalogService:
     async def get_vendor_products(
         self,
         vendor_id: str | None,
-        status_filter: Optional[str] = None,
-        category_id: Optional[str] = None,
-        search: Optional[str] = None,
+        status_filter: str | None = None,
+        category_id: str | None = None,
+        search: str | None = None,
         page: int = 1,
-        page_size: int = 20
-    ) -> Tuple[List[Product], int]:
+        page_size: int = 20,
+    ) -> tuple[list[Product], int]:
         """List products for a vendor with filters. If vendor_id is None, lists all products (admin)."""
         conditions = [Product.is_deleted == False]
         # If vendor_id is provided, filter by vendor (for vendors)
@@ -398,15 +400,19 @@ class CatalogService:
         if vendor_id is not None:
             conditions.append(Product.vendor_id == vendor_id)
 
-        query = select(Product).options(
-            selectinload(Product.images),
-            selectinload(Product.category),
-            selectinload(Product.variants),
-            selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
-            selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
-            selectinload(Product.brand_relation),
-            selectinload(Product.tags_relation)
-        ).where(*conditions)
+        query = (
+            select(Product)
+            .options(
+                selectinload(Product.images),
+                selectinload(Product.category),
+                selectinload(Product.variants),
+                selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
+                selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
+                selectinload(Product.brand_relation),
+                selectinload(Product.tags_relation),
+            )
+            .where(*conditions)
+        )
 
         if status_filter:
             query = query.where(Product.status == status_filter)
@@ -455,21 +461,21 @@ class CatalogService:
 
     async def get_storefront_products(
         self,
-        category_id: Optional[str] = None,
-        category_slug: Optional[str] = None,
-        search: Optional[str] = None,
-        price_min: Optional[float] = None,
-        price_max: Optional[float] = None,
-        is_featured: Optional[bool] = None,
-        is_clinical_pick: Optional[bool] = None,
-        care_setting: Optional[str] = None,
-        condition: Optional[str] = None,
-        is_on_sale: Optional[bool] = None,
-        in_stock: Optional[bool] = None,
+        category_id: str | None = None,
+        category_slug: str | None = None,
+        search: str | None = None,
+        price_min: float | None = None,
+        price_max: float | None = None,
+        is_featured: bool | None = None,
+        is_clinical_pick: bool | None = None,
+        care_setting: str | None = None,
+        condition: str | None = None,
+        is_on_sale: bool | None = None,
+        in_stock: bool | None = None,
         sort_by: str = "newest",
         page: int = 1,
-        page_size: int = 20
-    ) -> Tuple[List[Any], int]:
+        page_size: int = 20,
+    ) -> tuple[list[Any], int]:
         """Get published products for the public storefront."""
         if self.typesense.client is not None:
             try:
@@ -488,21 +494,17 @@ class CatalogService:
                     in_stock=in_stock,
                     sort_by=sort_by,
                     page=page,
-                    page_size=page_size
+                    page_size=page_size,
                 )
                 return products, total
             except Exception as e:
                 logger.error(f"Typesense search failed, falling back to database: {e}")
 
         # Database Fallback
-        query = select(Product).options(
-            selectinload(Product.images),
-            selectinload(Product.category),
-            selectinload(Product.brand_relation)
-        ).where(
-            Product.status == "published",
-            Product.is_verified == True,
-            Product.is_deleted == False
+        query = (
+            select(Product)
+            .options(selectinload(Product.images), selectinload(Product.category), selectinload(Product.brand_relation))
+            .where(Product.status == "published", Product.is_verified == True, Product.is_deleted == False)
         )
 
         # Filters
@@ -539,9 +541,7 @@ class CatalogService:
 
         # Count total
         count_query = select(func.count(Product.id)).where(
-            Product.status == "published",
-            Product.is_verified == True,
-            Product.is_deleted == False
+            Product.status == "published", Product.is_verified == True, Product.is_deleted == False
         )
         if category_id:
             count_query = count_query.where(Product.category_id == category_id)
@@ -587,58 +587,54 @@ class CatalogService:
         query = query.offset((page - 1) * page_size).limit(page_size)
 
         result = await self.db.execute(query)
-        products = result.scalars().all()
+        db_products = result.scalars().all()
 
-        return list(products), total
+        return list(db_products), total
 
     async def get_storefront_product_by_slug(self, slug: str) -> Product:
         """Get a single published product by slug. Increments view count."""
         result = await self.db.execute(
-            select(Product).options(
+            select(Product)
+            .options(
                 selectinload(Product.images),
                 selectinload(Product.category),
                 selectinload(Product.variants),
                 selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
                 selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
-                selectinload(Product.brand_relation)
-            ).where(
+                selectinload(Product.brand_relation),
+            )
+            .where(
                 or_(Product.slug == slug, Product.sku == slug, cast(Product.id, String) == slug),
                 Product.status == "published",
                 Product.is_verified == True,
-                Product.is_deleted == False
+                Product.is_deleted == False,
             )
         )
         product = result.scalar_one_or_none()
         if not product:
             raise ValueError("Product not found")
 
-        # Increment view count
-        product.view_count += 1
-        await self.db.commit()
-        
-        # To avoid refresh clearing the loaded attributes, we re-query
-        result = await self.db.execute(
-            select(Product).options(
-                selectinload(Product.images),
-                selectinload(Product.category),
-                selectinload(Product.variants),
-                selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
-                selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
-                selectinload(Product.brand_relation)
-            ).where(
-                Product.id == product.id
-            )
+        # Increment view count atomically without redundant reload
+        current_view_count = product.view_count or 0
+        await self.db.execute(
+            sql_update(Product).where(Product.id == product.id).values(view_count=Product.view_count + 1)
         )
-        return result.scalar_one()
+        await self.db.commit()
+        product.view_count = current_view_count + 1
+        return product
 
     # ========================================================================
     # IMAGE MANAGEMENT
     # ========================================================================
 
     async def add_product_image(
-        self, vendor_id: str | None, product_id: str,
-        url: str, alt_text: Optional[str] = None,
-        sort_order: int = 0, is_primary: bool = False
+        self,
+        vendor_id: str | None,
+        product_id: str,
+        url: str,
+        alt_text: str | None = None,
+        sort_order: int = 0,
+        is_primary: bool = False,
     ) -> ProductImage:
         """Add an image to a product."""
         product = await self._get_vendor_product(vendor_id, product_id)
@@ -649,11 +645,7 @@ class CatalogService:
                 img.is_primary = False
 
         image = ProductImage(
-            product_id=product.id,
-            url=url,
-            alt_text=alt_text,
-            sort_order=sort_order,
-            is_primary=is_primary
+            product_id=product.id, url=url, alt_text=alt_text, sort_order=sort_order, is_primary=is_primary
         )
 
         self.db.add(image)
@@ -677,19 +669,18 @@ class CatalogService:
         product = await self._get_vendor_product(vendor_id, product_id)
 
         image = await self.db.execute(
-            select(ProductImage).where(
-                ProductImage.id == image_id,
-                ProductImage.product_id == product.id
-            )
+            select(ProductImage).where(ProductImage.id == image_id, ProductImage.product_id == product.id)
         )
-        image = image.scalar_one_or_none()
-        if not image:
+        image_to_delete = image.scalar_one_or_none()
+        if not image_to_delete:
             raise ValueError("Image not found")
 
-        await self.db.delete(image)
+        await self.db.delete(image_to_delete)
 
         # Recalculate completeness
-        product.completeness_score = await self._calculate_completeness(product, image_count=max(0, len(product.images) - 1))
+        product.completeness_score = await self._calculate_completeness(
+            product, image_count=max(0, len(product.images) - 1)
+        )
 
         await self.db.commit()
 
@@ -700,29 +691,26 @@ class CatalogService:
 
         logger.info(f"Image {image_id} removed from product {product_id}")
 
-    async def reorder_product_images(self, vendor_id: str | None, product_id: str, image_ids: List[str]) -> List[ProductImage]:
+    async def reorder_product_images(
+        self, vendor_id: str | None, product_id: str, image_ids: list[str]
+    ) -> list[ProductImage]:
         """Reorder product images."""
         product = await self._get_vendor_product(vendor_id, product_id)
 
         for order, image_id in enumerate(image_ids):
             image_result = await self.db.execute(
-                select(ProductImage).where(
-                    ProductImage.id == image_id,
-                    ProductImage.product_id == product.id
-                )
+                select(ProductImage).where(ProductImage.id == image_id, ProductImage.product_id == product.id)
             )
             image = image_result.scalar_one_or_none()
             if image:
                 image.sort_order = order
-                image.is_primary = (order == 0)
+                image.is_primary = order == 0
 
         await self.db.commit()
 
         # Re-fetch ordered images
         result = await self.db.execute(
-            select(ProductImage)
-            .where(ProductImage.product_id == product.id)
-            .order_by(ProductImage.sort_order)
+            select(ProductImage).where(ProductImage.product_id == product.id).order_by(ProductImage.sort_order)
         )
         images = list(result.scalars().all())
 
@@ -737,7 +725,7 @@ class CatalogService:
     # CATEGORIES
     # ========================================================================
 
-    async def get_categories(self, active_only: bool = True) -> List[Any]:
+    async def get_categories(self, active_only: bool = True) -> list[Any]:
         """Get all root categories with children recursively built in memory."""
         query = select(Category).where(Category.is_deleted == False)
         if active_only:
@@ -760,7 +748,7 @@ class CatalogService:
                 parent_id=cat.parent_id,
                 sort_order=cat.sort_order,
                 is_active=cat.is_active,
-                children=[]
+                children=[],
             )
 
         roots = []
@@ -777,31 +765,32 @@ class CatalogService:
 
         return roots
 
-    async def get_category_by_slug(self, slug: str) -> Optional[Category]:
+    async def get_category_by_slug(self, slug: str) -> Category | None:
         """Get a category by slug."""
-        result = await self.db.execute(
-            select(Category).where(Category.slug == slug, Category.is_deleted == False)
-        )
+        result = await self.db.execute(select(Category).where(Category.slug == slug, Category.is_deleted == False))
         return result.scalar_one_or_none()
 
     async def create_category(self, **kwargs) -> Category:
         """Create a new category (admin only)."""
+        if not kwargs.get("slug") and kwargs.get("name"):
+            kwargs["slug"] = generate_slug(kwargs["name"])
+
         # Check slug uniqueness
-        existing = await self.db.execute(
-            select(Category).where(Category.slug == kwargs["slug"])
-        )
+        existing = await self.db.execute(select(Category).where(Category.slug == kwargs["slug"]))
         if existing.scalar_one_or_none():
             raise ValueError(f"Category with slug '{kwargs['slug']}' already exists")
 
         # Check parent_id exists
         if kwargs.get("parent_id"):
+            val_parent_id = uuid.UUID(str(kwargs["parent_id"]))
+            kwargs["parent_id"] = val_parent_id
             parent_exists = await self.db.execute(
-                select(Category.id).where(Category.id == kwargs["parent_id"], Category.is_deleted == False)
+                select(Category.id).where(Category.id == val_parent_id, Category.is_deleted == False)
             )
             if not parent_exists.scalar_one_or_none():
                 raise ValueError("Parent category not found")
 
-        category = Category(**kwargs)
+        category = Category(id=uuid.uuid4(), **kwargs)
         self.db.add(category)
         await self.db.commit()
         await self.db.refresh(category)
@@ -811,9 +800,7 @@ class CatalogService:
 
     async def update_category(self, category_id: str, **kwargs) -> Category:
         """Update a category (admin only)."""
-        result = await self.db.execute(
-            select(Category).where(Category.id == category_id)
-        )
+        result = await self.db.execute(select(Category).where(Category.id == category_id))
         category = result.scalar_one_or_none()
         if not category:
             raise ValueError("Category not found")
@@ -838,11 +825,11 @@ class CatalogService:
                 visited = {str(category_id)}
                 while curr_parent_id:
                     if str(curr_parent_id) in visited:
-                        raise ValueError("Circular reference detected: Parent category cannot be a descendant of this category")
+                        raise ValueError(
+                            "Circular reference detected: Parent category cannot be a descendant of this category"
+                        )
                     visited.add(str(curr_parent_id))
-                    parent_res = await self.db.execute(
-                        select(Category.parent_id).where(Category.id == curr_parent_id)
-                    )
+                    parent_res = await self.db.execute(select(Category.parent_id).where(Category.id == curr_parent_id))
                     curr_parent_id = parent_res.scalar_one_or_none()
 
         for key, value in kwargs.items():
@@ -859,9 +846,7 @@ class CatalogService:
 
     async def delete_category(self, category_id: str) -> None:
         """Soft delete a category. Fails if products are assigned."""
-        result = await self.db.execute(
-            select(Category).where(Category.id == category_id)
-        )
+        result = await self.db.execute(select(Category).where(Category.id == category_id))
         category = result.scalar_one_or_none()
         if not category:
             raise ValueError("Category not found")
@@ -870,14 +855,14 @@ class CatalogService:
         product_count = await self.db.execute(
             select(func.count(Product.id)).where(Product.category_id == category_id, Product.is_deleted == False)
         )
-        if product_count.scalar() > 0:
+        if (product_count.scalar() or 0) > 0:
             raise ValueError("Cannot delete category with assigned products. Reassign or delete products first.")
 
         # Check for children
         child_count = await self.db.execute(
             select(func.count(Category.id)).where(Category.parent_id == category_id, Category.is_deleted == False)
         )
-        if child_count.scalar() > 0:
+        if (child_count.scalar() or 0) > 0:
             raise ValueError("Cannot delete category with sub-categories. Delete children first.")
 
         category.is_deleted = True
@@ -889,12 +874,8 @@ class CatalogService:
     # ========================================================================
 
     async def get_brands(
-        self,
-        active_only: bool = True,
-        approval_status: Optional[str] = None,
-        page: int = 1,
-        page_size: int = 20
-    ) -> Tuple[List[Brand], int]:
+        self, active_only: bool = True, approval_status: str | None = None, page: int = 1, page_size: int = 20
+    ) -> tuple[list[Brand], int]:
         """Get brands with pagination."""
         query = select(Brand).where(Brand.is_deleted == False)
         if active_only:
@@ -909,7 +890,7 @@ class CatalogService:
         if approval_status:
             count_query = count_query.where(Brand.approval_status == approval_status)
         total_result = await self.db.execute(count_query)
-        total = total_result.scalar()
+        total = total_result.scalar() or 0
 
         # Get paginated results
         query = query.order_by(Brand.sort_order, Brand.name)
@@ -919,18 +900,15 @@ class CatalogService:
 
         return brands, total
 
-    async def get_brand_by_id(self, brand_id: str) -> Optional[Brand]:
+    async def get_brand_by_id(self, brand_id: str | uuid.UUID) -> Brand | None:
         """Get a brand by ID."""
-        result = await self.db.execute(
-            select(Brand).where(Brand.id == brand_id, Brand.is_deleted == False)
-        )
+        b_id = uuid.UUID(str(brand_id)) if not isinstance(brand_id, uuid.UUID) else brand_id
+        result = await self.db.execute(select(Brand).where(Brand.id == b_id, Brand.is_deleted == False))
         return result.scalar_one_or_none()
 
-    async def get_brand_by_slug(self, slug: str) -> Optional[Brand]:
+    async def get_brand_by_slug(self, slug: str) -> Brand | None:
         """Get a brand by slug."""
-        result = await self.db.execute(
-            select(Brand).where(Brand.slug == slug, Brand.is_deleted == False)
-        )
+        result = await self.db.execute(select(Brand).where(Brand.slug == slug, Brand.is_deleted == False))
         return result.scalar_one_or_none()
 
     async def create_brand(self, **kwargs) -> Brand:
@@ -938,15 +916,13 @@ class CatalogService:
         # Generate slug if not provided
         if "slug" not in kwargs or not kwargs["slug"]:
             # Convert to lowercase, replace non-alphanumeric chars with single dashes, strip ends
-            slug = re.sub(r'[^a-z0-9]+', '-', kwargs["name"].lower()).strip('-')
+            slug = re.sub(r"[^a-z0-9]+", "-", kwargs["name"].lower()).strip("-")
             # Collapse multiple dashes to single dashes
-            slug = re.sub(r'-+', '-', slug)
+            slug = re.sub(r"-+", "-", slug)
             kwargs["slug"] = slug
 
         # Check slug uniqueness
-        existing = await self.db.execute(
-            select(Brand).where(Brand.slug == kwargs["slug"])
-        )
+        existing = await self.db.execute(select(Brand).where(Brand.slug == kwargs["slug"]))
         if existing.scalar_one_or_none():
             raise ValueError(f"Brand with slug '{kwargs['slug']}' already exists")
 
@@ -958,11 +934,10 @@ class CatalogService:
         logger.info(f"Brand created: {brand.id} - {brand.name}")
         return brand
 
-    async def update_brand(self, brand_id: str, **kwargs) -> Brand:
+    async def update_brand(self, brand_id: str | uuid.UUID, **kwargs) -> Brand:
         """Update a brand (admin only)."""
-        result = await self.db.execute(
-            select(Brand).where(Brand.id == brand_id)
-        )
+        b_id = uuid.UUID(str(brand_id)) if not isinstance(brand_id, uuid.UUID) else brand_id
+        result = await self.db.execute(select(Brand).where(Brand.id == b_id))
         brand = result.scalar_one_or_none()
         if not brand:
             raise ValueError("Brand not found")
@@ -977,20 +952,19 @@ class CatalogService:
         logger.info(f"Brand updated: {brand_id}")
         return brand
 
-    async def delete_brand(self, brand_id: str) -> None:
+    async def delete_brand(self, brand_id: str | uuid.UUID) -> None:
         """Soft delete a brand. Fails if products are assigned."""
-        result = await self.db.execute(
-            select(Brand).where(Brand.id == brand_id)
-        )
+        b_id = uuid.UUID(str(brand_id)) if not isinstance(brand_id, uuid.UUID) else brand_id
+        result = await self.db.execute(select(Brand).where(Brand.id == b_id))
         brand = result.scalar_one_or_none()
         if not brand:
             raise ValueError("Brand not found")
 
         # Check for products
         product_count = await self.db.execute(
-            select(func.count(Product.id)).where(Product.brand_id == brand_id, Product.is_deleted == False)
+            select(func.count(Product.id)).where(Product.brand_id == b_id, Product.is_deleted == False)
         )
-        if product_count.scalar() > 0:
+        if (product_count.scalar() or 0) > 0:
             raise ValueError("Cannot delete brand with assigned products. Reassign or delete products first.")
 
         brand.is_deleted = True
@@ -1004,39 +978,26 @@ class CatalogService:
         Checks for duplicate brand names (case-insensitive).
         """
         # Check for duplicate brand name (case-insensitive)
-        existing = await self.db.execute(
-            select(Brand).where(
-                Brand.name.ilike(name),
-                Brand.is_deleted == False
-            )
-        )
+        existing = await self.db.execute(select(Brand).where(Brand.name.ilike(name), Brand.is_deleted == False))
         if existing.scalar_one_or_none():
             raise ValueError(f"Brand with name '{name}' already exists")
 
         # Auto-generate slug from name
-        slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
-        slug = re.sub(r'-+', '-', slug)
+        slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+        slug = re.sub(r"-+", "-", slug)
 
         # Ensure slug is unique
         counter = 1
         base_slug = slug
         while True:
-            slug_exists = await self.db.execute(
-                select(Brand).where(Brand.slug == slug)
-            )
+            slug_exists = await self.db.execute(select(Brand).where(Brand.slug == slug))
             if not slug_exists.scalar_one_or_none():
                 break
             slug = f"{base_slug}-{counter}"
             counter += 1
 
         # Create brand - auto-approved for vendors
-        brand = Brand(
-            name=name,
-            slug=slug,
-            approval_status="approved",
-            is_active=True,
-            sort_order=0
-        )
+        brand = Brand(name=name, slug=slug, approval_status="approved", is_active=True, sort_order=0)
 
         self.db.add(brand)
         await self.db.commit()
@@ -1045,14 +1006,13 @@ class CatalogService:
         logger.info(f"Quick brand created and auto-approved: {brand.id} - {brand.name}")
         return brand
 
-    async def approve_brand(self, brand_id: str) -> Brand:
+    async def approve_brand(self, brand_id: str | uuid.UUID) -> Brand:
         """
         Approve a pending brand.
         Sets approval_status to 'approved' and is_active to True.
         """
-        result = await self.db.execute(
-            select(Brand).where(Brand.id == brand_id, Brand.is_deleted == False)
-        )
+        b_id = uuid.UUID(str(brand_id)) if not isinstance(brand_id, uuid.UUID) else brand_id
+        result = await self.db.execute(select(Brand).where(Brand.id == b_id, Brand.is_deleted == False))
         brand = result.scalar_one_or_none()
         if not brand:
             raise ValueError("Brand not found")
@@ -1073,12 +1033,7 @@ class CatalogService:
     # TAGS
     # ========================================================================
 
-    async def get_tags(
-        self,
-        active_only: bool = True,
-        page: int = 1,
-        page_size: int = 20
-    ) -> Tuple[List[Tag], int]:
+    async def get_tags(self, active_only: bool = True, page: int = 1, page_size: int = 20) -> tuple[list[Tag], int]:
         """Get tags with pagination."""
         query = select(Tag).where(Tag.is_deleted == False)
         if active_only:
@@ -1089,7 +1044,7 @@ class CatalogService:
         if active_only:
             count_query = count_query.where(Tag.is_active == True)
         total_result = await self.db.execute(count_query)
-        total = total_result.scalar()
+        total = total_result.scalar() or 0
 
         # Get paginated results
         query = query.order_by(Tag.sort_order, Tag.name)
@@ -1099,31 +1054,25 @@ class CatalogService:
 
         return tags, total
 
-    async def get_tag_by_id(self, tag_id: str) -> Optional[Tag]:
+    async def get_tag_by_id(self, tag_id: str) -> Tag | None:
         """Get a tag by ID."""
-        result = await self.db.execute(
-            select(Tag).where(Tag.id == tag_id, Tag.is_deleted == False)
-        )
+        result = await self.db.execute(select(Tag).where(Tag.id == tag_id, Tag.is_deleted == False))
         return result.scalar_one_or_none()
 
-    async def get_tag_by_slug(self, slug: str) -> Optional[Tag]:
+    async def get_tag_by_slug(self, slug: str) -> Tag | None:
         """Get a tag by slug."""
-        result = await self.db.execute(
-            select(Tag).where(Tag.slug == slug, Tag.is_deleted == False)
-        )
+        result = await self.db.execute(select(Tag).where(Tag.slug == slug, Tag.is_deleted == False))
         return result.scalar_one_or_none()
 
     async def create_tag(self, **kwargs) -> Tag:
         """Create a new tag (admin only)."""
         # Generate slug if not provided
         if "slug" not in kwargs or not kwargs["slug"]:
-            slug = re.sub(r'[^a-z0-9]+', '-', kwargs["name"].lower()).strip('-')
+            slug = re.sub(r"[^a-z0-9]+", "-", kwargs["name"].lower()).strip("-")
             kwargs["slug"] = slug
 
         # Check slug uniqueness
-        existing = await self.db.execute(
-            select(Tag).where(Tag.slug == kwargs["slug"])
-        )
+        existing = await self.db.execute(select(Tag).where(Tag.slug == kwargs["slug"]))
         if existing.scalar_one_or_none():
             raise ValueError(f"Tag with slug '{kwargs['slug']}' already exists")
 
@@ -1137,9 +1086,7 @@ class CatalogService:
 
     async def update_tag(self, tag_id: str, **kwargs) -> Tag:
         """Update a tag (admin only)."""
-        result = await self.db.execute(
-            select(Tag).where(Tag.id == tag_id)
-        )
+        result = await self.db.execute(select(Tag).where(Tag.id == tag_id))
         tag = result.scalar_one_or_none()
         if not tag:
             raise ValueError("Tag not found")
@@ -1156,9 +1103,7 @@ class CatalogService:
 
     async def delete_tag(self, tag_id: str) -> None:
         """Soft delete a tag. Products can remain untagged."""
-        result = await self.db.execute(
-            select(Tag).where(Tag.id == tag_id)
-        )
+        result = await self.db.execute(select(Tag).where(Tag.id == tag_id))
         tag = result.scalar_one_or_none()
         if not tag:
             raise ValueError("Tag not found")
@@ -1171,7 +1116,7 @@ class CatalogService:
     # COMPLETENESS SCORING
     # ========================================================================
 
-    async def get_completeness_breakdown(self, vendor_id: str, product_id: str) -> dict:
+    async def get_completeness_breakdown(self, vendor_id: str | uuid.UUID | None, product_id: str) -> dict:
         """Get detailed completeness breakdown for a product."""
         product = await self._get_vendor_product(vendor_id, product_id)
         image_count = len(product.images) if product.images else 0
@@ -1187,54 +1132,60 @@ class CatalogService:
             elif check["required"]:
                 missing_required.append(check["label"])
 
-            items.append({
-                "field": check["field"],
-                "label": check["label"],
-                "weight": check["weight"],
-                "is_complete": is_complete,
-                "is_required": check["required"]
-            })
+            items.append(
+                {
+                    "field": check["field"],
+                    "label": check["label"],
+                    "weight": check["weight"],
+                    "is_complete": is_complete,
+                    "is_required": check["required"],
+                }
+            )
 
         return {
             "score": total_score,
             "minimum_required": self.MIN_COMPLETENESS,
             "is_ready_to_verify": total_score >= self.MIN_COMPLETENESS and len(missing_required) == 0,
             "items": items,
-            "missing_required": missing_required
+            "missing_required": missing_required,
         }
 
     # ========================================================================
     # PRIVATE HELPERS
     # ========================================================================
 
-    async def _get_vendor_product(self, vendor_id: str | None, product_id: str) -> Product:
+    async def _get_vendor_product(self, vendor_id: str | uuid.UUID | None, product_id: str | uuid.UUID) -> Product:
         """Get a product owned by the vendor (or any product if vendor_id is None for admins)."""
-        conditions = [
-            Product.id == product_id,
-            Product.is_deleted == False
-        ]
+        val_product_id = uuid.UUID(str(product_id)) if isinstance(product_id, (str, uuid.UUID)) else product_id
+        val_vendor_id = (
+            uuid.UUID(str(vendor_id)) if isinstance(vendor_id, (str, uuid.UUID)) and vendor_id else vendor_id
+        )
+
+        conditions = [Product.id == val_product_id, Product.is_deleted == False]
         # If vendor_id is provided, enforce ownership check (for vendors)
         # If vendor_id is None, allow access to any product (for admins)
-        if vendor_id is not None:
-            conditions.append(Product.vendor_id == vendor_id)
+        if val_vendor_id is not None:
+            conditions.append(Product.vendor_id == val_vendor_id)
 
         result = await self.db.execute(
-            select(Product).options(
+            select(Product)
+            .options(
                 selectinload(Product.images),
                 selectinload(Product.category),
                 selectinload(Product.variants),
                 selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
                 selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
                 selectinload(Product.brand_relation),
-                selectinload(Product.tags_relation)
-            ).where(*conditions)
+                selectinload(Product.tags_relation),
+            )
+            .where(*conditions)
         )
         product = result.scalar_one_or_none()
         if not product:
             raise ValueError("Product not found")
         return product
 
-    async def _ensure_unique_slug(self, base_slug: str, exclude_id: Optional[str] = None) -> str:
+    async def _ensure_unique_slug(self, base_slug: str, exclude_id: str | None = None) -> str:
         """Ensure slug is unique, appending a number if needed."""
         slug = base_slug
         counter = 1
@@ -1248,7 +1199,7 @@ class CatalogService:
             slug = f"{base_slug}-{counter}"
             counter += 1
 
-    async def _calculate_completeness(self, product: Product, image_count: Optional[int] = None) -> int:
+    async def _calculate_completeness(self, product: Product, image_count: int | None = None) -> int:
         """Calculate product completeness score (0-100)."""
         if image_count is None:
             if product.id:
@@ -1304,8 +1255,7 @@ class CatalogService:
 
         result = await self.db.execute(
             select(func.sum(ProductVariant.stock_quantity)).where(
-                ProductVariant.product_id == product_id,
-                ProductVariant.is_active == True
+                ProductVariant.product_id == product_id, ProductVariant.is_active == True
             )
         )
         total_stock = result.scalar() or 0
@@ -1313,7 +1263,7 @@ class CatalogService:
         product.stock_status = "instock" if total_stock > 0 else "outofstock"
         await self.db.commit()
 
-    async def get_variants(self, product_id: uuid.UUID) -> List[ProductVariant]:
+    async def get_variants(self, product_id: uuid.UUID) -> list[ProductVariant]:
         """Get all variants for a product ordered by sort_order."""
         result = await self.db.execute(
             select(ProductVariant)
@@ -1333,16 +1283,12 @@ class CatalogService:
 
         # If marked default, unset other defaults
         if kwargs.get("is_default"):
-            await self.db.execute(
-                select(ProductVariant)
-                .where(ProductVariant.product_id == product_id)
-            )
+            await self.db.execute(select(ProductVariant).where(ProductVariant.product_id == product_id))
             # update all existing variants is_default = False
             from sqlalchemy import update
+
             await self.db.execute(
-                update(ProductVariant)
-                .where(ProductVariant.product_id == product_id)
-                .values(is_default=False)
+                update(ProductVariant).where(ProductVariant.product_id == product_id).values(is_default=False)
             )
 
         variant = ProductVariant(product_id=product_id, **kwargs)
@@ -1356,16 +1302,17 @@ class CatalogService:
     async def create_variant_matrix(
         self,
         product_id: uuid.UUID,
-        attribute_groups: dict[str, List[str]],
-        base_sku_prefix: Optional[str] = None,
-        default_stock: int = 0
-    ) -> List[ProductVariant]:
+        attribute_groups: dict[str, list[str]],
+        base_sku_prefix: str | None = None,
+        default_stock: int = 0,
+    ) -> list[ProductVariant]:
         """Generate matrix combinations from attribute groups."""
         product = await self.db.get(Product, product_id)
         if not product:
             raise ValueError("Product not found")
 
         import itertools
+
         keys = list(attribute_groups.keys())
         value_lists = [attribute_groups[k] for k in keys]
         combinations = list(itertools.product(*value_lists))
@@ -1388,7 +1335,7 @@ class CatalogService:
                 attributes=attrs,
                 is_active=True,
                 is_default=(idx == 0),
-                sort_order=idx
+                sort_order=idx,
             )
             self.db.add(variant)
             created_variants.append(variant)
@@ -1409,10 +1356,9 @@ class CatalogService:
 
         if kwargs.get("is_default"):
             from sqlalchemy import update
+
             await self.db.execute(
-                update(ProductVariant)
-                .where(ProductVariant.product_id == variant.product_id)
-                .values(is_default=False)
+                update(ProductVariant).where(ProductVariant.product_id == variant.product_id).values(is_default=False)
             )
 
         for key, value in kwargs.items():
@@ -1439,7 +1385,7 @@ class CatalogService:
     # BUNDLE OPERATIONS
     # ========================================================================
 
-    async def get_bundle_items(self, product_id: uuid.UUID) -> List[BundleItem]:
+    async def get_bundle_items(self, product_id: uuid.UUID) -> list[BundleItem]:
         """Get all component items for a bundle product."""
         result = await self.db.execute(
             select(BundleItem)
@@ -1455,7 +1401,7 @@ class CatalogService:
         component_product_id: uuid.UUID,
         quantity: int = 1,
         sort_order: int = 0,
-        is_optional: bool = False
+        is_optional: bool = False,
     ) -> BundleItem:
         """Add a component item to a bundle product."""
         bundle_product = await self.db.get(Product, bundle_product_id)
@@ -1476,16 +1422,14 @@ class CatalogService:
             component_product_id=component_product_id,
             quantity=quantity,
             sort_order=sort_order,
-            is_optional=is_optional
+            is_optional=is_optional,
         )
         self.db.add(item)
         await self.db.commit()
 
         # Reload item with component_product loaded
         res = await self.db.execute(
-            select(BundleItem)
-            .where(BundleItem.id == item.id)
-            .options(selectinload(BundleItem.component_product))
+            select(BundleItem).where(BundleItem.id == item.id).options(selectinload(BundleItem.component_product))
         )
         return res.scalar_one()
 
@@ -1501,9 +1445,7 @@ class CatalogService:
 
         await self.db.commit()
         res = await self.db.execute(
-            select(BundleItem)
-            .where(BundleItem.id == item_id)
-            .options(selectinload(BundleItem.component_product))
+            select(BundleItem).where(BundleItem.id == item_id).options(selectinload(BundleItem.component_product))
         )
         return res.scalar_one()
 
@@ -1521,8 +1463,8 @@ class CatalogService:
     # ========================================================================
 
     async def get_related_products(
-        self, product_id: uuid.UUID, relation_type: Optional[str] = None
-    ) -> List[RelatedProduct]:
+        self, product_id: uuid.UUID, relation_type: str | None = None
+    ) -> list[RelatedProduct]:
         """Get related products linked to a product."""
         query = (
             select(RelatedProduct)
@@ -1542,7 +1484,7 @@ class CatalogService:
         related_product_id: uuid.UUID,
         relation_type: str,
         sort_order: int = 0,
-        is_bidirectional: bool = True
+        is_bidirectional: bool = True,
     ) -> RelatedProduct:
         """Link two products (cross_sell, upsell, accessory, spare_part)."""
         if product_id == related_product_id:
@@ -1558,7 +1500,7 @@ class CatalogService:
             related_product_id=related_product_id,
             relation_type=relation_type,
             sort_order=sort_order,
-            is_bidirectional=is_bidirectional
+            is_bidirectional=is_bidirectional,
         )
         self.db.add(rel)
 
@@ -1569,7 +1511,7 @@ class CatalogService:
                 related_product_id=product_id,
                 relation_type=relation_type,
                 sort_order=sort_order,
-                is_bidirectional=True
+                is_bidirectional=True,
             )
             self.db.add(reverse_rel)
 
@@ -1594,7 +1536,7 @@ class CatalogService:
                 select(RelatedProduct).where(
                     RelatedProduct.product_id == rel.related_product_id,
                     RelatedProduct.related_product_id == rel.product_id,
-                    RelatedProduct.relation_type == rel.relation_type
+                    RelatedProduct.relation_type == rel.relation_type,
                 )
             )
             reverse_rel = reverse_result.scalar_one_or_none()
@@ -1604,4 +1546,3 @@ class CatalogService:
         await self.db.delete(rel)
         await self.db.commit()
         return True
-

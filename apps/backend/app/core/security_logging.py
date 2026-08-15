@@ -16,14 +16,16 @@ ip_address, user_agent, and contextual details.
 """
 
 import json
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import UTC, datetime
 from enum import Enum
+from typing import Any
+
 from app.core.logging import logger
 
 
 class SecurityEventType(str, Enum):
     """Security event types for categorization and filtering."""
+
     # Authentication events
     AUTH_SUCCESS = "auth.success"
     AUTH_FAILURE = "auth.failure"
@@ -66,22 +68,23 @@ class SecurityEventType(str, Enum):
 
 class SecuritySeverity(str, Enum):
     """Security event severity levels."""
-    CRITICAL = "critical"      # Immediate action required (e.g., breach detected)
-    HIGH = "high"             # Investigate soon (e.g., multiple failed logins)
-    MEDIUM = "medium"         # Monitor (e.g., password validation failure)
-    LOW = "low"               # Informational (e.g., successful login)
-    INFO = "info"             # Audit trail (e.g., normal operations)
+
+    CRITICAL = "critical"  # Immediate action required (e.g., breach detected)
+    HIGH = "high"  # Investigate soon (e.g., multiple failed logins)
+    MEDIUM = "medium"  # Monitor (e.g., password validation failure)
+    LOW = "low"  # Informational (e.g., successful login)
+    INFO = "info"  # Audit trail (e.g., normal operations)
 
 
 def log_security_event(
     event_type: SecurityEventType,
     severity: SecuritySeverity = SecuritySeverity.INFO,
-    user_id: Optional[str] = None,
-    email: Optional[str] = None,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    details: Optional[dict[str, Any]] = None,
-    request_id: Optional[str] = None
+    user_id: str | None = None,
+    email: str | None = None,
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    details: dict[str, Any] | None = None,
+    request_id: str | None = None,
 ) -> None:
     """
     Log a structured security event.
@@ -96,8 +99,8 @@ def log_security_event(
         details: Additional event-specific details
         request_id: Request ID for tracing
     """
-    event = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+    event: dict[str, Any] = {
+        "timestamp": datetime.now(UTC).isoformat(),
         "event_type": event_type.value,
         "severity": severity.value,
     }
@@ -137,13 +140,14 @@ def log_security_event(
 
 # Convenience functions for common security events
 
+
 def log_auth_success(
     user_id: str,
     email: str,
     method: str,  # "password", "otp", "token"
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    request_id: Optional[str] = None
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    request_id: str | None = None,
 ) -> None:
     """Log successful authentication."""
     log_security_event(
@@ -154,16 +158,12 @@ def log_auth_success(
         ip_address=ip_address,
         user_agent=user_agent,
         request_id=request_id,
-        details={"method": method}
+        details={"method": method},
     )
 
 
 def log_auth_failure(
-    email: str,
-    reason: str,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    request_id: Optional[str] = None
+    email: str, reason: str, ip_address: str | None = None, user_agent: str | None = None, request_id: str | None = None
 ) -> None:
     """Log failed authentication attempt."""
     log_security_event(
@@ -173,7 +173,7 @@ def log_auth_failure(
         ip_address=ip_address,
         user_agent=user_agent,
         request_id=request_id,
-        details={"reason": reason}
+        details={"reason": reason},
     )
 
 
@@ -181,8 +181,8 @@ def log_account_lockout(
     email: str,
     failed_attempts: int,
     lockout_duration_minutes: int,
-    ip_address: Optional[str] = None,
-    request_id: Optional[str] = None
+    ip_address: str | None = None,
+    request_id: str | None = None,
 ) -> None:
     """Log account lockout event."""
     log_security_event(
@@ -191,18 +191,12 @@ def log_account_lockout(
         email=email,
         ip_address=ip_address,
         request_id=request_id,
-        details={
-            "failed_attempts": failed_attempts,
-            "lockout_duration_minutes": lockout_duration_minutes
-        }
+        details={"failed_attempts": failed_attempts, "lockout_duration_minutes": lockout_duration_minutes},
     )
 
 
 def log_password_validation_failure(
-    email: str,
-    validation_errors: list[str],
-    ip_address: Optional[str] = None,
-    request_id: Optional[str] = None
+    email: str, validation_errors: list[str], ip_address: str | None = None, request_id: str | None = None
 ) -> None:
     """Log password validation failure."""
     log_security_event(
@@ -211,7 +205,7 @@ def log_password_validation_failure(
         email=email,
         ip_address=ip_address,
         request_id=request_id,
-        details={"validation_errors": validation_errors}
+        details={"validation_errors": validation_errors},
     )
 
 
@@ -219,9 +213,9 @@ def log_token_issued(
     user_id: str,
     email: str,
     token_type: str,  # "access", "refresh"
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    request_id: Optional[str] = None
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    request_id: str | None = None,
 ) -> None:
     """Log token issuance."""
     log_security_event(
@@ -232,16 +226,16 @@ def log_token_issued(
         ip_address=ip_address,
         user_agent=user_agent,
         request_id=request_id,
-        details={"token_type": token_type}
+        details={"token_type": token_type},
     )
 
 
 def log_token_refreshed(
     user_id: str,
     email: str,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-    request_id: Optional[str] = None
+    ip_address: str | None = None,
+    user_agent: str | None = None,
+    request_id: str | None = None,
 ) -> None:
     """Log token refresh (rotation)."""
     log_security_event(
@@ -251,7 +245,7 @@ def log_token_refreshed(
         email=email,
         ip_address=ip_address,
         user_agent=user_agent,
-        request_id=request_id
+        request_id=request_id,
     )
 
 
@@ -259,8 +253,8 @@ def log_token_revoked(
     user_id: str,
     email: str,
     reason: str,  # "logout", "password_change", "security"
-    ip_address: Optional[str] = None,
-    request_id: Optional[str] = None
+    ip_address: str | None = None,
+    request_id: str | None = None,
 ) -> None:
     """Log token revocation."""
     log_security_event(
@@ -270,15 +264,12 @@ def log_token_revoked(
         email=email,
         ip_address=ip_address,
         request_id=request_id,
-        details={"reason": reason}
+        details={"reason": reason},
     )
 
 
 def log_token_reuse_detected(
-    email: str,
-    token_id: Optional[str] = None,
-    ip_address: Optional[str] = None,
-    request_id: Optional[str] = None
+    email: str, token_id: str | None = None, ip_address: str | None = None, request_id: str | None = None
 ) -> None:
     """Log attempt to reuse a revoked token (potential theft)."""
     log_security_event(
@@ -287,18 +278,18 @@ def log_token_reuse_detected(
         email=email,
         ip_address=ip_address,
         request_id=request_id,
-        details={"token_id": token_id} if token_id else {}
+        details={"token_id": token_id} if token_id else {},
     )
 
 
 def log_suspicious_activity(
     description: str,
     severity: SecuritySeverity = SecuritySeverity.HIGH,
-    email: Optional[str] = None,
-    user_id: Optional[str] = None,
-    ip_address: Optional[str] = None,
-    details: Optional[dict[str, Any]] = None,
-    request_id: Optional[str] = None
+    email: str | None = None,
+    user_id: str | None = None,
+    ip_address: str | None = None,
+    details: dict[str, Any] | None = None,
+    request_id: str | None = None,
 ) -> None:
     """Log suspicious activity."""
     log_security_event(
@@ -308,17 +299,12 @@ def log_suspicious_activity(
         email=email,
         ip_address=ip_address,
         request_id=request_id,
-        details={"description": description, **(details or {})}
+        details={"description": description, **(details or {})},
     )
 
 
 def log_authorization_denied(
-    user_id: str,
-    email: str,
-    resource: str,
-    action: str,
-    ip_address: Optional[str] = None,
-    request_id: Optional[str] = None
+    user_id: str, email: str, resource: str, action: str, ip_address: str | None = None, request_id: str | None = None
 ) -> None:
     """Log authorization denial."""
     log_security_event(
@@ -328,11 +314,11 @@ def log_authorization_denied(
         email=email,
         ip_address=ip_address,
         request_id=request_id,
-        details={"resource": resource, "action": action}
+        details={"resource": resource, "action": action},
     )
 
 
-def extract_request_context(request) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def extract_request_context(request) -> tuple[str | None, str | None, str | None]:
     """
     Extract request context (request_id, ip_address, user_agent) from a FastAPI request.
 
