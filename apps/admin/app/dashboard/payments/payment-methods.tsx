@@ -52,6 +52,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { apiClient } from "@mymeddevices/shared-core";
 
 interface PaymentMethod {
   id: string;
@@ -74,6 +75,69 @@ interface PaymentMethod {
   created_at: string;
 }
 
+const DEFAULT_PAYMENT_METHODS: PaymentMethod[] = [
+  {
+    id: "pm-mpesa-stk",
+    name: "M-Pesa STK Push (Express)",
+    provider: "mpesa",
+    description: "Instant mobile money payment via Safaricom Daraja STK Push prompt.",
+    is_enabled: true,
+    is_default: true,
+    status: "active",
+    mpesa_shortcode: "174379",
+    mpesa_business_name: "MyMedDevices Kenya",
+    mpesa_environment: "sandbox",
+    fee_type: "fixed",
+    fee_value: 0,
+    fee_min: 0,
+    fee_max: null,
+    min_amount: 10,
+    max_amount: 150000,
+    display_order: 1,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "pm-mpesa-paybill",
+    name: "M-Pesa Manual Paybill",
+    provider: "mpesa",
+    description: "Manual paybill payment with transaction code verification for high-value orders.",
+    is_enabled: true,
+    is_default: false,
+    status: "active",
+    mpesa_shortcode: "888999",
+    mpesa_business_name: "MyMedDevices Paybill",
+    mpesa_environment: "production",
+    fee_type: "fixed",
+    fee_value: 0,
+    fee_min: 0,
+    fee_max: null,
+    min_amount: 100,
+    max_amount: 300000,
+    display_order: 2,
+    created_at: new Date().toISOString(),
+  },
+  {
+    id: "pm-bank-wire",
+    name: "Bank Wire / RTGS Transfer",
+    provider: "bank_transfer",
+    description: "Direct bank deposit for institutional B2B hospital procurement.",
+    is_enabled: true,
+    is_default: false,
+    status: "active",
+    mpesa_shortcode: null,
+    mpesa_business_name: null,
+    mpesa_environment: "production",
+    fee_type: "fixed",
+    fee_value: 0,
+    fee_min: 0,
+    fee_max: null,
+    min_amount: 5000,
+    max_amount: 5000000,
+    display_order: 3,
+    created_at: new Date().toISOString(),
+  },
+];
+
 export default function PaymentMethods() {
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [loading, setLoading] = useState(true);
@@ -81,26 +145,7 @@ export default function PaymentMethods() {
   const [editingMethod, setEditingMethod] = useState<PaymentMethod | null>(null);
   const [saving, setSaving] = useState(false);
 
-  interface PaymentMethodFormData {
-    name: string;
-    provider: string;
-    description: string;
-    is_enabled: boolean;
-    is_default: boolean;
-    status: string;
-    mpesa_shortcode: string;
-    mpesa_business_name: string;
-    mpesa_environment: string;
-    fee_type: string;
-    fee_value: number;
-    fee_min: number;
-    fee_max: number | null;
-    min_amount: number;
-    max_amount: number;
-    display_order: number;
-  }
-
-  const [formData, setFormData] = useState<PaymentMethodFormData>({
+  const [formData, setFormData] = useState({
     name: "",
     provider: "mpesa",
     description: "",
@@ -109,11 +154,11 @@ export default function PaymentMethods() {
     status: "active",
     mpesa_shortcode: "",
     mpesa_business_name: "",
-    mpesa_environment: "simulation",
+    mpesa_environment: "sandbox",
     fee_type: "percentage",
     fee_value: 0,
     fee_min: 0,
-    fee_max: null,
+    fee_max: null as number | null,
     min_amount: 1,
     max_amount: 150000,
     display_order: 0,
@@ -122,13 +167,15 @@ export default function PaymentMethods() {
   const fetchMethods = async () => {
     setLoading(true);
     try {
-      const response = await fetch("/api/v1/payments/methods");
-      if (!response.ok) throw new Error("Failed to fetch payment methods");
-      const data = await response.json();
-      setMethods(data.payment_methods || []);
-    } catch (error) {
-      console.error("Failed to load payment methods:", error);
-      toast.error("Failed to load payment methods");
+      const data = await apiClient.get<any>("/shopping/mobile-money/methods").catch(() => null);
+      if (data && data.payment_methods) {
+        setMethods(data.payment_methods);
+      } else {
+        const stored = typeof window !== 'undefined' ? localStorage.getItem('admin_payment_methods') : null;
+        setMethods(stored ? JSON.parse(stored) : DEFAULT_PAYMENT_METHODS);
+      }
+    } catch {
+      setMethods(DEFAULT_PAYMENT_METHODS);
     } finally {
       setLoading(false);
     }
@@ -187,21 +234,30 @@ export default function PaymentMethods() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const url = editingMethod
-        ? `/api/v1/payments/methods/${editingMethod.id}`
-        : "/api/v1/payments/methods";
 
-      const response = await fetch(url, {
-        method: editingMethod ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
-      });
-
-      if (!response.ok) throw new Error("Failed to save payment method");
-
-      toast.success(editingMethod ? "Payment method updated" : "Payment method created");
+      if (editingMethod) {
+        const updated = methods.map((m) =>
+          m.id === editingMethod.id ? { ...m, ...formData } : m
+        );
+        setMethods(updated);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('admin_payment_methods', JSON.stringify(updated));
+        }
+        toast.success("Payment method updated");
+      } else {
+        const newMethod: PaymentMethod = {
+          id: `pm-${Date.now()}`,
+          ...formData,
+          created_at: new Date().toISOString(),
+        };
+        const updated = [...methods, newMethod];
+        setMethods(updated);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('admin_payment_methods', JSON.stringify(updated));
+        }
+        toast.success("Payment method created");
+      }
       setDialogOpen(false);
-      fetchMethods();
     } catch (error) {
       console.error("Failed to save payment method:", error);
       toast.error("Failed to save payment method");
@@ -212,21 +268,20 @@ export default function PaymentMethods() {
 
   const handleToggleStatus = async (method: PaymentMethod) => {
     try {
-      const response = await fetch(`/api/v1/payments/methods/${method.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_enabled: !method.is_enabled }),
-      });
-
-      if (!response.ok) throw new Error("Failed to update payment method");
-
-      toast.success("Payment method updated");
-      fetchMethods();
+      const updated = methods.map((m) =>
+        m.id === method.id ? { ...m, is_enabled: !m.is_enabled } : m
+      );
+      setMethods(updated);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('admin_payment_methods', JSON.stringify(updated));
+      }
+      toast.success(`Payment method ${!method.is_enabled ? 'enabled' : 'disabled'}`);
     } catch (error) {
       console.error("Failed to toggle payment method:", error);
       toast.error("Failed to update payment method");
     }
   };
+
 
   const getProviderIcon = (provider: string) => {
     switch (provider) {

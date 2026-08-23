@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "next": "16.0.7",
+    "next": "16.2.9",
     "sonner": "^2.0.7",
     "zustand": "^5.0.14",
     "clsx": "^2.1.1",

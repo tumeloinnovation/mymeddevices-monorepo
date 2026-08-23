@@ -48,10 +48,17 @@ async def admin_update_order_status(
 ):
     """Admin updates order status (e.g., from pending to paid) with state machine validation."""
     try:
+        user_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
         service = OrderService(db)
-        order = await service.update_order_status(order_id, data.status)
+        order = await service.update_order_status(
+            order_id,
+            data.status,
+            user_id=current_user.id,
+            user_name=f"Admin ({user_name})",
+        )
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        await db.commit()
         return success_response(order)
     except InvalidStateTransitionError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status transition: {str(e)}")
@@ -69,7 +76,7 @@ async def admin_update_internal_notes(
     """Admin updates internal notes for an order (admin-only communication)."""
     from sqlalchemy import select
 
-    from app.domains.shopping.models.order import Order
+    from app.domains.shopping.models.order import Order, OrderTimelineEvent
 
     # Get the order
     stmt = select(Order).where(Order.id == order_id)
@@ -81,6 +88,18 @@ async def admin_update_internal_notes(
 
     # Update internal notes
     order.internal_notes = data.internal_notes
+
+    # Add audit timeline event
+    user_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
+    current_status = order.status.value if hasattr(order.status, "value") else str(order.status)
+    timeline_event = OrderTimelineEvent(
+        id=uuid.uuid4(),
+        order_id=order_id,
+        status=current_status,
+        message=f"Internal notes updated by Admin ({user_name})",
+        created_by=current_user.id,
+    )
+    db.add(timeline_event)
     await db.commit()
 
     service = OrderService(db)

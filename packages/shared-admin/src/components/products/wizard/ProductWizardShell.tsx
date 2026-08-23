@@ -21,6 +21,7 @@ import { useProductWizardStore, WIZARD_STEPS } from "./use-product-wizard-store"
 import { StepGeneral } from "./steps/StepGeneral";
 import { StepPricing } from "./steps/StepPricing";
 import { StepInventory } from "./steps/StepInventory";
+import { StepVariants } from "./steps/StepVariants";
 import { StepGallery } from "./steps/StepGallery";
 import { StepAiSpecs } from "./steps/StepAiSpecs";
 import { StepReview } from "./steps/StepReview";
@@ -110,6 +111,7 @@ function ProductWizardInner({
       tags: [],
       meta_title: "",
       meta_description: "",
+      variants: [],
     },
     mode: "onChange",
   });
@@ -189,12 +191,24 @@ function ProductWizardInner({
     }
   };
 
+  const ensureDraftProduct = async (): Promise<string> => {
+    const targetId = productId || draftProductId || urlDraftId;
+    if (targetId) return targetId;
+
+    const currentValues = methods.getValues();
+    const draftPayload = buildCleanPayload(currentValues, "draft");
+    const product = await catalogService.createProduct(draftPayload as any);
+    setDraftProductId(product.id);
+    setUrlDraftId(product.id);
+    return product.id;
+  };
+
   const handleNextStep = async () => {
     let fieldsToValidate: (keyof ProductWizardFormData)[] = [];
     if (currentStep === 0) fieldsToValidate = ["name", "slug", "category_id"];
     if (currentStep === 1) fieldsToValidate = ["base_price"];
     if (currentStep === 2) fieldsToValidate = ["sku", "stock_quantity"];
-    if (currentStep === 3 && imagePreviews.length === 0) {
+    if (currentStep === 4 && imagePreviews.length === 0) {
       toast.error("At least 1 product image is required. Upload a primary equipment photo.");
       return;
     }
@@ -220,7 +234,13 @@ function ProductWizardInner({
     if (formData.slug?.trim()) payload.slug = formData.slug.trim();
     if (formData.vendor_id?.trim()) payload.vendor_id = formData.vendor_id.trim();
     if (formData.category_id?.trim()) payload.category_id = formData.category_id.trim();
-    if (formData.brand?.trim()) payload.brand = formData.brand.trim();
+    if (formData.brand?.trim() || formData.brand_name?.trim()) {
+      const resolvedBrand =
+        formData.brand_name?.trim() ||
+        brands.find((b) => b.id === formData.brand?.trim() || b.name === formData.brand?.trim())?.name ||
+        formData.brand?.trim();
+      if (resolvedBrand) payload.brand = resolvedBrand;
+    }
     if (formData.model_number?.trim()) payload.model_number = formData.model_number.trim();
     if (formData.sku?.trim()) payload.sku = formData.sku.trim();
     if (formData.description?.trim()) payload.description = formData.description.trim();
@@ -244,6 +264,10 @@ function ProductWizardInner({
     if (formData.wholesale_price !== undefined && formData.wholesale_price !== null && !isNaN(Number(formData.wholesale_price)) && Number(formData.wholesale_price) > 0) {
       payload.wholesale_price = Number(formData.wholesale_price);
     }
+    if (formData.compare_at_price !== undefined && formData.compare_at_price !== null && !isNaN(Number(formData.compare_at_price)) && Number(formData.compare_at_price) > 0) {
+      payload.compare_at_price = Number(formData.compare_at_price);
+    }
+    payload.is_on_sale = !!formData.sale_active;
 
     payload.stock_quantity = Number(formData.stock_quantity || 0);
     payload.low_stock_threshold = Number(formData.low_stock_threshold || 5);
@@ -279,44 +303,46 @@ function ProductWizardInner({
   const handleGenerateAiContent = async () => {
     const name = watch("name");
     const categoryId = watch("category_id");
+    const brandValue = watch("brand_name") || watch("brand") || "";
 
-    if (!name || !categoryId) {
-      toast.error("Please select product name and medical category first.");
+    if (!name?.trim()) {
+      toast.error("Please enter a product title first.");
       return;
     }
 
+    const resolvedCategory = categories.find((c) => c.id === categoryId)?.name;
+    const resolvedBrand =
+      brandValue ||
+      brands.find((b) => b.id === brandValue || b.name === brandValue)?.name ||
+      "Medical Equipment";
+
     setIsGenerating(true);
     try {
-      const currentValues = methods.getValues();
-      const draftPayload = buildCleanPayload(currentValues, "draft");
-
-      let product;
-      if (draftProductId || urlDraftId) {
-        const id = draftProductId || urlDraftId;
-        product = await catalogService.updateProduct(id!, draftPayload as any);
-      } else {
-        product = await catalogService.createProduct(draftPayload as any);
-        setDraftProductId(product.id);
-        setUrlDraftId(product.id);
-      }
-
-      const suggestions = await catalogService.getAiSuggestions(product.id, {
-        fields_to_generate: ["description", "short_description", "specifications", "tags", "meta_title", "meta_description"],
+      // First try direct stateless MedAI description and specs generation
+      const suggestions = await catalogService.generateDescriptions({
+        product_name: name.trim(),
+        brand: resolvedBrand,
+        category: resolvedCategory || undefined,
       });
 
-      if (suggestions.suggestions) {
+      if (suggestions && suggestions.suggestions) {
         const s = suggestions.suggestions;
-        if (s.description) setValue("description", s.description);
-        if (s.short_description) setValue("short_description", s.short_description);
-        if (s.specifications) setValue("specifications", s.specifications);
-        if (s.tags) setValue("tags", s.tags);
-        if (s.meta_title) setValue("meta_title", s.meta_title);
-        if (s.meta_description) setValue("meta_description", s.meta_description);
+        if (s.description) setValue("description", s.description, { shouldValidate: true, shouldDirty: true });
+        if (s.short_description) setValue("short_description", s.short_description, { shouldValidate: true, shouldDirty: true });
+        if (s.specifications && typeof s.specifications === "object") {
+          setValue("specifications", s.specifications, { shouldValidate: true, shouldDirty: true });
+        }
+        if (s.tags && Array.isArray(s.tags)) {
+          setValue("tags", s.tags, { shouldValidate: true, shouldDirty: true });
+        }
+        if (s.meta_title) setValue("meta_title", s.meta_title, { shouldValidate: true, shouldDirty: true });
+        if (s.meta_description) setValue("meta_description", s.meta_description, { shouldValidate: true, shouldDirty: true });
 
         toast.success("MedAI details & medical specs generated!");
       }
     } catch (e: any) {
-      toast.error("AI Generation failed: " + (e.message || "Unknown error"));
+      console.warn("Direct AI assist failed, attempting fallback:", e);
+      toast.error("AI Generation failed: " + (e.message || "Please check backend connection"));
     } finally {
       setIsGenerating(false);
     }
@@ -349,6 +375,28 @@ function ProductWizardInner({
           } catch (imgError) {
             console.error(`Failed to upload image ${i + 1}:`, imgError);
             toast.error(`Image ${i + 1} upload failed, but product listing was saved.`);
+          }
+        }
+      }
+
+      // Persist in-memory configured variants to backend
+      if (formDataValues.variants && formDataValues.variants.length > 0) {
+        for (let i = 0; i < formDataValues.variants.length; i++) {
+          const v = formDataValues.variants[i];
+          try {
+            await catalogService.createVariant(product.id, {
+              name: v.name,
+              sku: v.sku || undefined,
+              override_price: v.price > 0 ? v.price : undefined,
+              stock_quantity: v.stock_quantity ?? 10,
+              attributes: v.attributes,
+              is_active: v.is_active ?? true,
+              is_default: v.is_default ?? false,
+              image_url: v.image_url || undefined,
+              sort_order: i,
+            });
+          } catch (variantErr) {
+            console.error(`Failed to save variant ${v.name}:`, variantErr);
           }
         }
       }
@@ -483,6 +531,14 @@ function ProductWizardInner({
             {currentStep === 1 && <StepPricing />}
             {currentStep === 2 && <StepInventory />}
             {currentStep === 3 && (
+              <StepVariants
+                productId={productId || draftProductId || urlDraftId || undefined}
+                basePrice={Number(watch("base_price")) || 0}
+                baseSku={watch("sku") || ""}
+                imagePreviews={imagePreviews}
+              />
+            )}
+            {currentStep === 4 && (
               <StepGallery
                 images={images}
                 imagePreviews={imagePreviews}
@@ -490,13 +546,13 @@ function ProductWizardInner({
                 setImagePreviews={setImagePreviews}
               />
             )}
-            {currentStep === 4 && (
+            {currentStep === 5 && (
               <StepAiSpecs
                 onGenerateAiContent={handleGenerateAiContent}
                 isGenerating={isGenerating}
               />
             )}
-            {currentStep === 5 && (
+            {currentStep === 6 && (
               <StepReview
                 role={role}
                 imagePreviews={imagePreviews}

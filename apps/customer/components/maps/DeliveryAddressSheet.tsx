@@ -28,6 +28,7 @@ import {
 import { useGoogleMaps } from "./useGoogleMaps";
 import AddressAutocomplete from "./AddressAutocomplete";
 import { useAddressStore, PREDEFINED_TAGS, type AddressTag } from "@/lib/store/useAddressStore";
+import { capitalizeTag } from "@mymeddevices/shared-core";
 
 interface Address {
   id?: string;
@@ -220,8 +221,8 @@ export default function DeliveryAddressSheet({
                     </SelectTrigger>
                     <SelectContent>
                       {allTags.map((tag) => (
-                        <SelectItem key={tag} value={tag} className="capitalize text-xs">
-                          {tag}
+                        <SelectItem key={tag} value={tag} className="text-xs">
+                          {capitalizeTag(tag)}
                         </SelectItem>
                       ))}
                       <SelectItem value="custom" className="text-xs">

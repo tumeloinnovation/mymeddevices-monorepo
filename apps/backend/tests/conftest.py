@@ -25,6 +25,9 @@ TestingSessionLocal = async_sessionmaker(engine_test, expire_on_commit=False, cl
 async def setup_test_database():
     """Ensure database schema is up-to-date once per test run."""
     async with engine_test.begin() as conn:
+        await conn.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
+        await conn.execute(text("CREATE SCHEMA public"))
+        await conn.execute(text("CREATE SEQUENCE IF NOT EXISTS order_number_seq START WITH 1000"))
         await conn.run_sync(Base.metadata.create_all)
     yield
 

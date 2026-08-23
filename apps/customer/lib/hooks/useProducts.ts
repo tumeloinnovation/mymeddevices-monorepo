@@ -61,13 +61,14 @@ export function useProducts(
       // Convert params to service format
       const serviceParams: any = {
         page: queryParams.page,
-        limit: queryParams.per_page || 20,
+        limit: queryParams.per_page || 100,
         q: queryParams.search,
         min_price: queryParams.min_price,
         max_price: queryParams.max_price,
         vendor_id: queryParams.vendor_id,
         sku: queryParams.ids?.[0], // Handle IDs
         in_stock: queryParams.stock_status === 'instock' ? true : undefined,
+        category: queryParams.category,
       };
 
       const response = await productService.getProducts(serviceParams);
@@ -106,10 +107,10 @@ export function useProducts(
             alt: img.alt_text || '',
             position: img.position || 0,
           })),
-          categories: (item.category_name || item.category) ? [{
+          categories: (item.category_slug || item.category_name || item.category || item.category_id) ? [{
             id: item.category_id || 0,
-            name: item.category_name || item.category,
-            slug: (item.category_name || item.category).toLowerCase().replace(/\s+/g, '-'),
+            name: item.category_name || item.category || '',
+            slug: item.category_slug || (item.category_name || item.category || '').toLowerCase().replace(/\s+/g, '-'),
           }] : [],
           tags: [],
           attributes: [],

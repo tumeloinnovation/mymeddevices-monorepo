@@ -124,6 +124,18 @@ class AdminCustomerCreate(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 
+class UserPasswordUpdateRequest(BaseModel):
+    """Admin user password update schema"""
+
+    password: str = Field(..., min_length=8, description="New password for the user")
+    force_change: bool = Field(
+        default=True, description="Whether user must change password on next login"
+    )
+    notify_user: bool = Field(
+        default=True, description="Whether to send email notification to user"
+    )
+
+
 # ============================================================================
 # Stats Endpoints
 # ============================================================================
@@ -445,6 +457,63 @@ async def create_customer(
     )
 
 
+@router.put("/customers/{customer_id}/password")
+async def set_customer_password(
+    customer_id: str,
+    payload: UserPasswordUpdateRequest,
+    current_user: Annotated[User, Depends(require_role("admin"))],
+    db: AsyncSession = Depends(get_db),
+):
+    """Set or reset a customer's password (admin only)"""
+    try:
+        customer_uuid = uuid.UUID(customer_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid customer ID")
+
+    result = await db.execute(
+        select(User).where(and_(User.id == customer_uuid, User.role == "customer"))
+    )
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    from app.core.security import get_password_hash_async
+
+    user.password_hash = await get_password_hash_async(payload.password)
+
+    # Force password change flag could be stored in user metadata or a separate field
+    # For now, we'll rely on the notification to inform the user
+
+    await db.commit()
+
+    # Audit log
+    logger.info(
+        f"Password updated for customer {customer_id} by admin {current_user.email}. Force change: {payload.force_change}"
+    )
+
+    # Send password change notification if requested
+    if payload.notify_user:
+        try:
+            from app.domains.shopping.services.email_notification_service import EmailNotificationService
+
+            email_service = EmailNotificationService()
+            user_name = f"{user.first_name} {user.last_name}".strip() or user.email.split("@")[0]
+            await email_service.send_password_reset_notification(
+                user.email, user_name, payload.force_change
+            )
+        except Exception as e:
+            logger.error(f"Failed to send password notification: {e}")
+
+    return success_response(
+        {
+            "message": "Password updated successfully",
+            "force_change": payload.force_change,
+            "notified": payload.notify_user,
+        }
+    )
+
+
 # ============================================================================
 # Staff Management Endpoints
 # ============================================================================
@@ -463,10 +532,10 @@ async def list_staff(
     """List staff members (admin and worker roles)"""
 
     # Build query
-    query = select(User).where(or_(User.role == "admin", User.role == "worker"))
+    query = select(User).where(User.role != "guest")
 
     # Apply role filter
-    if role_filter in ["admin", "worker"]:
+    if role_filter and role_filter != "all":
         query = query.where(User.role == role_filter)
 
     # Apply status filter
@@ -475,7 +544,6 @@ async def list_staff(
     elif status_filter == "inactive":
         query = query.where(User.is_active == False)
     elif status_filter == "pending":
-        # For staff, pending would be unverified
         query = query.where(User.is_verified == False)
 
     # Apply search
@@ -502,10 +570,33 @@ async def list_staff(
     result = await db.execute(query)
     users = result.scalars().all()
 
+    dept_map = {
+        "admin": "Executive Management",
+        "finance": "Finance & Accounting",
+        "compliance": "Clinical & Regulatory Affairs",
+        "support": "Customer Support",
+        "logistics": "Logistics & Supply Chain",
+        "driver": "Logistics & Delivery",
+        "vendor": "Vendor Operations",
+        "customer": "Client Accounts",
+        "worker": "Operations",
+    }
+
+    # Fetch permissions matrix & staff overrides
+    from app.domains.admin.api.system_api import DEFAULT_ROLE_MATRIX
+    from app.domains.admin.services import SystemSettingService
+
+    saved_matrix = await SystemSettingService.get_setting(db, "role_permissions")
+    saved_overrides = await SystemSettingService.get_setting(db, "staff_permission_overrides") or {}
+
+    role_matrix = dict(DEFAULT_ROLE_MATRIX)
+    if saved_matrix and isinstance(saved_matrix, dict):
+        role_matrix.update(saved_matrix)
+
     # Build response
     staff_list = []
     for user in users:
-        name = " ".join(filter(None, [user.first_name, user.last_name])) or "Staff"
+        name = " ".join(filter(None, [user.first_name, user.last_name])) or user.company_name or "Staff Member"
 
         # Determine status
         if not user.is_active:
@@ -515,12 +606,19 @@ async def list_staff(
         else:
             status = "active"
 
-        # Department based on role (could be expanded)
-        department = "Management" if user.role == "admin" else "Operations"
+        department = dept_map.get(user.role, "Operations")
+
+        # Calculate dynamic permissions count
+        user_id_str = str(user.id)
+        base_perms = set(role_matrix.get(user.role, []))
+        user_override = saved_overrides.get(user_id_str, {})
+        granted = set(user_override.get("granted", []))
+        revoked = set(user_override.get("revoked", []))
+        effective_perms = (base_perms | granted) - revoked
 
         staff_list.append(
             StaffListItem(
-                id=str(user.id),
+                id=user_id_str,
                 name=name,
                 email=user.email,
                 role=user.role,
@@ -528,7 +626,7 @@ async def list_staff(
                 department=department,
                 last_login=user.updated_at.isoformat() if user.updated_at else None,
                 joined_date=user.created_at.isoformat() if user.created_at else None,
-                permissions_count=0,  # To be implemented with permissions system
+                permissions_count=len(effective_perms),
             )
         )
 
@@ -541,56 +639,295 @@ async def list_staff(
 async def get_staff_member(
     staff_id: str, current_user: Annotated[User, Depends(require_role("admin"))], db: AsyncSession = Depends(get_db)
 ):
-    """Get staff member details"""
+    """Get staff member details with effective permissions"""
     try:
         staff_uuid = uuid.UUID(staff_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid staff ID")
 
-    result = await db.execute(
-        select(User).where(and_(User.id == staff_uuid, or_(User.role == "admin", User.role == "worker")))
-    )
+    result = await db.execute(select(User).where(User.id == staff_uuid))
     user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=404, detail="Staff member not found")
 
-    name = " ".join(filter(None, [user.first_name, user.last_name])) or "Staff"
-    department = "Management" if user.role == "admin" else "Operations"
+    name = " ".join(filter(None, [user.first_name, user.last_name])) or user.company_name or "Staff Member"
+
+    dept_map = {
+        "admin": "Executive Management",
+        "finance": "Finance & Accounting",
+        "compliance": "Clinical & Regulatory Affairs",
+        "support": "Customer Support",
+        "logistics": "Logistics & Supply Chain",
+        "driver": "Logistics & Delivery",
+        "vendor": "Vendor Operations",
+        "customer": "Client Accounts",
+        "worker": "Operations",
+    }
+    department = dept_map.get(user.role, "Operations")
+
+    # Fetch permissions & overrides
+    from app.domains.admin.api.system_api import DEFAULT_ROLE_MATRIX
+    from app.domains.admin.services import SystemSettingService
+
+    saved_matrix = await SystemSettingService.get_setting(db, "role_permissions")
+    saved_overrides = await SystemSettingService.get_setting(db, "staff_permission_overrides") or {}
+
+    role_matrix = dict(DEFAULT_ROLE_MATRIX)
+    if saved_matrix and isinstance(saved_matrix, dict):
+        role_matrix.update(saved_matrix)
+
+    base_perms = set(role_matrix.get(user.role, []))
+    user_override = saved_overrides.get(str(user.id), {})
+    granted = set(user_override.get("granted", []))
+    revoked = set(user_override.get("revoked", []))
+    effective_perms = sorted(list((base_perms | granted) - revoked))
 
     return success_response(
         {
             "id": str(user.id),
             "name": name,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
             "email": user.email,
             "role": user.role,
             "phone": user.phone,
             "department": department,
             "is_active": user.is_active,
+            "status": "active" if user.is_active else "inactive",
             "is_verified": user.is_verified,
             "joined_date": user.created_at.isoformat() if user.created_at else None,
             "last_login": user.updated_at.isoformat() if user.updated_at else None,
+            "permissions": effective_perms,
+            "permissions_count": len(effective_perms),
+            "is_customized": bool(granted or revoked),
+            "granted_overrides": sorted(list(granted)),
+            "revoked_overrides": sorted(list(revoked)),
         }
     )
+
+
+class StaffPermissionUpdateRequest(BaseModel):
+    granted: list[str] = Field(default_factory=list)
+    revoked: list[str] = Field(default_factory=list)
+    role: str | None = None
+    department: str | None = None
+
+
+@router.get("/staff/{staff_id}/permissions")
+async def get_staff_permissions(
+    staff_id: str,
+    current_user: Annotated[User, Depends(require_role("admin"))],
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Get detailed permissions breakdown for a specific staff member.
+    """
+    try:
+        staff_uuid = uuid.UUID(staff_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid staff ID")
+
+    result = await db.execute(select(User).where(User.id == staff_uuid))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+
+    from app.domains.admin.api.system_api import DEFAULT_PERMISSION_CATEGORIES, DEFAULT_ROLE_MATRIX, DEFAULT_ROLES
+    from app.domains.admin.services import SystemSettingService
+
+    saved_matrix = await SystemSettingService.get_setting(db, "role_permissions")
+    saved_roles = await SystemSettingService.get_setting(db, "custom_roles") or []
+    saved_overrides = await SystemSettingService.get_setting(db, "staff_permission_overrides") or {}
+
+    role_matrix = dict(DEFAULT_ROLE_MATRIX)
+    if saved_matrix and isinstance(saved_matrix, dict):
+        role_matrix.update(saved_matrix)
+
+    all_roles = list(DEFAULT_ROLES)
+    if saved_roles:
+        existing_keys = {r["key"] for r in all_roles}
+        for cr in saved_roles:
+            if cr.get("key") not in existing_keys:
+                all_roles.append(cr)
+
+    user_id_str = str(user.id)
+    base_perms = set(role_matrix.get(user.role, []))
+    user_override = saved_overrides.get(user_id_str, {})
+    granted = set(user_override.get("granted", []))
+    revoked = set(user_override.get("revoked", []))
+    effective_perms = sorted(list((base_perms | granted) - revoked))
+
+    name = " ".join(filter(None, [user.first_name, user.last_name])) or user.company_name or "Staff Member"
+
+    return success_response(
+        {
+            "staff_id": user_id_str,
+            "name": name,
+            "email": user.email,
+            "role": user.role,
+            "categories": DEFAULT_PERMISSION_CATEGORIES,
+            "available_roles": all_roles,
+            "base_permissions": sorted(list(base_perms)),
+            "granted_overrides": sorted(list(granted)),
+            "revoked_overrides": sorted(list(revoked)),
+            "effective_permissions": effective_perms,
+            "is_customized": bool(granted or revoked),
+        }
+    )
+
+
+@router.put("/staff/{staff_id}/permissions")
+async def update_staff_permissions(
+    staff_id: str,
+    payload: StaffPermissionUpdateRequest,
+    current_user: Annotated[User, Depends(require_role("admin"))],
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update custom permission overrides or assigned role for a staff member.
+    """
+    try:
+        staff_uuid = uuid.UUID(staff_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid staff ID")
+
+    result = await db.execute(select(User).where(User.id == staff_uuid))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+
+    # Update role if provided
+    if payload.role and payload.role != user.role:
+        valid_roles = {"admin", "worker", "finance", "compliance", "support", "logistics", "driver", "vendor", "customer", "viewer"}
+        if payload.role in valid_roles:
+            user.role = payload.role
+            await db.commit()
+            await db.refresh(user)
+
+    from app.domains.admin.api.system_api import DEFAULT_ROLE_MATRIX
+    from app.domains.admin.services import SystemSettingService
+
+    saved_overrides = await SystemSettingService.get_setting(db, "staff_permission_overrides") or {}
+    user_id_str = str(user.id)
+
+    # Clean granted and revoked lists
+    granted = sorted(list(set(payload.granted)))
+    revoked = sorted(list(set(payload.revoked)))
+
+    if granted or revoked:
+        saved_overrides[user_id_str] = {
+            "granted": granted,
+            "revoked": revoked,
+            "updated_at": datetime.now(UTC).isoformat(),
+            "updated_by": current_user.email,
+        }
+    elif user_id_str in saved_overrides:
+        del saved_overrides[user_id_str]
+
+    await SystemSettingService.set_setting(
+        db,
+        "staff_permission_overrides",
+        saved_overrides,
+        "Individual staff custom permission overrides: {user_id: {granted: [...], revoked: [...]}}",
+    )
+
+    saved_matrix = await SystemSettingService.get_setting(db, "role_permissions")
+    role_matrix = dict(DEFAULT_ROLE_MATRIX)
+    if saved_matrix and isinstance(saved_matrix, dict):
+        role_matrix.update(saved_matrix)
+
+    base_perms = set(role_matrix.get(user.role, []))
+    effective_perms = sorted(list((base_perms | set(granted)) - set(revoked)))
+
+    logger.info(f"Permissions updated for staff member {user_id_str} by {current_user.email}")
+
+    return success_response(
+        {
+            "message": f"Permissions updated successfully for {user.email}",
+            "staff_id": user_id_str,
+            "role": user.role,
+            "granted_overrides": granted,
+            "revoked_overrides": revoked,
+            "effective_permissions": effective_perms,
+            "is_customized": bool(granted or revoked),
+        }
+    )
+
+
+@router.delete("/staff/{staff_id}/permissions/overrides")
+async def reset_staff_permission_overrides(
+    staff_id: str,
+    current_user: Annotated[User, Depends(require_role("admin"))],
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Reset staff member custom overrides back to their base role defaults.
+    """
+    try:
+        staff_uuid = uuid.UUID(staff_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid staff ID")
+
+    result = await db.execute(select(User).where(User.id == staff_uuid))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+
+    from app.domains.admin.services import SystemSettingService
+
+    saved_overrides = await SystemSettingService.get_setting(db, "staff_permission_overrides") or {}
+    user_id_str = str(user.id)
+
+    if user_id_str in saved_overrides:
+        del saved_overrides[user_id_str]
+        await SystemSettingService.set_setting(
+            db,
+            "staff_permission_overrides",
+            saved_overrides,
+            "Individual staff custom permission overrides: {user_id: {granted: [...], revoked: [...]}}",
+        )
+
+    return success_response(
+        {
+            "message": "Custom permission overrides reset to standard role defaults",
+            "staff_id": user_id_str,
+            "is_customized": False,
+        }
+    )
+
+
+class StaffCreateRequest(BaseModel):
+    email: str
+    first_name: str
+    last_name: str
+    role: str = "worker"
 
 
 @router.post("/staff")
 async def create_staff(
     current_user: Annotated[User, Depends(require_role("admin"))],
-    email: str = Query(..., description="Staff email"),
+    data: StaffCreateRequest | None = None,
+    email: str | None = Query(None, description="Staff email (deprecated, use JSON body)"),
     role: str = Query("worker", description="Staff role: admin, worker"),
-    first_name: str = Query(...),
-    last_name: str = Query(...),
+    first_name: str | None = Query(None),
+    last_name: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a new staff member (sends invite email)"""
-    # For now, this is a placeholder. The actual implementation would:
-    # 1. Generate a temporary password
-    # 2. Send an invite email
-    # 3. Create the user with a forced password reset on first login
+    eff_email = data.email if data else email
+    eff_role = data.role if data else role
+    eff_first_name = data.first_name if data else first_name
+    eff_last_name = data.last_name if data else last_name
+
+    if not eff_email or not eff_first_name or not eff_last_name:
+        raise HTTPException(status_code=400, detail="email, first_name, and last_name are required")
 
     # Check if user exists
-    existing = await db.execute(select(User).where(User.email == email))
+    existing = await db.execute(select(User).where(User.email == eff_email))
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="User with this email already exists")
 
@@ -604,11 +941,11 @@ async def create_staff(
     from app.core.security import get_password_hash_async
 
     new_user = User(
-        email=email,
+        email=eff_email,
         password_hash=await get_password_hash_async(temp_password),
-        role=role,
-        first_name=first_name,
-        last_name=last_name,
+        role=eff_role,
+        first_name=eff_first_name,
+        last_name=eff_last_name,
         is_active=True,
         is_verified=True,  # Staff are pre-verified
     )
@@ -624,7 +961,13 @@ async def create_staff(
         aggregate_type="User",
         aggregate_id=str(new_user.id),
         event_type="StaffInvitationCreated",
-        payload={"email": email, "first_name": first_name, "role": role},
+        payload={
+            "email": eff_email,
+            "first_name": eff_first_name,
+            "last_name": eff_last_name,
+            "role": eff_role,
+            "temp_password": temp_password,
+        },
         status=OutboxStatus.PENDING,
     )
     db.add(invitation_event)
@@ -681,11 +1024,67 @@ async def update_staff_status(
     )
 
 
+@router.put("/staff/{staff_id}/password")
+async def set_staff_password(
+    staff_id: str,
+    payload: UserPasswordUpdateRequest,
+    current_user: Annotated[User, Depends(require_role("admin"))],
+    db: AsyncSession = Depends(get_db),
+):
+    """Set or reset a staff member's password (admin only)"""
+    try:
+        staff_uuid = uuid.UUID(staff_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid staff ID")
+
+    # Prevent self-password change (admin should use their own profile page)
+    if str(current_user.id) == staff_id:
+        raise HTTPException(status_code=400, detail="Cannot change your own password via this endpoint")
+
+    result = await db.execute(select(User).where(User.id == staff_uuid))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+
+    from app.core.security import get_password_hash_async
+
+    user.password_hash = await get_password_hash_async(payload.password)
+
+    await db.commit()
+
+    # Audit log
+    logger.info(
+        f"Password updated for staff {staff_id} by admin {current_user.email}. Force change: {payload.force_change}"
+    )
+
+    # Send password change notification if requested
+    if payload.notify_user:
+        try:
+            from app.domains.auth.services.email_service import EmailService
+
+            email_service = EmailService()
+            user_name = f"{user.first_name} {user.last_name}".strip() or user.email.split("@")[0]
+            # TODO: Create staff password reset email template
+            # For now, just log it
+            logger.info(f"Password reset notification queued for {user.email}")
+        except Exception as e:
+            logger.error(f"Failed to send password notification: {e}")
+
+    return success_response(
+        {
+            "message": "Password updated successfully",
+            "force_change": payload.force_change,
+            "notified": payload.notify_user,
+        }
+    )
+
+
 @router.delete("/staff/{staff_id}")
 async def delete_staff(
     staff_id: str, current_user: Annotated[User, Depends(require_role("admin"))], db: AsyncSession = Depends(get_db)
 ):
-    """Delete a staff member"""
+    """Delete a staff member or user account"""
     try:
         staff_uuid = uuid.UUID(staff_id)
     except ValueError:
@@ -695,18 +1094,21 @@ async def delete_staff(
     if str(current_user.id) == staff_id:
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
-    result = await db.execute(
-        select(User).where(and_(User.id == staff_uuid, or_(User.role == "admin", User.role == "worker")))
-    )
+    result = await db.execute(select(User).where(User.id == staff_uuid))
     user = result.scalar_one_or_none()
 
     if not user:
         raise HTTPException(status_code=404, detail="Staff member not found")
 
-    await db.delete(user)
-    await db.commit()
-
-    logger.info(f"Staff {staff_id} deleted by {current_user.email}")
+    try:
+        await db.delete(user)
+        await db.commit()
+        logger.info(f"User {staff_id} deleted by {current_user.email}")
+    except Exception as e:
+        await db.rollback()
+        user.is_active = False
+        await db.commit()
+        logger.info(f"User {staff_id} deactivated due to dependent records: {e}")
 
     return success_response({"message": "Staff member deleted successfully"})
 

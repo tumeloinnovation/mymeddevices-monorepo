@@ -216,9 +216,6 @@ async def test_product_vendor_creation_and_admin_review_workflow(client: AsyncCl
         "sku": "PHI-MX450-01",
         "specifications": {"display": "12 inch LCD", "battery_life": "5 hours", "parameters": ["ECG", "SpO2", "NIBP"]},
         "weight_kg": 4.5,
-        "kmpdb_registration_number": "KMPDB/MED/2026/099",
-        "ppb_classification": "Class B",
-        "ce_marking_or_fda_clearance": "CE-0123 / FDA-510k",
         "prescription_required": False,
         "warranty_info": "24 months manufacturer warranty",
     }

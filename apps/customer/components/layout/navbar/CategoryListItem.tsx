@@ -19,7 +19,7 @@ export const CategoryListItem = React.forwardRef<
   const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault()
     setFilter("selectedCategory", slug)
-    router.push(`/categories/${slug}`)
+    router.push(`/products?category=${slug}`)
   }
 
   return (
@@ -29,7 +29,7 @@ export const CategoryListItem = React.forwardRef<
           ref={ref}
           className="block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground"
           onClick={handleClick}
-          href={`/categories/${slug}`}
+          href={`/products?category=${slug}`}
           {...props}
         >
           <div className="text-sm font-medium leading-none">{title}</div>

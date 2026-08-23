@@ -39,3 +39,10 @@ class ConflictError(DomainError):
 
     def __init__(self, message: str):
         super().__init__(message, code="RESOURCE_CONFLICT")
+
+
+class ValidationError(DomainError):
+    """Raised when input validation fails."""
+
+    def __init__(self, message: str):
+        super().__init__(message, code="VALIDATION_ERROR")

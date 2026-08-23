@@ -10,7 +10,8 @@ class CartItemCreate(BaseModel):
     """Schema for adding an item to cart."""
 
     product_id: uuid.UUID = Field(..., description="ID of the product to add")
-    quantity: int = Field(default=1, gt=0, le=99, description="Quantity (1-99)")
+    product_variant_id: uuid.UUID | None = Field(None, description="Optional variant ID")
+    quantity: int = Field(default=1, gt=0, le=9999, description="Quantity (1-9999)")
     notes: str | None = Field(None, max_length=500, description="Customer notes for this item")
     substitution_allowed: bool = Field(default=True, description="Allow substitution if out of stock")
 
@@ -18,7 +19,7 @@ class CartItemCreate(BaseModel):
 class CartItemUpdate(BaseModel):
     """Schema for updating a cart item."""
 
-    quantity: int = Field(gt=0, le=99, description="Quantity (1-99)")
+    quantity: int = Field(gt=0, le=9999, description="Quantity (1-9999)")
     notes: str | None = Field(None, max_length=500, description="Customer notes for this item")
     substitution_allowed: bool | None = Field(default=True)
 
@@ -42,6 +43,7 @@ class CartItemResponse(BaseModel):
     id: uuid.UUID
     cart_id: uuid.UUID
     product_id: uuid.UUID
+    product_variant_id: uuid.UUID | None = None
     quantity: int
     unit_price: float | None = None
     notes: str | None = None
@@ -88,11 +90,13 @@ class CartTotalsResponse(BaseModel):
     """Cart totals with breakdown."""
 
     cart_id: uuid.UUID
-    subtotal: int
-    discount_amount: int = 0
-    tax_amount: int = 0
-    shipping_amount: int = 0
-    total: int
+    subtotal: float
+    discount_amount: float = 0.0
+    tax_amount: float = 0.0
+    shipping_amount: float = 0.0
+    packaging_fee: float = 0.0
+    services_fee: float = 0.0
+    total: float
     currency: str = "KES"
     item_count: int
     applied_discounts: list[dict] = []

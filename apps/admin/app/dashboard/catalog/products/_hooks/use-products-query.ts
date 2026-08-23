@@ -67,6 +67,24 @@ export function useVendors() {
   });
 }
 
+export function useBrands() {
+  return useQuery({
+    queryKey: ["admin", "brands", "overview-map"],
+    queryFn: async () => {
+      const data = await catalogService.getBrands({
+        active_only: false,
+        page_size: 100,
+      });
+      const map = new Map<string, string>();
+      (data.brands || []).forEach((b) => {
+        map.set(b.id, b.name);
+      });
+      return map;
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
 export function useProductMutations() {
   const queryClient = useQueryClient();
   const invalidate = () =>

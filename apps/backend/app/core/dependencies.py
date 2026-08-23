@@ -96,6 +96,45 @@ async def get_current_user(
     return user
 
 
+async def get_current_user_optional(
+    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+) -> User | None:
+    """
+    Dependency to optionally get current authenticated user if valid token present, else None.
+    """
+    if credentials is None:
+        return None
+
+    token = credentials.credentials
+    payload = verify_access_token(token)
+    if payload is None:
+        return None
+
+    from app.core.blacklist import token_blacklist
+
+    jti = payload.get("jti")
+    if jti and await token_blacklist.is_blacklisted(jti):
+        return None
+
+    user_id_raw: Any | None = payload.get("sub")
+    if user_id_raw is None:
+        return None
+
+    try:
+        user_uuid = uuid.UUID(str(user_id_raw))
+    except ValueError:
+        return None
+
+    result = await db.execute(select(User).where(User.id == user_uuid))
+    user = result.scalar_one_or_none()
+
+    if user is None or not user.is_active:
+        return None
+
+    return user
+
+
 async def get_current_active_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
     """
     Dependency to get the current active user.
@@ -112,6 +151,28 @@ async def get_current_active_user(current_user: Annotated[User, Depends(get_curr
     """
     if not current_user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User account is inactive")
+    return current_user
+
+
+async def get_current_admin_user(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    """
+    Dependency to get the current authenticated admin user.
+    Verifies the user has admin role.
+
+    Args:
+        current_user: The current authenticated user
+
+    Returns:
+        The User if they have admin role
+
+    Raises:
+        HTTPException: If user is not an admin
+    """
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Admin privileges required."
+        )
     return current_user
 
 

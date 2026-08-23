@@ -23,9 +23,9 @@ class InvalidStateTransitionError(ValueError):
 
 # Canonical transition matrices
 # These define all valid state transitions for each entity type
-# COD-only flow: PENDING -> PROCESSING -> SHIPPED -> DELIVERED
 ORDER_TRANSITIONS: dict[OrderStatus, list[OrderStatus]] = {
-    OrderStatus.PENDING: [OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+    OrderStatus.PENDING: [OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+    OrderStatus.PAID: [OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.CANCELLED, OrderStatus.REFUNDED],
     OrderStatus.PROCESSING: [OrderStatus.SHIPPED, OrderStatus.CANCELLED, OrderStatus.REFUNDED],
     OrderStatus.SHIPPED: [OrderStatus.DELIVERED, OrderStatus.REFUNDED],
     OrderStatus.DELIVERED: [OrderStatus.REFUNDED],

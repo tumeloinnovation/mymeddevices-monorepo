@@ -1,6 +1,7 @@
 import React from 'react'
 import { Button } from '@/components/ui/button'
 import Link from 'next/link'
+import { ShoppingBag } from 'lucide-react'
 
 type Props = {
   productName: string
@@ -18,9 +19,16 @@ export default function DirectCheckout({ className = '', onAddToCart }: Props) {
   };
 
   return (
-    <div className={`flex flex-col sm:flex-row gap-3 ${className}`}>
-      <Link href="/checkout" onClick={handleCheckout} className="w-full">
-        <Button size="lg" className="w-full px-6 py-3">Proceed to Checkout</Button>
+    <div className={`w-full ${className}`}>
+      <Link href="/checkout" onClick={handleCheckout} className="w-full block">
+        <Button 
+          size="lg" 
+          variant="secondary"
+          className="w-full h-14 text-lg font-semibold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+        >
+          <ShoppingBag className="w-5 h-5" />
+          Proceed to Checkout
+        </Button>
       </Link>
     </div>
   )

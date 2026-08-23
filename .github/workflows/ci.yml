@@ -118,7 +118,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9
+          version: 10
 
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
@@ -129,6 +129,12 @@ jobs:
       - name: Install Monorepo Dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Typecheck Shared Packages
+        run: |
+          pnpm --filter=@mymeddevices/shared-core exec tsc --noEmit
+          pnpm --filter=@mymeddevices/shared-ui exec tsc --noEmit
+          pnpm --filter=@mymeddevices/shared-admin exec tsc --noEmit
+
       - name: Typecheck Customer App
         run: pnpm --filter=customer exec tsc --noEmit
 
@@ -137,3 +143,42 @@ jobs:
 
       - name: Typecheck Vendor App
         run: pnpm --filter=vendor exec tsc --noEmit
+
+  frontend-test-lint-build:
+    name: Frontend Tests, Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Shared Core Tests
+        run: pnpm --filter=@mymeddevices/shared-core test
+
+      - name: Run Customer Tests
+        run: pnpm --filter=customer test
+
+      - name: Run Vendor Tests
+        run: pnpm --filter=vendor test
+
+      - name: Run Admin Tests
+        run: pnpm --filter=admin test
+
+      - name: Run Monorepo Lint
+        run: pnpm lint
+
+      - name: Run Monorepo Build
+        run: pnpm build

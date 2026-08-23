@@ -9,6 +9,7 @@ export interface CartItem {
   id: string;
   cart_id: string;
   product_id: string;
+  product_variant_id?: string;
   quantity: number;
   unit_price?: string;
   notes?: string;
@@ -20,6 +21,15 @@ export interface CartItem {
     price: string;
     image_url?: string;
     stock_quantity: number;
+  };
+  product_variant?: {
+    id: string;
+    sku?: string;
+    name: string;
+    price?: number;
+    calculated_price?: number;
+    override_price?: number;
+    attributes?: Record<string, string>;
   };
   created_at: string;
   updated_at: string;
@@ -41,6 +51,7 @@ export interface Cart {
 
 export interface CartItemAdd {
   product_id: string;
+  product_variant_id?: string;
   quantity: number;
   notes?: string;
   substitution_allowed?: boolean;
@@ -113,8 +124,8 @@ export const cartService = {
       const params = cartToken ? { cart_token: cartToken } : undefined;
       const response = await apiClient.get<any>('/shopping/cart/my', { params });
 
-      if (response?.success && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -135,9 +146,9 @@ export const cartService = {
         params,
       });
 
-      if (response?.success && response.data) {
+      if (response) {
         toast.success('Item added to cart');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -163,9 +174,9 @@ export const cartService = {
         params,
       });
 
-      if (response?.success && response.data) {
-        toast.success(`${response.data.added_count} items added to cart`);
-        return response.data;
+      if (response) {
+        toast.success(`${response.added_count} items added to cart`);
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -190,9 +201,9 @@ export const cartService = {
         }
       );
  
-      if (response?.success && response.data) {
+      if (response) {
         toast.success('Cart updated');
-        return response.data;
+        return response;
       }
  
       throw new Error('Invalid response format');
@@ -228,9 +239,9 @@ export const cartService = {
         body: itemIds,
       });
 
-      if (response?.success && response.data) {
-        toast.success(`${response.data.removed_count} items removed`);
-        return response.data;
+      if (response) {
+        toast.success(`${response.removed_count} items removed`);
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -251,9 +262,9 @@ export const cartService = {
         params,
       });
 
-      if (response?.success && response.data) {
+      if (response) {
         toast.success('Cart cleared');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -273,8 +284,8 @@ export const cartService = {
         params: { cart_id: cartId },
       });
 
-      if (response?.success && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -293,8 +304,8 @@ export const cartService = {
         params: { cart_id: cartId },
       });
 
-      if (response?.success && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -317,9 +328,9 @@ export const cartService = {
         merge_method: mergeMethod,
       });
 
-      if (response?.success && response.data) {
+      if (response) {
         toast.success('Cart merged successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -343,9 +354,9 @@ export const cartService = {
         }
       );
 
-      if (response?.success && response.data) {
+      if (response) {
         toast.success('Coupon applied successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -390,9 +401,9 @@ export const cartService = {
         params: { name, description },
       });
 
-      if (response?.success && response.data) {
+      if (response) {
         toast.success('Cart saved successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -420,8 +431,8 @@ export const cartService = {
         params: { offset, limit },
       });
 
-      if (response?.success && response.data?.saved_carts) {
-        return response.data.saved_carts;
+      if (response?.saved_carts) {
+        return response.saved_carts;
       }
 
       return [];
@@ -449,9 +460,9 @@ export const cartService = {
         { params: { replace } }
       );
 
-      if (response?.success && response.data) {
+      if (response) {
         toast.success('Cart restored successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');

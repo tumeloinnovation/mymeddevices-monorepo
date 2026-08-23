@@ -27,7 +27,9 @@ async def create_order(
             notes=data.notes,
             idempotency_key=data.idempotency_key,
             guest_token=data.guest_token,
+            points_to_redeem=data.points_to_redeem,
         )
+        await db.commit()
         return success_response(order)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

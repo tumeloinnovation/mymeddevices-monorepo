@@ -12,10 +12,11 @@ interface Category {
   description: string;
   parent_id: string;
   image_url: string | null;
+  icon_url?: string | null;
   product_count: number;
   parent: number;
   display: string;
-  image: null;
+  image?: { src: string } | null;
   count: number;
   children?: Category[];
 }
@@ -66,7 +67,12 @@ export const categoryService = {
         const response = await apiClient.get<any>('/catalog/categories');
         const categoriesList = response?.data || response;
         if (categoriesList && Array.isArray(categoriesList)) {
-          return categoriesList;
+          return categoriesList.map((c: any) => ({
+            ...c,
+            product_count: c.product_count ?? c.count ?? 0,
+            count: c.product_count ?? c.count ?? 0,
+            image_url: c.icon_url || c.image_url || null,
+          }));
         }
       } catch {
         // Endpoint doesn't exist, fall back to extracting from products

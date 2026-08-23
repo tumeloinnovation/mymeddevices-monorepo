@@ -126,6 +126,20 @@ async def upload_my_avatar(
     file_ext = os.path.splitext(file.filename)[1].lower() if file.filename else ".jpg"
     if file_ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported image format")
+
+    # Validate image header magic bytes
+    header = await file.read(512)
+    await file.seek(0)
+    is_valid_image = (
+        header.startswith(b"\xff\xd8\xff")
+        or header.startswith(b"\x89PNG\r\n\x1a\n")
+        or header.startswith(b"GIF87a")
+        or header.startswith(b"GIF89a")
+        or (header.startswith(b"RIFF") and b"WEBP" in header[:16])
+    )
+    if not is_valid_image:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image content: signature mismatch")
+
     upload_dir = settings.AVATAR_UPLOAD_DIR
     os.makedirs(upload_dir, exist_ok=True)
     filename = f"{uuid.uuid4()}{file_ext}"

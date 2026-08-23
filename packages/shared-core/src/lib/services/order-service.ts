@@ -147,8 +147,8 @@ export const orderService = {
         },
       });
 
-      if (response && response.data) {
-        const data = response.data;
+      if (response) {
+        const data = response;
         const rawOrders: any[] = data.orders || data.items || [];
         return {
           items: rawOrders.map(mapOrder),
@@ -174,8 +174,8 @@ export const orderService = {
       const endpoint = guestToken ? `/shopping/orders/public/${id}` : `/shopping/orders/${id}`;
       const response = await apiClient.get<any>(endpoint, { params });
 
-      if (response && response.data) {
-        return mapOrder(response.data);
+      if (response) {
+        return mapOrder(response);
       }
 
       throw new Error('Invalid response format');
@@ -194,8 +194,8 @@ export const orderService = {
         params: { order_number: orderNumber, limit: 1 },
       });
 
-      if (response && response.data) {
-        const rawOrders: any[] = response.data.orders || response.data.items || [];
+      if (response) {
+        const rawOrders: any[] = response.orders || response.items || [];
         if (rawOrders.length > 0) {
           return mapOrder(rawOrders[0]);
         }
@@ -219,9 +219,9 @@ export const orderService = {
     try {
       const response = await apiClient.post<any>('/shopping/checkout', request);
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Order created successfully');
-        return mapOrder(response.data);
+        return mapOrder(response);
       }
 
       throw new Error('Invalid response format');
@@ -280,9 +280,9 @@ export const orderService = {
         payment_data: request.payment_data,
       });
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Payment processed successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -314,8 +314,8 @@ export const orderService = {
     try {
       const response = await apiClient.get<any>(`/payments/${paymentId}`);
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -336,8 +336,8 @@ export const orderService = {
     try {
       const response = await apiClient.get<any>(`/shopping/orders/${orderId}/status`);
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -354,8 +354,8 @@ export const orderService = {
     try {
       const response = await apiClient.get<any>(`/shopping/orders/${orderId}/tracking`);
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -397,9 +397,9 @@ export const orderService = {
         reason,
       });
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Order cancelled successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -424,9 +424,9 @@ export const orderService = {
         reason,
       });
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Refund requested successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');

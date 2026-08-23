@@ -110,8 +110,7 @@ export default function AccessoriesTab({ product, relatedProducts }: Accessories
         name: item.name,
         price: item.price,
         image: item.imageUrl || '',
-        quantity: item.quantity
-      } as any)
+      } as any, item.quantity || 1)
     })
   }
 

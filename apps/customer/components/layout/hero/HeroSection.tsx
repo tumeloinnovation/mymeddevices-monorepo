@@ -124,7 +124,7 @@ export const HeroSection: FC = () => {
 								Mobility Solutions
 							</h3>
 							<Link
-								href="/categories/mobility-rehabilitation-aids"
+								href="/products?category=mobility-rehabilitation-aids"
 								className="font-medium text-muted-foreground dark:text-slate-300 hover:text-primary inline-flex items-center"
 							>
 								View more <ArrowRight size={16} className="ml-1" />
@@ -149,7 +149,7 @@ export const HeroSection: FC = () => {
 								Up to 20% Discount
 							</p>
 							<Link
-								href="/categories/diagnostic-devices"
+								href="/products?category=diagnostic-devices"
 								className="font-medium text-muted-foreground dark:text-slate-300 hover:text-primary inline-flex items-center"
 							>
 								View more <ArrowRight size={16} className="ml-1" />

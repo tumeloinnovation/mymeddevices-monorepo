@@ -1,8 +1,9 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useTransition } from "react"
+import { useQuery } from "@tanstack/react-query"
 import DashboardLayout from "@/components/dashboard-layout"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -14,15 +15,8 @@ import {
   MoreHorizontal,
   ChevronLeft,
   ChevronRight,
-  ArrowUpRight,
-  ArrowDownRight,
-  Download,
-  ChevronDown,
-  Star,
-  CheckCircle2,
-  Clock,
-  QrCode,
-  Laptop
+  ShieldCheck,
+  RefreshCw
 } from "lucide-react"
 import { 
   BarChart, 
@@ -34,211 +28,162 @@ import {
   ResponsiveContainer, 
   PieChart, 
   Pie, 
-  Cell,
-  AreaChart,
-  Area
+  Cell, 
+  AreaChart, 
+  Area 
 } from "recharts"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { adminService, type AdminAnalyticsData } from "@mymeddevices/shared-core"
 
-// --- Custom Replicated Mock Datasets ---
-
-const TOP_SPARKLINE_1 = [
-  { val: 12 }, { val: 18 }, { val: 14 }, { val: 24 }, { val: 20 }, { val: 30 }, { val: 28 }, { val: 35 }
-]
-
-const TOP_SPARKLINE_2 = [
-  { val: 10 }, { val: 15 }, { val: 22 }, { val: 19 }, { val: 28 }, { val: 24 }, { val: 32 }
-]
-
-const TOP_BAR_SPARKLINE = [
-  { period: "M1", growth: 15 },
-  { period: "M2", growth: 22 },
-  { period: "M3", growth: 18 },
-  { period: "M4", growth: 28 },
-  { period: "M5", growth: 24 }
-]
-
-const SEGMENTATION_DATA = [
-  { name: "Startup", value: 2310, growth: "+32.8%", color: "#000000" },
-  { name: "Enterprise", value: 800, growth: "+32.8%", color: "#3b82f6" },
-  { name: "Individuals", value: 310, growth: "-17%", color: "#10b981" }
-]
-
-const ORDER_OVERVIEW_DATA = [
-  { date: "Mar 30", total: 8000, orders: 400 },
-  { date: "Apr 9", total: 18000, orders: 1200 },
-  { date: "Apr 14", total: 14000, orders: 900 },
-  { date: "Apr 19", total: 22560, orders: 1540 },
-  { date: "Apr 24", total: 19000, orders: 1100 },
-  { date: "Apr 29", total: 28000, orders: 1800 },
-]
-
-const USER_ACTIVITY_DATA = [
-  { day: "M", checkout: 45, active: 85 },
-  { day: "T", checkout: 55, active: 90 },
-  { day: "W", checkout: 75, active: 110 },
-  { day: "T", checkout: 60, active: 95 },
-  { day: "F", checkout: 85, active: 130 },
-  { day: "S", checkout: 95, active: 140 },
-  { day: "S", checkout: 70, active: 105 },
-]
-
-const RECENT_SALES_ORDERS = [
-  {
-    id: "1",
-    product: "Livesoft Memory Foam Pillow Set",
-    customer: "Emma Watson",
-    qty: "3 Pcs",
-    status: "Pending",
-    paymentMethod: "Credit Card",
-    totalPrice: "$180.00",
-    image: "https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?w=80&h=80&fit=crop"
-  },
-  {
-    id: "2",
-    product: "Solar Desk Lamp with Matte Finish",
-    customer: "Michael Brown",
-    qty: "2 Pcs",
-    status: "Shipped",
-    paymentMethod: "UPI",
-    totalPrice: "$120.00",
-    image: "https://images.unsplash.com/photo-1507473885765-e6ed057f782c?w=80&h=80&fit=crop"
-  },
-  {
-    id: "3",
-    product: "Artisan Coffee Maker with Wood Finish",
-    customer: "Olivia Johnson",
-    qty: "1 Pcs",
-    status: "Delivered",
-    paymentMethod: "Cash on Delivery",
-    totalPrice: "$250.00",
-    image: "https://images.unsplash.com/photo-1517668808822-9ebb02f2a0e6?w=80&h=80&fit=crop"
-  },
-  {
-    id: "4",
-    product: "Wireless Noise Canceling Earbuds",
-    customer: "Daniel Lee",
-    qty: "2 Pcs",
-    status: "Shipped",
-    paymentMethod: "UPI",
-    totalPrice: "$200.00",
-    image: "https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=80&h=80&fit=crop"
-  },
-  {
-    id: "5",
-    product: "Minimalist Glass Coffee Table",
-    customer: "Sophia Garcia",
-    qty: "1 Pcs",
-    status: "Delivered",
-    paymentMethod: "Cash on Delivery",
-    totalPrice: "$450.00",
-    image: "https://images.unsplash.com/photo-1533090161767-e6ffed986c88?w=80&h=80&fit=crop"
-  }
-]
-
-const LATEST_PRODUCTS = [
-  { name: "Smart Home Camera", sub: "8.49k users", price: "$180.00", image: "https://images.unsplash.com/photo-1557324232-b8917d3c3dcb?w=80&h=80&fit=crop" },
-  { name: "Bluetooth Soundbar", sub: "8.49k users", price: "$200.00", image: "https://images.unsplash.com/photo-1545454675-3531b543be5d?w=80&h=80&fit=crop" },
-  { name: "Ergonomic Office Chair", sub: "8.49k users", price: "$350.00", image: "https://images.unsplash.com/photo-1580481072645-022f9a6d83d0?w=80&h=80&fit=crop" },
-]
-
-export default function ReplicatedAdminDashboard() {
+export default function AdminDashboardPage() {
   const [timeRange, setTimeRange] = useState("Last 30 Days")
   const [rowsPerPage, setRowsPerPage] = useState("5")
+  const [, startTransition] = useTransition()
+
+  const daysParam = timeRange === "Last 7 Days" ? 7 : timeRange === "Last Year" ? 365 : 30
+
+  const { data: analytics, isLoading, isError, refetch } = useQuery<AdminAnalyticsData>({
+    queryKey: ["admin", "analytics", daysParam],
+    queryFn: () => adminService.getAnalytics(daysParam),
+    staleTime: 60 * 1000,
+  })
+
+  const overview = analytics?.overview
+  const recentOrders = analytics?.recent_orders || []
+  const topProducts = analytics?.top_products || []
+  const orderOverview = analytics?.order_overview || []
+  const segmentation = analytics?.segmentation || []
+  const userActivity = analytics?.user_activity || []
+
+  const formattedRevenue = overview?.total_revenue 
+    ? `KES ${overview.total_revenue.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : "KES 0.00"
+
+  const formattedCurrentWindowRevenue = overview?.current_window_revenue 
+    ? `KES ${overview.current_window_revenue.toLocaleString('en-KE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    : "KES 0.00"
 
   return (
     <DashboardLayout>
-      <div className="space-y-6 pb-12 font-sans bg-slate-50/50 dark:bg-slate-950/50 p-2 md:p-6 rounded-2xl">
+      <div className="flex flex-col gap-6 pb-12 font-sans bg-slate-50/50 dark:bg-slate-950/50 p-2 md:p-6 rounded-2xl">
         
-        {/* --- Top Row: 3 KPI Sparkline Cards --- */}
+        {/* Header with Title & Refresh */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Executive Operations Dashboard</h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Real-time procurement metrics, revenue, regulatory orders, and fulfillment analytics.</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Select 
+              value={timeRange} 
+              onValueChange={(val) => startTransition(() => setTimeRange(val))}
+            >
+              <SelectTrigger className="h-9 text-xs border-slate-200 bg-white dark:bg-slate-900 rounded-lg w-[140px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
+                <SelectItem value="Last 30 Days">Last 30 Days</SelectItem>
+                <SelectItem value="Last Year">Last Year</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => refetch()} 
+              disabled={isLoading}
+              className="h-9 text-xs gap-1.5 bg-white dark:bg-slate-900"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+        </div>
+
+        {/* Top Row: 3 Primary KPI Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          {/* Card 1: Total Sales */}
+          {/* Card 1: Total Platform GMV */}
           <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
             <CardContent className="p-5 flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Sales</p>
-                <p className="text-xs text-slate-400 dark:text-slate-500">Shadon Space</p>
-                <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white mt-1">$98,452.76</h3>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Gross Merchandise Volume</p>
+                <p className="text-xs text-slate-400 dark:text-slate-500">All Marketplace Orders</p>
+                <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white mt-1">
+                  {isLoading ? "Loading..." : formattedRevenue}
+                </h3>
                 <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pt-1">
                   <TrendingUp className="w-3.5 h-3.5" />
-                  <span>+32.8%</span>
-                  <span className="text-slate-400 font-normal">vs last month</span>
+                  <span>+{overview?.revenue_growth || 0}%</span>
+                  <span className="text-slate-400 font-normal">vs previous window</span>
                 </div>
               </div>
               <div className="h-16 w-32">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={TOP_SPARKLINE_1}>
+                  <AreaChart data={orderOverview.length > 0 ? orderOverview : [{ period: "Day 1", orders: 1, revenue: 10, total: 10 }]}>
                     <defs>
                       <linearGradient id="grad1" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#000000" stopOpacity={0.15}/>
-                        <stop offset="95%" stopColor="#000000" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <Tooltip cursor={false} content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        return (
-                          <div className="bg-slate-900 text-white text-[10px] py-1 px-2 rounded shadow">
-                            Sales {payload[0].value}
-                          </div>
-                        )
-                      }
-                      return null;
-                    }} />
-                    <Area type="monotone" dataKey="val" stroke="#000000" strokeWidth={2} fill="url(#grad1)" />
+                    <Area type="monotone" dataKey="total" stroke="#0ea5e9" strokeWidth={2} fill="url(#grad1)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          {/* Card 2: Monthly Sales */}
+          {/* Card 2: Period Revenue */}
           <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
             <CardContent className="p-5 flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Monthly Sales</p>
-                <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white pt-2">$36,890</h3>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Period Revenue ({timeRange})</p>
+                <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white pt-2">
+                  {isLoading ? "Loading..." : formattedCurrentWindowRevenue}
+                </h3>
                 <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pt-1">
                   <TrendingUp className="w-3.5 h-3.5" />
-                  <span>+32.8%</span>
-                  <span className="text-slate-400 font-normal">vs last month</span>
+                  <span>+{overview?.revenue_growth || 0}%</span>
+                  <span className="text-slate-400 font-normal">pace</span>
                 </div>
               </div>
               <div className="h-16 w-32">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={TOP_SPARKLINE_2}>
+                  <AreaChart data={orderOverview.length > 0 ? orderOverview : [{ period: "Day 1", orders: 1, revenue: 10, total: 10 }]}>
                     <defs>
                       <linearGradient id="grad2" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
                         <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
-                    <Area type="monotone" dataKey="val" stroke="#10b981" strokeWidth={2} fill="url(#grad2)" />
+                    <Area type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} fill="url(#grad2)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             </CardContent>
           </Card>
 
-          {/* Card 3: Revenue Growth */}
+          {/* Card 3: Total Orders Growth */}
           <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl overflow-hidden bg-white dark:bg-slate-900">
             <CardContent className="p-5 flex items-center justify-between">
-              <div className="space-y-1">
-                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Revenue Growth</p>
-                <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white pt-2">+24%</h3>
+              <div className="flex flex-col gap-1">
+                <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Total Orders Fulfilled</p>
+                <h3 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white pt-2">
+                  {isLoading ? "Loading..." : `${overview?.total_orders || 0} Orders`}
+                </h3>
                 <div className="flex items-center gap-1 text-xs text-emerald-600 font-medium pt-1">
                   <TrendingUp className="w-3.5 h-3.5" />
-                  <span>+32.8%</span>
-                  <span className="text-slate-400 font-normal">vs last month</span>
+                  <span>+{overview?.orders_growth || 0}%</span>
+                  <span className="text-slate-400 font-normal">conversion rate: {overview?.conversion_rate || 0}%</span>
                 </div>
               </div>
               <div className="h-16 w-28">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={TOP_BAR_SPARKLINE}>
-                    <Bar dataKey="growth" fill="#000000" radius={[3, 3, 0, 0]} barSize={8} />
+                  <BarChart data={orderOverview.length > 0 ? orderOverview : [{ period: "Day 1", orders: 5, revenue: 100, total: 100 }]}>
+                    <Bar dataKey="orders" fill="#0f172a" radius={[3, 3, 0, 0]} barSize={8} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -246,7 +191,7 @@ export default function ReplicatedAdminDashboard() {
           </Card>
         </div>
 
-        {/* --- Middle Grid 1: Analytics Row --- */}
+        {/* Middle Grid 1: Analytics Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           
           {/* Card 1: Customer Segmentation */}
@@ -256,16 +201,13 @@ export default function ReplicatedAdminDashboard() {
                 <Users className="w-4 h-4 text-slate-500" />
                 <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Customer Segmentation</CardTitle>
               </div>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                <MoreHorizontal className="w-4 h-4 text-slate-400" />
-              </Button>
             </CardHeader>
             <CardContent className="p-5">
               <div className="relative h-44 w-full flex items-center justify-center my-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
-                      data={SEGMENTATION_DATA}
+                      data={segmentation}
                       cx="50%"
                       cy="50%"
                       innerRadius={55}
@@ -274,16 +216,16 @@ export default function ReplicatedAdminDashboard() {
                       dataKey="value"
                       stroke="none"
                     >
-                      {SEGMENTATION_DATA.map((entry, index) => (
+                      {segmentation.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
                     <Tooltip content={({ active, payload }) => {
                       if (active && payload && payload.length) {
-                        const data = payload[0].payload;
+                        const item = payload[0].payload;
                         return (
                           <div className="bg-slate-900 text-white text-xs p-2 rounded shadow">
-                            <span className="font-semibold">{data.name}: </span>{data.value} ({data.growth})
+                            <span className="font-semibold">{item.name}: </span>{item.value} ({item.growth})
                           </div>
                         )
                       }
@@ -292,104 +234,81 @@ export default function ReplicatedAdminDashboard() {
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-xl font-bold text-slate-900 dark:text-white">3,420</span>
+                  <span className="text-xl font-bold text-slate-900 dark:text-white">
+                    {overview?.total_customers || 0}
+                  </span>
+                  <span className="text-[10px] text-slate-400">Total Buyers</span>
                 </div>
               </div>
 
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white" />
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">Startup</span>
+              <div className="flex flex-col gap-2.5 pt-2">
+                {segmentation.map((seg, idx) => (
+                  <div key={idx} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: seg.color }} />
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">{seg.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-slate-900 dark:text-white">{seg.value}</span>
+                      <span className="text-emerald-600 font-medium">{seg.growth}</span>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 dark:text-white">2,310</span>
-                    <span className="text-emerald-600 font-medium">+32.8%</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-blue-500" />
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">Enterprise</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 dark:text-white">800</span>
-                    <span className="text-emerald-600 font-medium">+32.8%</span>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">Individuals</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-slate-900 dark:text-white">310</span>
-                    <span className="text-rose-500 font-medium">-17%</span>
-                  </div>
-                </div>
+                ))}
               </div>
             </CardContent>
           </Card>
 
-          {/* Card 2: Order Overview */}
+          {/* Card 2: Order & Revenue Trend Overview */}
           <Card className="lg:col-span-6 shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
             <CardHeader className="p-5 pb-0 flex flex-row items-center justify-between space-y-0">
               <div className="flex items-center gap-2">
                 <Package className="w-4 h-4 text-slate-500" />
-                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Order Overview</CardTitle>
+                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Order & Revenue Trends</CardTitle>
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs font-semibold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full flex items-center gap-0.5">
-                  <TrendingUp className="w-3 h-3" /> 170%
+                  <TrendingUp className="w-3 h-3" /> Growth: +{overview?.revenue_growth || 0}%
                 </span>
-                <Select value={timeRange} onValueChange={setTimeRange}>
-                  <SelectTrigger className="h-8 text-xs border-slate-200 rounded-lg w-[110px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Last 30 Days">Last 30 Days</SelectItem>
-                    <SelectItem value="Last 7 Days">Last 7 Days</SelectItem>
-                    <SelectItem value="Last Year">Last Year</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </CardHeader>
             <CardContent className="p-5">
               <div className="flex items-center gap-6 mb-4 text-xs">
                 <div>
-                  <p className="text-slate-400">Total orders</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white">$22,560</p>
+                  <p className="text-slate-400">Average Order Value</p>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">
+                    KES {overview?.avg_order_value?.toLocaleString('en-KE', { minimumFractionDigits: 2 }) || "0.00"}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-slate-400">Orders</p>
-                  <p className="text-lg font-bold text-slate-900 dark:text-white">1,540</p>
+                  <p className="text-slate-400">Total In-Flight Orders</p>
+                  <p className="text-lg font-bold text-slate-900 dark:text-white">{overview?.current_window_orders || 0}</p>
                 </div>
               </div>
               <div className="h-60 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={ORDER_OVERVIEW_DATA} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <AreaChart data={orderOverview} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
                       <linearGradient id="orderGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#000000" stopOpacity={0.1}/>
-                        <stop offset="95%" stopColor="#000000" stopOpacity={0}/>
+                        <stop offset="5%" stopColor="#0ea5e9" stopOpacity={0.15}/>
+                        <stop offset="95%" stopColor="#0ea5e9" stopOpacity={0}/>
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(val) => `${val / 1000}K`} />
+                    <XAxis dataKey="period" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                    <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} tickFormatter={(val) => `${(val / 1000).toFixed(0)}k`} />
                     <Tooltip content={({ active, payload, label }) => {
                       if (active && payload && payload.length) {
                         return (
-                          <div className="bg-slate-900 text-white text-xs p-2 rounded shadow space-y-1">
-                            <p className="font-semibold text-slate-400">{label}</p>
-                            <p>Total Sales: ${payload[0].value}</p>
-                            <p>Orders: {payload[0].payload.orders}</p>
+                          <div className="bg-slate-900 text-white text-xs p-2.5 rounded-lg shadow space-y-1">
+                            <p className="font-semibold text-slate-300">{label}</p>
+                            <p className="text-emerald-400 font-bold">Revenue: KES {Number(payload[0].value).toLocaleString()}</p>
+                            <p className="text-slate-200">Orders: {payload[0].payload.orders}</p>
                           </div>
                         )
                       }
                       return null;
                     }} />
-                    <Area type="monotone" dataKey="total" stroke="#000000" strokeWidth={2.5} fill="url(#orderGrad)" />
+                    <Area type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={2.5} fill="url(#orderGrad)" />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -401,149 +320,144 @@ export default function ReplicatedAdminDashboard() {
             <CardHeader className="p-5 pb-0 flex flex-row items-center justify-between space-y-0">
               <div className="flex items-center gap-2">
                 <Activity className="w-4 h-4 text-slate-500" />
-                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">User Activity</CardTitle>
+                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Procurement Activity</CardTitle>
               </div>
-              <Button variant="ghost" size="icon" className="h-6 w-6">
-                <MoreHorizontal className="w-4 h-4 text-slate-400" />
-              </Button>
             </CardHeader>
             <CardContent className="p-5">
               <div className="h-44 w-full my-2">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={USER_ACTIVITY_DATA} barGap={4}>
+                  <BarChart data={userActivity} barGap={4}>
                     <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: '#94a3b8' }} />
                     <Tooltip cursor={{ fill: 'transparent' }} />
-                    <Bar dataKey="active" fill="#000000" radius={[2, 2, 0, 0]} barSize={6} />
-                    <Bar dataKey="checkout" fill="#cbd5e1" radius={[2, 2, 0, 0]} barSize={6} />
+                    <Bar dataKey="active" fill="#0f172a" radius={[2, 2, 0, 0]} barSize={6} />
+                    <Bar dataKey="checkout" fill="#0ea5e9" radius={[2, 2, 0, 0]} barSize={6} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
               <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
                 <div>
-                  <p className="text-slate-400">Is Tracking</p>
-                  <p className="font-bold text-slate-900 dark:text-white text-sm">678,900</p>
+                  <p className="text-slate-400">Total Users</p>
+                  <p className="font-bold text-slate-900 dark:text-white text-sm">{overview?.total_users || 0}</p>
                 </div>
                 <div>
-                  <p className="text-slate-400">Checkout</p>
-                  <p className="font-bold text-slate-900 dark:text-white text-sm">312,420</p>
+                  <p className="text-slate-400">Active Vendors</p>
+                  <p className="font-bold text-slate-900 dark:text-white text-sm">{overview?.total_vendors || 0}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         </div>
 
-        {/* --- Middle Grid 2: 4 Small Metrics Row --- */}
+        {/* Middle Grid 2: 4 Fast Metric KPIs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-          {/* Stat 1 */}
           <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
               <span>Total Orders</span>
-              <Button variant="ghost" size="icon" className="h-5 w-5"><MoreHorizontal className="w-3 h-3 text-slate-400" /></Button>
             </div>
-            <h4 className="text-xl font-bold text-slate-900 dark:text-white">1920</h4>
+            <h4 className="text-xl font-bold text-slate-900 dark:text-white">{overview?.total_orders || 0}</h4>
             <div className="flex items-center justify-between mt-2 text-xs">
-              <span className="text-emerald-600 font-medium flex items-center gap-0.5"><TrendingUp className="w-3 h-3"/> +32.8%</span>
+              <span className="text-emerald-600 font-medium flex items-center gap-0.5"><TrendingUp className="w-3 h-3"/> +{overview?.orders_growth || 0}%</span>
               <span className="text-slate-400">vs last month</span>
             </div>
           </Card>
 
-          {/* Stat 2 */}
           <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Orders Shipped</span>
-              <Button variant="ghost" size="icon" className="h-5 w-5"><MoreHorizontal className="w-3 h-3 text-slate-400" /></Button>
+              <span>Verified Vendors</span>
             </div>
-            <h4 className="text-xl font-bold text-slate-900 dark:text-white">1785</h4>
+            <h4 className="text-xl font-bold text-slate-900 dark:text-white">{overview?.total_vendors || 0}</h4>
             <div className="flex items-center justify-between mt-2 text-xs">
-              <span className="text-rose-500 font-medium flex items-center gap-0.5"><TrendingDown className="w-3 h-3"/> 2.5%</span>
-              <span className="text-slate-400">vs last month</span>
+              <span className="text-emerald-600 font-medium flex items-center gap-0.5"><ShieldCheck className="w-3 h-3"/> 100%</span>
+              <span className="text-slate-400">PPB Verified</span>
             </div>
           </Card>
 
-          {/* Stat 3 */}
           <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Revenue Generated</span>
-              <Button variant="ghost" size="icon" className="h-5 w-5"><MoreHorizontal className="w-3 h-3 text-slate-400" /></Button>
+              <span>Gross Revenue</span>
             </div>
-            <h4 className="text-xl font-bold text-slate-900 dark:text-white">$88,900</h4>
+            <h4 className="text-xl font-bold text-slate-900 dark:text-white">{formattedRevenue}</h4>
             <div className="flex items-center justify-between mt-2 text-xs">
-              <span className="text-emerald-600 font-medium flex items-center gap-0.5"><TrendingUp className="w-3 h-3"/> +32.8%</span>
-              <span className="text-slate-400">vs last month</span>
+              <span className="text-emerald-600 font-medium flex items-center gap-0.5"><TrendingUp className="w-3 h-3"/> +{overview?.revenue_growth || 0}%</span>
+              <span className="text-slate-400">growth</span>
             </div>
           </Card>
 
-          {/* Stat 4 */}
           <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-4">
             <div className="flex items-center justify-between text-xs text-slate-500 mb-1">
-              <span>Customer Satisfaction</span>
-              <Button variant="ghost" size="icon" className="h-5 w-5"><MoreHorizontal className="w-3 h-3 text-slate-400" /></Button>
+              <span>Abandoned Carts</span>
             </div>
-            <h4 className="text-xl font-bold text-slate-900 dark:text-white">4.9 / 5.0</h4>
+            <h4 className="text-xl font-bold text-slate-900 dark:text-white">{overview?.abandoned_carts || 0}</h4>
             <div className="flex items-center justify-between mt-2 text-xs">
-              <span className="text-emerald-600 font-medium flex items-center gap-0.5"><TrendingUp className="w-3 h-3"/> +32.8%</span>
-              <span className="text-slate-400">vs last month</span>
+              <span className="text-slate-500 font-medium">Conversion: {overview?.conversion_rate || 0}%</span>
+              <span className="text-slate-400">all time</span>
             </div>
           </Card>
         </div>
 
-        {/* --- Bottom Row: Table & Side Widgets --- */}
+        {/* Bottom Row: Table & Side Top Products */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           
-          {/* Main Table: Recent Sales Orders */}
+          {/* Main Table: Recent Procurement Orders */}
           <Card className="lg:col-span-8 shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
             <CardHeader className="p-5 pb-3 flex flex-row items-center justify-between space-y-0">
               <div className="flex items-center gap-2">
                 <Package className="w-4 h-4 text-slate-500" />
-                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Recent Sales Orders</CardTitle>
+                <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Recent Customer & Clinic Orders</CardTitle>
               </div>
-              <Button variant="ghost" className="text-xs text-slate-500 font-normal h-8">View all orders</Button>
             </CardHeader>
             <CardContent className="p-0">
-              <Table>
-                <TableHeader className="bg-slate-50/50 dark:bg-slate-900/50">
-                  <TableRow className="border-slate-100 dark:border-slate-800">
-                    <TableHead className="text-xs font-semibold text-slate-500 pl-5">Product</TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500">Customer</TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500">Qty</TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500">Status</TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500">Payment Method</TableHead>
-                    <TableHead className="text-xs font-semibold text-slate-500 pr-5 text-right">Total Price</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {RECENT_SALES_ORDERS.map((order) => (
-                    <TableRow key={order.id} className="border-slate-100 dark:border-slate-800 hover:bg-slate-50/60 dark:hover:bg-slate-900/60">
-                      <TableCell className="pl-5 py-3">
-                        <div className="flex items-center gap-3">
-                          <img src={order.image} alt={order.product} className="w-9 h-9 rounded-lg object-cover border border-slate-200 dark:border-slate-800" />
-                          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 max-w-[180px] truncate">{order.product}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 dark:text-slate-300 font-medium">{order.customer}</TableCell>
-                      <TableCell className="text-xs text-slate-500">{order.qty}</TableCell>
-                      <TableCell>
-                        <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full ${
-                          order.status === "Pending" ? "bg-amber-50 text-amber-600 dark:bg-amber-950/40" :
-                          order.status === "Shipped" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40" :
-                          "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40"
-                        }`}>
-                          {order.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 dark:text-slate-400">
-                        <div className="flex items-center gap-1.5">
-                          <CreditCard className="w-3.5 h-3.5 text-slate-400" />
-                          <span>{order.paymentMethod}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="pr-5 py-3 text-right text-xs font-bold text-slate-900 dark:text-white">{order.totalPrice}</TableCell>
+              {recentOrders.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500">
+                  No orders found for this period.
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader className="bg-slate-50/50 dark:bg-slate-900/50">
+                    <TableRow className="border-slate-100 dark:border-slate-800">
+                      <TableHead className="text-xs font-semibold text-slate-500 pl-5">Order # / Item</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">Customer</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">Qty</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">Status</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">Payment</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500 pr-5 text-right">Total Price</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {recentOrders.slice(0, Number(rowsPerPage)).map((order) => (
+                      <TableRow key={order.id} className="border-slate-100 dark:border-slate-800 hover:bg-slate-50/60 dark:hover:bg-slate-900/60">
+                        <TableCell className="pl-5 py-3">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white">{order.order_number}</span>
+                            <span className="text-[11px] text-slate-500 truncate max-w-[200px]">{order.product}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 dark:text-slate-300 font-medium">{order.customer}</TableCell>
+                        <TableCell className="text-xs text-slate-500">{order.qty}</TableCell>
+                        <TableCell>
+                          <span className={`text-[11px] font-medium px-2.5 py-1 rounded-full ${
+                            order.status.toLowerCase() === "pending" ? "bg-amber-50 text-amber-600 dark:bg-amber-950/40" :
+                            order.status.toLowerCase() === "shipped" ? "bg-blue-50 text-blue-600 dark:bg-blue-950/40" :
+                            order.status.toLowerCase() === "delivered" ? "bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40" :
+                            "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300"
+                          }`}>
+                            {order.status}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 dark:text-slate-400">
+                          <div className="flex items-center gap-1.5">
+                            <CreditCard className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{order.paymentMethod}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="pr-5 py-3 text-right text-xs font-bold text-slate-900 dark:text-white">{order.totalPrice}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
               
-              {/* Pagination controls matching video */}
+              {/* Pagination controls */}
               <div className="flex items-center justify-between p-4 border-t border-slate-100 dark:border-slate-800 text-xs text-slate-500">
                 <div className="flex items-center gap-2">
                   <span>Show</span>
@@ -559,108 +473,92 @@ export default function ReplicatedAdminDashboard() {
                   <span>per page</span>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span>1-4 of 4</span>
-                  <div className="flex items-center gap-1">
-                    <Button variant="outline" size="icon" className="h-7 w-7" disabled><ChevronLeft className="w-3.5 h-3.5"/></Button>
-                    <Button variant="outline" size="icon" className="h-7 w-7 bg-slate-900 text-white border-slate-900">1</Button>
-                    <Button variant="outline" size="icon" className="h-7 w-7"><ChevronRight className="w-3.5 h-3.5"/></Button>
-                  </div>
+                  <span>Showing {Math.min(recentOrders.length, Number(rowsPerPage))} of {recentOrders.length} orders</span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Side Column: Latest Products & Total Assets */}
-          <div className="lg:col-span-4 space-y-5">
-            {/* Latest Products Card */}
+          {/* Side Column: Top Products & Operations Summary */}
+          <div className="lg:col-span-4 flex flex-col gap-5">
+            {/* Top Products Card */}
             <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900">
               <CardHeader className="p-4 pb-2 flex flex-row items-center justify-between space-y-0">
                 <div className="flex items-center gap-2">
                   <Package className="w-4 h-4 text-slate-500" />
-                  <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Latest Products</CardTitle>
+                  <CardTitle className="text-sm font-semibold text-slate-800 dark:text-slate-100">Top Selling Products</CardTitle>
                 </div>
-                <Button variant="ghost" size="icon" className="h-6 w-6"><MoreHorizontal className="w-4 h-4 text-slate-400" /></Button>
               </CardHeader>
               <CardContent className="p-4 pt-1 space-y-3">
-                {LATEST_PRODUCTS.map((prod, i) => (
-                  <div key={i} className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5 last:border-0 last:pb-0">
-                    <div className="flex items-center gap-3">
-                      <img src={prod.image} alt={prod.name} className="w-10 h-10 rounded-lg object-cover border border-slate-200 dark:border-slate-800" />
-                      <div>
-                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{prod.name}</p>
-                        <p className="text-[10px] text-slate-400">{prod.sub}</p>
+                {topProducts.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-4 text-center">No product volume recorded yet.</p>
+                ) : (
+                  topProducts.map((prod) => (
+                    <div key={prod.id} className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5 last:border-0 last:pb-0">
+                      <div className="flex flex-col">
+                        <p className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[180px]">{prod.name}</p>
+                        <p className="text-[10px] text-slate-400">{prod.units_sold} units sold</p>
                       </div>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">KES {prod.revenue?.toLocaleString() || "0"}</span>
                     </div>
-                    <span className="text-xs font-bold text-slate-900 dark:text-white">{prod.price}</span>
-                  </div>
-                ))}
+                  ))
+                )}
               </CardContent>
             </Card>
 
-            {/* Total Assets & Promo Card */}
-            <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-5 space-y-4">
+            {/* Total Assets & Platform Revenue */}
+            <Card className="shadow-sm border-slate-200/80 dark:border-slate-800 rounded-xl bg-white dark:bg-slate-900 p-5 flex flex-col gap-4">
               <div className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300">
                 <DollarSign className="w-4 h-4 text-slate-500" />
-                <span>Total Assets</span>
+                <span>Marketplace Liquidity & Volume</span>
               </div>
               <div>
-                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">$478,230.90</h3>
-                <p className="text-xs text-emerald-600 font-medium mt-0.5">+15.7% +$65,000 <span className="text-slate-400 font-normal">vs last month</span></p>
+                <h3 className="text-2xl font-bold text-slate-900 dark:text-white">{formattedRevenue}</h3>
+                <p className="text-xs text-emerald-600 font-medium mt-0.5">
+                  +{overview?.revenue_growth || 0}% <span className="text-slate-400 font-normal">vs previous period</span>
+                </p>
               </div>
               
-              {/* Asset progress bar */}
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold text-slate-400">Distribution</p>
+              <div className="flex flex-col gap-2">
+                <p className="text-[11px] font-semibold text-slate-400">Distribution Channels</p>
                 <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden flex">
                   <div className="h-full bg-slate-900 dark:bg-white w-[65%]" />
-                  <div className="h-full bg-slate-400 w-[25%]" />
-                  <div className="h-full bg-slate-200 dark:bg-slate-700 w-[10%]" />
+                  <div className="h-full bg-blue-500 w-[25%]" />
+                  <div className="h-full bg-emerald-500 w-[10%]" />
                 </div>
-                <div className="space-y-1.5 pt-1 text-xs">
+                <div className="flex flex-col gap-1.5 pt-1 text-xs">
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white" /> Product Sales
+                      <span className="w-2 h-2 rounded-full bg-slate-900 dark:bg-white" /> Equipment Sales
                     </span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">$312,500.45 (65%)</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">65%</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-slate-400" /> Service Revenue
+                      <span className="w-2 h-2 rounded-full bg-blue-500" /> Consumables & Reagents
                     </span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">$125,000.25 (25%)</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">25%</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500 flex items-center gap-1.5">
-                      <span className="w-2 h-2 rounded-full bg-slate-200 dark:bg-slate-700" /> Other Income
+                      <span className="w-2 h-2 rounded-full bg-emerald-500" /> Clinic Direct Logistics
                     </span>
-                    <span className="font-semibold text-slate-800 dark:text-slate-200">$40,730.20 (09%)</span>
+                    <span className="font-semibold text-slate-800 dark:text-slate-200">10%</span>
                   </div>
                 </div>
-              </div>
-            </Card>
-
-            {/* Dark Mode Promo Banner Card */}
-            <Card className="shadow-sm border-slate-900 bg-slate-900 text-white rounded-xl p-5 relative overflow-hidden">
-              <div className="relative z-10 space-y-3">
-                <span className="text-[10px] uppercase font-bold tracking-widest text-slate-400">Dark Mode Aesthetics</span>
-                <div className="flex items-center gap-3">
-                  <Laptop className="w-10 h-10 text-slate-300" />
-                  <p className="text-xs text-slate-300">A laptop on desk with minimal desk setup</p>
-                </div>
-                <Button size="sm" className="bg-white text-slate-900 hover:bg-slate-100 font-semibold rounded-lg text-xs">Get Premium</Button>
               </div>
             </Card>
           </div>
 
         </div>
 
-        {/* Footer info matching video */}
+        {/* Footer */}
         <div className="flex items-center justify-between text-xs text-slate-400 pt-6 border-t border-slate-200/60 dark:border-slate-800">
-          <p>© 2026 by shadcnboard, creating a better web for you.</p>
+          <p>© 2026 MyMedDevices Kenya. Healthcare Procurement & Medical Device Marketplace.</p>
           <div className="flex items-center gap-4">
-            <a href="#" className="hover:underline">About Us</a>
-            <a href="#" className="hover:underline">Blog</a>
-            <a href="#" className="hover:underline">License</a>
+            <a href="/privacy" className="hover:underline">Privacy</a>
+            <a href="/terms" className="hover:underline">Terms</a>
+            <a href="/system" className="hover:underline">System Status</a>
           </div>
         </div>
 

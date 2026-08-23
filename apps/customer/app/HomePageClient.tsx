@@ -9,6 +9,9 @@ import { useOnSaleProducts, useNewArrivals } from "@/lib/hooks/useProducts";
 import TrendingSection from "./_components/TrendingSection";
 import { BannerCarousel, HeaderBanner } from "@mymeddevices/shared-ui";
 import { BannerPlacement } from "@mymeddevices/shared-core";
+import { TrustFeaturesBar } from "@/components/common/TrustFeaturesBar";
+import { LimitedOfferBanner } from "@/components/common/LimitedOfferBanner";
+import { CuratedBundlesSection } from "@/components/common/CuratedBundlesSection";
 
 export default function HomePageClient() {
   const { data: onSaleProducts = [], isLoading: saleLoading } = useOnSaleProducts(10);
@@ -19,6 +22,14 @@ export default function HomePageClient() {
       <BannerCarousel placement={BannerPlacement.HOMEPAGE_HERO} fallback={<HeroSection />} />
 
       <main className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <TrustFeaturesBar />
+
+        <TrendingSection />
+
+        <WhyUs />
+
+        <ShopByCategories />
+
         <section className="py-6">
           <ProductSection
             title="Special Offers"
@@ -28,9 +39,9 @@ export default function HomePageClient() {
           />
         </section>
 
-        <TrendingSection />
+        <CuratedBundlesSection />
 
-        <WhyUs />
+        <LimitedOfferBanner />
 
         <section className="py-6">
           <ProductSection
@@ -43,8 +54,6 @@ export default function HomePageClient() {
             layout="scroll"
           />
         </section>
-
-        <ShopByCategories />
       </main>
       <NewsletterSection />
     </>

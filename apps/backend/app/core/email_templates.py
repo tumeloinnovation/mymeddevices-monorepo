@@ -175,17 +175,45 @@ def password_changed_html(
 
 def account_welcome_html(
     user_name: str,
-    account_id: str,
-    verify_url: str,
+    account_id: str | None = None,
+    verify_url: str | None = None,
+    user_email: str | None = None,
+    role: str | None = None,
+    temp_password: str | None = None,
 ) -> str:
+    clean_account_id = None if (not account_id or str(account_id).lower() == "none") else str(account_id)
     return render_email_template(
         "account_welcome.html",
         {
             "user_name": user_name,
-            "account_id": account_id,
-            "verify_url": verify_url,
+            "user_email": user_email,
+            "role": role,
+            "account_id": clean_account_id,
+            "temp_password": temp_password,
+            "verify_url": verify_url or f"{settings.SITE_URL}/verify",
             "title": "Welcome to MyMedDevices",
             "preheader": "Your account has been created. Complete your profile to get started.",
+        },
+    )
+
+
+def staff_invite_html(
+    first_name: str,
+    email: str,
+    role: str,
+    temp_password: str | None = None,
+    login_url: str | None = None,
+) -> str:
+    return render_email_template(
+        "staff_invite.html",
+        {
+            "first_name": first_name,
+            "email": email,
+            "role": role,
+            "temp_password": temp_password,
+            "login_url": login_url or f"{settings.SITE_URL}/auth/login",
+            "title": "Invitation to Join MyMedDevices",
+            "preheader": f"You've been invited to join MyMedDevices as a {role}.",
         },
     )
 
@@ -255,5 +283,22 @@ def delivery_confirmation_html(
             "instructions_url": instructions_url or f"{settings.SITE_URL}/device-instructions",
             "title": f"Delivery Confirmed — {order_id}",
             "preheader": f"Your order {order_id} has been delivered.",
+        },
+    )
+
+
+def admin_password_reset_html(
+    user_name: str,
+    force_change: bool = True,
+    login_url: str | None = None,
+) -> str:
+    return render_email_template(
+        "admin_password_reset.html",
+        {
+            "user_name": user_name,
+            "force_change": force_change,
+            "login_url": login_url or f"{settings.SITE_URL}/auth/login",
+            "title": "Your Password Has Been Reset",
+            "preheader": "An administrator has reset your account password.",
         },
     )

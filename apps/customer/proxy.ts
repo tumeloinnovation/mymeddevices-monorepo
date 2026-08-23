@@ -22,23 +22,9 @@ const getBackendUrl = () => process.env.NEXT_PUBLIC_API_URL || 'http://localhost
 async function validateToken(token: string): Promise<any> {
     console.log('🔑 [Proxy] validateToken called');
 
-    if (token === 'demo-customer-token') {
-        console.log('🔑 [Proxy] Using mock user for demo customer token');
-        return {
-            id: 1,
-            email: 'john.doe@example.com',
-            roles: ['customer'],
-            isVendor: false,
-        };
-    }
-    if (token === 'demo-vendor-token') {
-        console.log('🔑 [Proxy] Using mock user for demo vendor token');
-        return {
-            id: 101,
-            email: 'vendor@medistore.co.ke',
-            roles: ['vendor'],
-            isVendor: true,
-        };
+    // Reject known insecure mock tokens immediately
+    if (token.startsWith('demo-')) {
+        return null;
     }
 
     // Check cache first

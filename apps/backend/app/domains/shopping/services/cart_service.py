@@ -1,8 +1,11 @@
+import logging
 import secrets
 import uuid
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +26,7 @@ class CartService:
     """Service for shopping cart operations."""
 
     MAX_ITEMS_PER_CART = 100
-    MAX_QUANTITY_PER_ITEM = 99
+    MAX_QUANTITY_PER_ITEM = 9999
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -115,7 +118,10 @@ class CartService:
             stmt = (
                 select(Cart)
                 .where(and_(Cart.id == cart_id, Cart.is_active == True))
-                .options(selectinload(Cart.items).selectinload(CartItem.product))
+                .options(
+                    selectinload(Cart.items).selectinload(CartItem.product),
+                    selectinload(Cart.items).selectinload(CartItem.product_variant),
+                )
             )
             result = await self.db.execute(stmt)
             return result.scalar_one_or_none()
@@ -131,12 +137,14 @@ class CartService:
         self,
         cart_id: uuid.UUID,
         product_id: uuid.UUID,
+        product_variant_id: uuid.UUID | None = None,
         quantity: int = 1,
         notes: str | None = None,
         substitution_allowed: bool = True,
         unit_price: float | None = None,
     ) -> CartItem:
         """Add item to cart or update quantity if already exists."""
+        item_id = None
         # Use transaction for atomic item addition
         async with self._transaction():
             # Verify product exists and is available
@@ -148,12 +156,33 @@ class CartService:
             if product.status != "published":
                 raise BusinessRuleError("Product is not available for purchase")
 
-            # Check existing item
-            item_stmt = select(CartItem).where(and_(CartItem.cart_id == cart_id, CartItem.product_id == product_id))
+            # If variant_id is provided, verify variant exists and belongs to product
+            if product_variant_id is not None:
+                from app.domains.catalog.models.product_variant import ProductVariant
+
+                var_stmt = select(ProductVariant).where(
+                    and_(
+                        ProductVariant.id == product_variant_id,
+                        ProductVariant.product_id == product_id,
+                        ProductVariant.is_active == True,
+                    )
+                )
+                var_result = await self.db.execute(var_stmt)
+                variant = var_result.scalar_one_or_none()
+                if not variant:
+                    raise NotFoundError("ProductVariant", product_variant_id)
+
+            # Check existing item matching both product_id and product_variant_id
+            item_conditions = [CartItem.cart_id == cart_id, CartItem.product_id == product_id]
+            if product_variant_id is not None:
+                item_conditions.append(CartItem.product_variant_id == product_variant_id)
+            else:
+                item_conditions.append(CartItem.product_variant_id.is_(None))
+
+            item_stmt = select(CartItem).where(and_(*item_conditions))
             item_result = await self.db.execute(item_stmt)
             item = item_result.scalar_one_or_none()
 
-            item_id = None
             if item:
                 item.quantity += quantity
                 if item.quantity > self.MAX_QUANTITY_PER_ITEM:
@@ -164,18 +193,30 @@ class CartService:
                 if unit_price is not None:
                     item.unit_price = Decimal(str(unit_price))
                 item_id = item.id
+                logger.info(f"[BACKEND CART] Updated existing item {item_id}: new quantity={item.quantity}")
             else:
                 item = CartItem(
                     id=uuid.uuid4(),
                     cart_id=cart_id,
                     product_id=product_id,
+                    product_variant_id=product_variant_id,
                     quantity=min(quantity, self.MAX_QUANTITY_PER_ITEM),
                     notes=notes,
                     substitution_allowed=substitution_allowed,
-                    unit_price=unit_price,
+                    unit_price=Decimal(str(unit_price)) if unit_price is not None else None,
                 )
                 self.db.add(item)
                 item_id = item.id
+                logger.info(f"[BACKEND CART] Created new item {item_id}: cart_id={cart_id}, product_id={product_id}, quantity={quantity}")
+
+        # EXPLICIT COMMIT to ensure data is persisted
+        try:
+            await self.db.commit()
+            logger.info(f"[BACKEND CART] Explicit commit successful for item {item_id}")
+        except Exception as e:
+            logger.error(f"[BACKEND CART] Explicit commit failed for item {item_id}: {e}")
+            await self.db.rollback()
+            raise
 
         # Specific expiration of cart items so subsequent queries reload collection
         cart_stmt = select(Cart).where(Cart.id == cart_id)
@@ -185,7 +226,11 @@ class CartService:
             self.db.expire(cart_obj, ["items"])
 
         # Reload and return
-        stmt = select(CartItem).where(CartItem.id == item_id)
+        stmt = (
+            select(CartItem)
+            .where(CartItem.id == item_id)
+            .options(selectinload(CartItem.product), selectinload(CartItem.product_variant))
+        )
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
@@ -234,6 +279,7 @@ class CartService:
                     await self.add_item(
                         target_cart.id,
                         item.product_id,
+                        item.product_variant_id,
                         item.quantity,
                         item.notes,
                         item.substitution_allowed,

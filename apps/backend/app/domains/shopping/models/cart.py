@@ -13,6 +13,7 @@ from app.domains.shared.models import AuditMixin, IDMixin
 if TYPE_CHECKING:
     from app.domains.auth.models.user import User
     from app.domains.catalog.models.product import Product
+    from app.domains.catalog.models.product_variant import ProductVariant
     from app.domains.shopping.models.cart_discount import CartDiscount
     from app.domains.shopping.models.cart_share import CartShare
 
@@ -75,10 +76,22 @@ class Cart(Base, IDMixin, AuditMixin):
         return f"<Cart(id={self.id}, guest, token={self.cart_token})>"
 
 
+from sqlalchemy import UniqueConstraint
+
+
 class CartItem(Base, IDMixin, AuditMixin):
     """Item in a shopping cart with customization options."""
 
     __tablename__ = "cart_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "cart_id",
+            "product_id",
+            "product_variant_id",
+            name="uq_cart_items_cart_product_variant",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
 
     cart_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("carts.id", ondelete="CASCADE"), nullable=False, index=True
@@ -86,6 +99,10 @@ class CartItem(Base, IDMixin, AuditMixin):
 
     product_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    product_variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="CASCADE"), nullable=True, index=True
     )
 
     quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -106,6 +123,7 @@ class CartItem(Base, IDMixin, AuditMixin):
     cart: Mapped["Cart"] = relationship("Cart", back_populates="items")
 
     product: Mapped["Product"] = relationship("Product", lazy="selectin")
+    product_variant: Mapped[Optional["ProductVariant"]] = relationship("ProductVariant", lazy="selectin")
 
     def __repr__(self) -> str:
-        return f"<CartItem(id={self.id}, cart_id={self.cart_id}, product_id={self.product_id}, qty={self.quantity})>"
+        return f"<CartItem(id={self.id}, cart_id={self.cart_id}, product_id={self.product_id}, variant_id={self.product_variant_id}, qty={self.quantity})>"

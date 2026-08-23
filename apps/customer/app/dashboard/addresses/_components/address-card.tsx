@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { MapPin, Package, Star, Trash2, Pencil, Home, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Address } from '@/lib/store/useAddressStore';
+import { capitalizeTag } from '@mymeddevices/shared-core';
 
 interface AddressCardProps {
   address: Address;
@@ -58,8 +59,8 @@ export function AddressCard({
                 </span>
 
                 {address.tag && (
-                  <Badge variant="outline" className="capitalize text-[10px] font-normal py-0">
-                    {address.tag}
+                  <Badge variant="outline" className="text-[10px] font-normal py-0">
+                    {capitalizeTag(address.tag)}
                   </Badge>
                 )}
 

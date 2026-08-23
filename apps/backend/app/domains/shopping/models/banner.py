@@ -67,7 +67,11 @@ class Banner(Base, IDMixin, AuditMixin):
     )
 
     # Placement and Priority
-    placement: Mapped[str] = mapped_column(SQLEnum(BannerPlacement), nullable=False, index=True)
+    placement: Mapped[str] = mapped_column(
+        SQLEnum(BannerPlacement, name="bannerplacement", values_callable=lambda obj: [e.value for e in obj]),
+        nullable=False,
+        index=True,
+    )
     priority: Mapped[int] = mapped_column(
         Integer,
         default=0,  # Higher = shown first
@@ -75,7 +79,13 @@ class Banner(Base, IDMixin, AuditMixin):
     )
 
     # Scheduling
-    status: Mapped[str] = mapped_column(SQLEnum(BannerStatus), default=BannerStatus.DRAFT, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(
+        SQLEnum(BannerStatus, name="bannerstatus", values_callable=lambda obj: [e.value for e in obj]),
+        server_default="draft",
+        default=BannerStatus.DRAFT.value,
+        nullable=False,
+        index=True,
+    )
     scheduled_start: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     scheduled_end: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 

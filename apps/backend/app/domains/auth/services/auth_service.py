@@ -67,6 +67,24 @@ class AuthService:
         self.token_repo = RefreshTokenRepository(db)
         self.device_repo = UserDeviceRepository(db)
 
+    async def _ensure_driver_profile(self, user: User) -> None:
+        """Create a DriverProfile for driver users if one doesn't exist.
+
+        Driver profiles are required by logistics services (capacity tracking,
+        matching, ETA estimation). Auto-provisioning here guarantees every
+        driver who logs in gets a profile, regardless of how they were created.
+        """
+        if user.role != "driver":
+            return
+
+        from app.domains.logistics.models.driver_profile import DriverProfile, DriverStatus
+
+        result = await self.db.execute(select(DriverProfile).where(DriverProfile.user_id == user.id))
+        if not result.scalar_one_or_none():
+            # Use .value to get the string value ("offline") instead of the enum name
+            self.db.add(DriverProfile(user_id=user.id, status=DriverStatus.OFFLINE.value))
+            await self.db.commit()
+
     async def initiate_registration(self, data: RegisterInitiateRequest) -> User:
         # Server-side validation: enforce allowed registration roles
         allowed_roles = {"customer", "vendor", "guest"}
@@ -349,6 +367,9 @@ class AuthService:
         # Successful login - reset failed attempt counter
         await lockout_service.reset_attempts(login_data.email)
 
+        # Ensure driver users have a DriverProfile for logistics operations
+        await self._ensure_driver_profile(user)
+
         # Create or update device record
         device = await self.device_repo.get_by_user_and_device(user.id, login_data.device_id)
         if not device:
@@ -505,6 +526,9 @@ class AuthService:
         # Mark user verified
         if not user.is_verified:
             await self.user_repo.update(user, {"is_verified": True})
+
+        # Ensure driver users have a DriverProfile for logistics operations
+        await self._ensure_driver_profile(user)
 
         # Create or update device record
         device = await self.device_repo.get_by_user_and_device(user.id, login_data.device_id)

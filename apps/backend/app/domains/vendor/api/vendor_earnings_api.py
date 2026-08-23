@@ -36,7 +36,8 @@ async def get_earnings_summary(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Vendor profile not found")
 
     # Get vendor ledger
-    ledger = await db.get(VendorLedger, profile.id)
+    ledger_res = await db.execute(select(VendorLedger).where(VendorLedger.vendor_id == profile.id))
+    ledger = ledger_res.scalar_one_or_none()
     available_balance = ledger.balance if ledger else Decimal("0")
 
     # Calculate total earnings (sum of all credit transactions)

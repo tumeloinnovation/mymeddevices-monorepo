@@ -29,8 +29,9 @@ def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: fl
 class CartCalculationService:
     """Service for cart calculations."""
 
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, routing_service: "RoutingServiceDep | None" = None):
         self.db = db
+        self.routing_service = routing_service
 
     async def calculate_totals(self, cart_id: uuid.UUID, shipping_address: dict | None = None) -> dict:
         """Calculate cart totals with discounts.
@@ -38,8 +39,15 @@ class CartCalculationService:
         Returns:
             dict with keys: subtotal, discount_amount, tax_amount, shipping_amount, total, currency, item_count
         """
-        # Get cart with items and discounts - eager load products to avoid N+1 queries
-        stmt = select(Cart).where(Cart.id == cart_id).options(selectinload(Cart.items).selectinload(CartItem.product))
+        # Get cart with items and discounts - eager load products and variants to avoid N+1 queries
+        stmt = (
+            select(Cart)
+            .where(Cart.id == cart_id)
+            .options(
+                selectinload(Cart.items).selectinload(CartItem.product),
+                selectinload(Cart.items).selectinload(CartItem.product_variant),
+            )
+        )
         result = await self.db.execute(stmt)
         cart = result.scalar_one_or_none()
         if not cart:
@@ -52,6 +60,8 @@ class CartCalculationService:
         for item in items:
             if item.unit_price is not None:
                 price = float(item.unit_price)
+            elif item.product_variant and item.product_variant.calculated_price is not None:
+                price = float(item.product_variant.calculated_price)
             elif item.product and item.product.price is not None:
                 price = float(item.product.price)
             else:
@@ -128,8 +138,8 @@ class CartCalculationService:
         # Calculate subtotal after discount
         discounted_subtotal = max(0.0, subtotal - discount_amount)
 
-        # Calculate tax (simplified)
-        tax_amount = await self.calculate_tax(cart_id, discounted_subtotal)
+        # Calculate tax (16% VAT on taxable products after discounts)
+        tax_amount = await self.calculate_tax(items, discounted_subtotal, subtotal)
 
         # Calculate shipping and logistics details
         shipping_details = await self.calculate_shipping_details(cart, shipping_address)
@@ -139,17 +149,17 @@ class CartCalculationService:
         packaging_fee = 100.0 if shipping_address else 0.0
         services_fee = 50.0 if shipping_address else 0.0
 
-        # Calculate total
+        # Calculate total (Subtotal - Discounts + 16% VAT + Shipping + Packaging + Services)
         total = discounted_subtotal + tax_amount + shipping_amount + packaging_fee + services_fee
 
         return {
-            "subtotal": round(subtotal),
-            "discount_amount": round(discount_amount),
-            "tax_amount": round(tax_amount),
-            "shipping_amount": round(shipping_amount),
-            "packaging_fee": round(packaging_fee),
-            "services_fee": round(services_fee),
-            "total": round(total),
+            "subtotal": round(subtotal, 2),
+            "discount_amount": round(discount_amount, 2),
+            "tax_amount": round(tax_amount, 2),
+            "shipping_amount": round(shipping_amount, 2),
+            "packaging_fee": round(packaging_fee, 2),
+            "services_fee": round(services_fee, 2),
+            "total": round(total, 2),
             "currency": "KES",
             "item_count": len(items),
             "logistics_type": shipping_details["logistics_type"],
@@ -166,12 +176,47 @@ class CartCalculationService:
             ],
         }
 
-    async def calculate_tax(self, cart_id: uuid.UUID, subtotal: float) -> float:
-        """Calculate tax for cart. Placeholder implementation."""
-        return 0.0
+    async def calculate_tax(
+        self, items: list[CartItem], discounted_subtotal: float, subtotal: float
+    ) -> float:
+        """Calculate VAT tax for cart at 16% rate on taxable items."""
+        if subtotal <= 0 or discounted_subtotal <= 0:
+            return 0.0
+
+        VAT_RATE = 0.16
+        discount_ratio = max(0.0, discounted_subtotal / subtotal) if subtotal > 0 else 1.0
+
+        total_tax = 0.0
+        for item in items:
+            is_taxable = True
+            rate = VAT_RATE
+            if item.product:
+                if hasattr(item.product, "has_vat") and item.product.has_vat is False:
+                    is_taxable = False
+                elif hasattr(item.product, "vat_rate") and item.product.vat_rate is not None:
+                    rate = float(item.product.vat_rate) / 100.0
+
+            if is_taxable:
+                if item.unit_price is not None:
+                    price = float(item.unit_price)
+                elif item.product_variant and item.product_variant.calculated_price is not None:
+                    price = float(item.product_variant.calculated_price)
+                elif item.product and item.product.price is not None:
+                    price = float(item.product.price)
+                else:
+                    price = 0.0
+
+                item_taxable_amt = (price * item.quantity) * discount_ratio
+                total_tax += item_taxable_amt * rate
+
+        return round(total_tax, 2)
 
     async def calculate_shipping_details(self, cart: Cart, shipping_address: dict | None = None) -> dict:
-        """Calculate shipping amount and logistics routing details."""
+        """Calculate shipping amount and logistics routing details.
+
+        Delegates to the logistics domain RoutingService when available,
+        otherwise falls back to the legacy implementation for backwards compatibility.
+        """
         if not shipping_address:
             return {"amount": 0.0, "logistics_type": "courier", "calculated_distance_km": 0.0, "route_coordinates": []}
 
@@ -199,6 +244,37 @@ class CartCalculationService:
                 "route_coordinates": [],
             }
 
+        # Use logistics domain RoutingService if available
+        if self.routing_service:
+            vendor_ids = [item.product.vendor_id for item in cart.items if item.product and item.product.vendor_id]
+
+            # Load settings from DB
+            from app.domains.admin.services import SystemSettingService
+
+            settings = await SystemSettingService.get_setting(self.db, "shipping_settings")
+            if not settings:
+                settings = {"flat_fee": 200.0, "rate_per_km": 20.0, "max_radius_km": 50.0, "courier_fee": 450.0}
+
+            result = await self.routing_service.calculate_delivery_route(
+                customer_coords=(customer_lat, customer_lon),
+                vendor_ids=vendor_ids,
+                logistics_settings=settings,
+            )
+
+            return {
+                "amount": result.amount,
+                "logistics_type": result.logistics_type,
+                "calculated_distance_km": result.distance,
+                "route_coordinates": result.route,
+            }
+
+        # Fallback to legacy implementation
+        return await self._calculate_shipping_details_legacy(cart, shipping_address, customer_lat, customer_lon)
+
+    async def _calculate_shipping_details_legacy(
+        self, cart: Cart, shipping_address: dict, customer_lat: float, customer_lon: float
+    ) -> dict:
+        """Legacy implementation of shipping calculation for backwards compatibility."""
         # Load settings from DB
         from app.domains.admin.services import SystemSettingService
 

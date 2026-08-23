@@ -41,7 +41,11 @@ import {
   Star,
   MessageSquare,
   Sparkles,
-  Store
+  Store,
+  Key,
+  RefreshCw,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { usersService, shoppingService, type CustomerDetail } from "@mymeddevices/shared-core";
@@ -62,6 +66,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 export default function CustomerDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -73,6 +86,14 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+
+  // Password reset state
+  const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
+  const [passwordValue, setPasswordValue] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [forcePasswordChange, setForcePasswordChange] = useState(true);
+  const [notifyUser, setNotifyUser] = useState(true);
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -113,6 +134,39 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
       toast.error(error.message || `Failed to update customer status`);
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const generateRandomPassword = () => {
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*";
+    let password = "";
+    for (let i = 0; i < 16; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setPasswordValue(password);
+  };
+
+  const handlePasswordReset = async () => {
+    if (!passwordValue || passwordValue.length < 8) {
+      toast.error("Password must be at least 8 characters long");
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      await usersService.setCustomerPassword(id, {
+        password: passwordValue,
+        force_change: forcePasswordChange,
+        notify_user: notifyUser,
+      });
+      toast.success("Password updated successfully");
+      setPasswordDialogOpen(false);
+      setPasswordValue("");
+      setShowPassword(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update password");
+    } finally {
+      setPasswordSaving(false);
     }
   };
 
@@ -280,6 +334,10 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
                 <DropdownMenuLabel>Account Actions</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setPasswordDialogOpen(true)} className="gap-2">
+                  <Key className="h-4 w-4" /> Reset Password
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {isActive ? (
                   <DropdownMenuItem onClick={() => handleStatusChange("suspend")} className="text-rose-600">
@@ -690,6 +748,125 @@ export default function CustomerDetailPage({ params }: { params: Promise<{ id: s
           </div>
 
         </div>
+
+        {/* Password Reset Dialog */}
+        <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Key className="h-5 w-5 text-primary" />
+                Reset Customer Password
+              </DialogTitle>
+              <DialogDescription>
+                Set a new password for {customer?.name}. You can generate a random secure password or enter a custom one.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="password">New Password</Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={passwordValue}
+                      onChange={(e) => setPasswordValue(e.target.value)}
+                      placeholder="Enter new password"
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-muted-foreground" />
+                      )}
+                    </Button>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={generateRandomPassword}
+                    className="shrink-0"
+                    title="Generate random password"
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                </div>
+                {passwordValue && (
+                  <p className="text-xs text-muted-foreground">
+                    Password strength: {passwordValue.length < 8 ? "Weak" : passwordValue.length < 12 ? "Medium" : "Strong"}
+                  </p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="force-change" className="cursor-pointer">
+                    Require password change on next login
+                  </Label>
+                  <input
+                    id="force-change"
+                    type="checkbox"
+                    checked={forcePasswordChange}
+                    onChange={(e) => setForcePasswordChange(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  User will be prompted to create their own password after logging in.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="notify-user" className="cursor-pointer">
+                    Send email notification to user
+                  </Label>
+                  <input
+                    id="notify-user"
+                    type="checkbox"
+                    checked={notifyUser}
+                    onChange={(e) => setNotifyUser(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  User will receive an email informing them of the password change.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setPasswordDialogOpen(false);
+                  setPasswordValue("");
+                  setShowPassword(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handlePasswordReset}
+                disabled={!passwordValue || passwordValue.length < 8 || passwordSaving}
+              >
+                {passwordSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Updating...
+                  </>
+                ) : (
+                  "Update Password"
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
       </div>
     </DashboardLayout>

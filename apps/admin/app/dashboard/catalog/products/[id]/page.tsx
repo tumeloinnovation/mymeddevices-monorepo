@@ -33,6 +33,7 @@ import {
   ListChecks,
   Award,
   Star,
+  Tag,
   SlidersHorizontal,
   Search,
   Share2,
@@ -317,14 +318,40 @@ export default function ProductDetailPage() {
     const match = brands.find((b) => b.id === product.brand || b.name === product.brand);
     return match?.name || product.brand;
   }, [product?.brand, brands]);
-  const imageMutations = useImageMutations(productId);
-  const aiGen = useAIGenerate(productId);
-  const aiValidate = useAIValidate(productId);
 
   const form = useForm<ProductFormValues>({
     resolver: standardSchemaResolver(productSchema) as any,
     defaultValues: productToFormValues(product ?? ({} as Product)),
   });
+
+  const categoryDisplayName = useMemo(() => {
+    if (!product) return "Uncategorized";
+    const isUuid = (val?: string) => val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val);
+    
+    // Check if category object is present on product
+    const catObj = (product as any).category;
+    if (catObj && typeof catObj === "object" && catObj.name) {
+      return catObj.name;
+    }
+
+    // Match by category_id from loaded categories
+    const activeCatId = form.watch("category_id") || product.category_id;
+    if (activeCatId) {
+      const match = categories.find((c) => c.id === activeCatId || c.name === activeCatId);
+      if (match) return match.name;
+    }
+
+    // Match by category_name if valid string and not UUID
+    if (product.category_name && !isUuid(product.category_name)) {
+      return product.category_name;
+    }
+
+    return "General Medical Equipment";
+  }, [product, categories, form]);
+
+  const imageMutations = useImageMutations(productId);
+  const aiGen = useAIGenerate(productId);
+  const aiValidate = useAIValidate(productId);
 
   useEffect(() => {
     if (product) form.reset(productToFormValues(product));
@@ -345,6 +372,36 @@ export default function ProductDetailPage() {
       onSuccess: () => setIsEditing(false),
     });
   }, [form, mutations.update]);
+
+  const handleToggleClinicalPick = useCallback((checked: boolean) => {
+    form.setValue("is_clinical_pick", checked, { shouldDirty: true });
+    if (!isEditing) {
+      mutations.update.mutate({ is_clinical_pick: checked } as any, {
+        onSuccess: () => toast.success(checked ? "Product endorsed as Clinical Pick" : "Clinical Pick endorsement removed"),
+        onError: (err: any) => toast.error("Failed to update endorsement: " + (err.message || "Unknown error")),
+      });
+    }
+  }, [isEditing, form, mutations.update]);
+
+  const handleToggleFeatured = useCallback((checked: boolean) => {
+    form.setValue("is_featured", checked, { shouldDirty: true });
+    if (!isEditing) {
+      mutations.update.mutate({ is_featured: checked } as any, {
+        onSuccess: () => toast.success(checked ? "Product promoted to Featured Hero" : "Featured Hero placement removed"),
+        onError: (err: any) => toast.error("Failed to update hero placement: " + (err.message || "Unknown error")),
+      });
+    }
+  }, [isEditing, form, mutations.update]);
+
+  const handleToggleOnSale = useCallback((checked: boolean) => {
+    form.setValue("is_on_sale", checked, { shouldDirty: true });
+    if (!isEditing) {
+      mutations.update.mutate({ is_on_sale: checked } as any, {
+        onSuccess: () => toast.success(checked ? "Promotional sale pricing enabled" : "Promotional sale pricing disabled"),
+        onError: (err: any) => toast.error("Failed to update sale status: " + (err.message || "Unknown error")),
+      });
+    }
+  }, [isEditing, form, mutations.update]);
 
   const handleStatusAction = useCallback(
     (action: "verify" | "publish" | "archive") => {
@@ -763,9 +820,9 @@ export default function ProductDetailPage() {
                         <Field
                           label="Catalog Category"
                           editing={isEditing}
-                          view={<BadgeView>{product.category_name || "Uncategorized"}</BadgeView>}
+                          view={<BadgeView>{categoryDisplayName}</BadgeView>}
                         >
-                          <Select value={form.watch("category_id")} onValueChange={(v) => form.setValue("category_id", v)}>
+                          <Select value={form.watch("category_id")} onValueChange={(v) => form.setValue("category_id", v, { shouldDirty: true })}>
                             <SelectTrigger className="h-9 text-xs focus-visible:ring-primary">
                               <SelectValue placeholder="Assign category" />
                             </SelectTrigger>
@@ -1018,37 +1075,51 @@ export default function ProductDetailPage() {
                         </CardDescription>
                       </CardHeader>
                       <CardContent className="p-4 sm:p-5 space-y-3">
-                        <div className="flex items-center justify-between p-3 border rounded-xl bg-card">
+                        <div className="flex items-center justify-between p-3 border rounded-xl bg-card hover:bg-muted/30 transition-colors">
                           <div className="space-y-0.5">
                             <label className="text-xs font-bold text-foreground cursor-pointer flex items-center gap-1.5">
                               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
                               Clinical Pick Endorsement
                             </label>
                             <p className="text-[11px] text-muted-foreground">
-                              Flag product as verified by clinical compliance.
+                              Flag product as verified by clinical compliance board.
                             </p>
                           </div>
                           <Switch
                             checked={form.watch("is_clinical_pick") ?? product.is_clinical_pick}
-                            onCheckedChange={(checked) => form.setValue("is_clinical_pick", checked, { shouldDirty: true })}
-                            disabled={!isEditing}
+                            onCheckedChange={handleToggleClinicalPick}
                           />
                         </div>
 
-                        <div className="flex items-center justify-between p-3 border rounded-xl bg-card">
+                        <div className="flex items-center justify-between p-3 border rounded-xl bg-card hover:bg-muted/30 transition-colors">
                           <div className="space-y-0.5">
                             <label className="text-xs font-bold text-foreground cursor-pointer flex items-center gap-1.5">
                               <Star className="h-3.5 w-3.5 text-amber-500" />
                               Featured Hero Placement
                             </label>
                             <p className="text-[11px] text-muted-foreground">
-                              Promote item on main storefront hero sections.
+                              Promote item on main storefront hero carousel.
                             </p>
                           </div>
                           <Switch
                             checked={form.watch("is_featured") ?? product.is_featured}
-                            onCheckedChange={(checked) => form.setValue("is_featured", checked, { shouldDirty: true })}
-                            disabled={!isEditing}
+                            onCheckedChange={handleToggleFeatured}
+                          />
+                        </div>
+
+                        <div className="flex items-center justify-between p-3 border rounded-xl bg-card hover:bg-muted/30 transition-colors">
+                          <div className="space-y-0.5">
+                            <label className="text-xs font-bold text-foreground cursor-pointer flex items-center gap-1.5">
+                              <Tag className="h-3.5 w-3.5 text-rose-500" />
+                              Promotional Sale Pricing
+                            </label>
+                            <p className="text-[11px] text-muted-foreground">
+                              Mark as active promotional item on storefront.
+                            </p>
+                          </div>
+                          <Switch
+                            checked={form.watch("is_on_sale") ?? product.is_on_sale}
+                            onCheckedChange={handleToggleOnSale}
                           />
                         </div>
                       </CardContent>
@@ -1596,9 +1667,12 @@ export default function ProductDetailPage() {
               Cancel
             </Button>
             <Button
+              type="button"
               variant="destructive"
               size="sm"
               onClick={() => {
+                if (mutations.delete.isPending) return;
+                setShowDeleteDialog(false);
                 mutations.delete.mutate(undefined, {
                   onSuccess: () => router.push("/dashboard/catalog/products"),
                 });

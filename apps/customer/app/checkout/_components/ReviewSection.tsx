@@ -86,7 +86,7 @@ export default function ReviewSection({
     // triggering other components' updates during this component's render
     if (updated) {
       if (onUpdateItem) onUpdateItem(updated);
-      else cart.updateQuantity(Number(updated.id), updated.quantity);
+      else cart.updateQuantity(updated.id, updated.quantity);
     }
   };
 
@@ -103,7 +103,7 @@ export default function ReviewSection({
   const remove = (id: string | number) => {
     setItems((prev) => prev.filter((p) => p.id !== id));
     if (onRemoveItem) onRemoveItem(id);
-    else cart.removeItem(Number(id));
+    else cart.removeItem(id);
   };
 
   const total = useMemo(() => {

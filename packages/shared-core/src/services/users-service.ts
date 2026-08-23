@@ -66,7 +66,7 @@ export interface StaffMember {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'worker';
+  role: string;
   status: 'active' | 'inactive' | 'pending';
   department?: string;
   last_login?: string;
@@ -85,15 +85,45 @@ export interface StaffListResponse {
 export interface StaffDetail {
   id: string;
   name: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
-  role: 'admin' | 'worker';
+  role: string;
   phone?: string;
   department?: string;
   is_active: boolean;
+  status?: string;
   is_verified: boolean;
   joined_date: string;
   last_login?: string;
+  permissions?: string[];
+  permissions_count?: number;
+  is_customized?: boolean;
+  granted_overrides?: string[];
+  revoked_overrides?: string[];
 }
+
+export interface StaffPermissionsDetail {
+  staff_id: string;
+  name: string;
+  email: string;
+  role: string;
+  categories: any[];
+  available_roles: any[];
+  base_permissions: string[];
+  granted_overrides: string[];
+  revoked_overrides: string[];
+  effective_permissions: string[];
+  is_customized: boolean;
+}
+
+export interface StaffPermissionUpdateInput {
+  granted: string[];
+  revoked: string[];
+  role?: string;
+  department?: string;
+}
+
 
 export interface VendorOverview {
   id: string;
@@ -163,13 +193,25 @@ export const usersService = {
     return apiClient.post('/admin/users/customers', data);
   },
 
+  async setCustomerPassword(id: string, data: {
+    password: string;
+    force_change?: boolean;
+    notify_user?: boolean;
+  }): Promise<{
+    message: string;
+    force_change: boolean;
+    notified: boolean;
+  }> {
+    return apiClient.put(`/admin/users/customers/${id}/password`, data);
+  },
+
   // ============================================================================
   // Staff
   // ============================================================================
 
   async getStaff(params: {
     search?: string;
-    role_filter?: 'admin' | 'worker';
+    role_filter?: string;
     status_filter?: 'active' | 'inactive' | 'pending';
     page?: number;
     page_size?: number;
@@ -183,18 +225,17 @@ export const usersService = {
 
   async createStaff(data: {
     email: string;
-    role: 'admin' | 'worker';
+    role: string;
     first_name: string;
     last_name: string;
   }): Promise<{
     id: string;
     email: string;
     role: string;
+    temp_password?: string;
     message: string;
   }> {
-    return apiClient.post('/admin/users/staff', null, {
-      params: data
-    });
+    return apiClient.post('/admin/users/staff', data);
   },
 
   async updateStaffStatus(id: string, action: 'activate' | 'deactivate'): Promise<{
@@ -209,6 +250,43 @@ export const usersService = {
   async deleteStaff(id: string): Promise<{ message: string }> {
     return apiClient.delete(`/admin/users/staff/${id}`);
   },
+
+  async getStaffPermissions(staffId: string): Promise<StaffPermissionsDetail> {
+    return apiClient.get<StaffPermissionsDetail>(`/admin/users/staff/${staffId}/permissions`);
+  },
+
+  async updateStaffPermissions(staffId: string, data: StaffPermissionUpdateInput): Promise<{
+    message: string;
+    staff_id: string;
+    role: string;
+    granted_overrides: string[];
+    revoked_overrides: string[];
+    effective_permissions: string[];
+    is_customized: boolean;
+  }> {
+    return apiClient.put(`/admin/users/staff/${staffId}/permissions`, data);
+  },
+
+  async resetStaffPermissions(staffId: string): Promise<{
+    message: string;
+    staff_id: string;
+    is_customized: boolean;
+  }> {
+    return apiClient.delete(`/admin/users/staff/${staffId}/permissions/overrides`);
+  },
+
+  async setStaffPassword(staffId: string, data: {
+    password: string;
+    force_change?: boolean;
+    notify_user?: boolean;
+  }): Promise<{
+    message: string;
+    force_change: boolean;
+    notified: boolean;
+  }> {
+    return apiClient.put(`/admin/users/staff/${staffId}/password`, data);
+  },
+
 
   // ============================================================================
   // Vendors (Overview)

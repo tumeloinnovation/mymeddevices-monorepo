@@ -29,7 +29,7 @@ export const WithInput: Story = {
 
 export const Disabled: Story = {
   render: () => (
-    <Label htmlFor="disabled" disabled>
+    <Label htmlFor="disabled" className="opacity-50">
       Disabled Label
     </Label>
   ),

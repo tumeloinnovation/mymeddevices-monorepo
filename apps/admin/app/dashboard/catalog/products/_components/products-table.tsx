@@ -27,11 +27,14 @@ import {
   ArrowUp,
   ArrowDown,
   MoreVertical,
+  AlertTriangle,
+  Layers,
 } from "lucide-react";
 import { Product, ProductStatus } from "@mymeddevices/shared-core";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Checkbox } from "@/components/ui/checkbox";
+import { useCategories, useBrands } from "../_hooks/use-products-query";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -93,6 +96,7 @@ const columnHelper = createColumnHelper<Product & { vendor_name?: string }>();
 
 interface ProductsTableProps {
   products: (Product & { vendor_name?: string })[];
+  categories?: { id: string; name: string; slug?: string }[];
   total: number;
   page: number;
   pageSize: number;
@@ -109,6 +113,7 @@ interface ProductsTableProps {
 
 export function ProductsTable({
   products,
+  categories,
   total,
   page,
   pageSize,
@@ -125,6 +130,19 @@ export function ProductsTable({
   const router = useRouter();
   const [rowSelection, setRowSelection] = useState<Record<string, boolean>>({});
   const [sorting, setSorting] = useState<SortingState>([]);
+
+  const { data: fetchedCategories = [] } = useCategories();
+  const { data: brandMap = new Map<string, string>() } = useBrands();
+  const allCategories = categories && categories.length > 0 ? categories : fetchedCategories;
+
+  const categoryMap = useMemo(() => {
+    const map = new Map<string, string>();
+    allCategories.forEach((cat) => {
+      if (cat.id) map.set(cat.id, cat.name);
+      if (cat.slug) map.set(cat.slug, cat.name);
+    });
+    return map;
+  }, [allCategories]);
 
   const columns = useMemo(
     () => [
@@ -176,6 +194,10 @@ export function ProductsTable({
         ),
         cell: ({ getValue }) => {
           const product = getValue();
+          const displayedBrand = product.brand
+            ? brandMap.get(product.brand) || (product as any).brand_name || product.brand
+            : null;
+
           return (
             <div className="flex items-center gap-3">
               <div className="h-8 w-8 flex-shrink-0 overflow-hidden rounded bg-muted/20 border">
@@ -198,19 +220,34 @@ export function ProductsTable({
                 >
                   {product.name}
                 </Link>
-                <div className="flex items-center gap-1.5 mt-0.5">
+                <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                   <span className="text-[10px] font-mono text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded">
                     {product.sku || "NO-SKU"}
                   </span>
-                  {product.brand && (
+                  {displayedBrand && (
                     <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
                       <Building2 className="h-2.5 w-2.5" />
-                      {product.brand}
+                      {displayedBrand}
                     </span>
                   )}
                   {product.vendor_name && (
                     <span className="text-[10px] text-muted-foreground">
                       · {product.vendor_name}
+                    </span>
+                  )}
+                  {product.is_clinical_pick && (
+                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                      ✓ Clinical Pick
+                    </span>
+                  )}
+                  {product.is_featured && (
+                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                      ★ Featured
+                    </span>
+                  )}
+                  {product.is_on_sale && (
+                    <span className="inline-flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300">
+                      % Sale
                     </span>
                   )}
                 </div>
@@ -236,11 +273,32 @@ export function ProductsTable({
             )}
           </button>
         ),
-        cell: ({ getValue }) => (
-          <span className="text-xs text-muted-foreground">
-            {getValue() || "General"}
-          </span>
-        ),
+        cell: ({ getValue, row }) => {
+          const rawVal = getValue();
+          const catId = row.original.category_id;
+          const catObj = (row.original as any).category;
+          const isUuid = (val?: string) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+
+          let resolvedName: string | undefined;
+          if (typeof catObj === "object" && catObj?.name) {
+            resolvedName = catObj.name;
+          } else if (catId && categoryMap.has(catId)) {
+            resolvedName = categoryMap.get(catId);
+          } else if (rawVal && categoryMap.has(rawVal)) {
+            resolvedName = categoryMap.get(rawVal);
+          } else if (rawVal && !isUuid(rawVal)) {
+            resolvedName = rawVal;
+          } else if (catId) {
+            const match = allCategories.find((c) => c.id === catId || c.slug === catId);
+            if (match) resolvedName = match.name;
+          }
+
+          return (
+            <span className="text-xs font-medium text-foreground/80">
+              {resolvedName || "General Medical Equipment"}
+            </span>
+          );
+        },
       }),
       columnHelper.accessor("product_type", {
         id: "type",
@@ -289,28 +347,51 @@ export function ProductsTable({
           </button>
         ),
         cell: ({ row }) => {
-          const qty = row.original.stock_quantity;
+          const qty = row.original.stock_quantity ?? 0;
+          const status = ((row.original.stock_status as unknown as string) || (qty > 0 ? "instock" : "outofstock")) as string;
           const threshold = row.original.low_stock_threshold || 5;
-          const isLow = qty <= threshold;
+          const isOutOfStock = status === "outofstock" || qty === 0;
+          const isLow = !isOutOfStock && qty <= threshold;
+          const isBackorder = status === "backorder" || status === "onbackorder";
+          const isOnDemand = status === "ondemand";
+
           return (
             <div className="flex flex-col">
               <div className="flex items-center gap-1.5">
-                <div
-                  className={`h-1.5 w-1.5 rounded-full ${
-                    isLow ? "bg-warning" : "bg-success"
-                  }`}
-                />
+                {isOutOfStock ? (
+                  <XCircle className="h-3.5 w-3.5 text-rose-500 flex-shrink-0" />
+                ) : isBackorder ? (
+                  <Clock className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                ) : isOnDemand ? (
+                  <Layers className="h-3.5 w-3.5 text-blue-500 flex-shrink-0" />
+                ) : isLow ? (
+                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500 flex-shrink-0" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
+                )}
                 <span
                   className={`text-xs font-medium tabular-nums ${
-                    isLow ? "text-warning" : "text-foreground"
+                    isOutOfStock
+                      ? "text-rose-600 dark:text-rose-400 font-semibold"
+                      : isLow || isBackorder
+                      ? "text-amber-600 dark:text-amber-400 font-semibold"
+                      : isOnDemand
+                      ? "text-blue-600 dark:text-blue-400 font-semibold"
+                      : "text-foreground"
                   }`}
                 >
-                  {qty} units
+                  {isOutOfStock
+                    ? "Out of Stock"
+                    : isBackorder
+                    ? `Backorder (${qty})`
+                    : isOnDemand
+                    ? "On Demand"
+                    : `${qty} units`}
                 </span>
               </div>
-              {isLow && (
-                <span className="text-[9px] uppercase tracking-[0.15em] font-medium text-warning mt-0.5">
-                  Low stock
+              {isLow && !isOutOfStock && (
+                <span className="text-[9px] uppercase tracking-[0.15em] font-bold text-amber-600 dark:text-amber-400 mt-0.5 flex items-center gap-1">
+                  Low stock threshold ({threshold})
                 </span>
               )}
             </div>
@@ -386,7 +467,6 @@ export function ProductsTable({
                   product={product}
                   onQuickAction={onQuickAction}
                   onDelete={onDelete}
-                  onStatusChange={onStatusChange}
                 />
               )}
             </div>
@@ -394,7 +474,7 @@ export function ProductsTable({
         },
       }),
     ],
-    [actionLoadingId, onQuickAction, onDelete]
+    [actionLoadingId, onQuickAction, onDelete, categoryMap, allCategories, brandMap]
   );
 
   const table = useReactTable({
@@ -739,12 +819,10 @@ function RowActions({
   product,
   onQuickAction,
   onDelete,
-  onStatusChange,
 }: {
   product: Product;
   onQuickAction: (id: string, action: "verify" | "publish" | "archive" | "unarchive" | "reject") => void;
   onDelete: (product: Product) => void;
-  onStatusChange?: (product: Product) => void;
 }) {
   return (
     <DropdownMenu>
@@ -791,32 +869,12 @@ function RowActions({
           </>
         )}
 
-        {product.status === "published" && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onQuickAction(product.id, "archive")}>
-              <Archive className="h-3.5 w-3.5 mr-1.5" />
-              Archive
-            </DropdownMenuItem>
-          </>
-        )}
-
         {product.status === "archived" && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onQuickAction(product.id, "unarchive")}>
               <Package className="h-3.5 w-3.5 mr-1.5" />
               Restore to draft
-            </DropdownMenuItem>
-          </>
-        )}
-
-        {onStatusChange && (
-          <>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onStatusChange(product)}>
-              <FileEdit className="h-3.5 w-3.5 mr-1.5" />
-              Change status
             </DropdownMenuItem>
           </>
         )}

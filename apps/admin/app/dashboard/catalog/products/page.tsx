@@ -200,7 +200,7 @@ function ProductsPageInner() {
   );
 
   const handleDelete = useCallback(() => {
-    if (!deleteTarget) return;
+    if (!deleteTarget || mutations.delete.isPending) return;
     setPendingProductId(deleteTarget.id);
     mutations.delete.mutate(deleteTarget.id, {
       onSuccess: () => {
@@ -386,6 +386,7 @@ function ProductsPageInner() {
         {/* Table */}
         <ProductsTable
           products={productsWithVendors}
+          categories={categories}
           total={total}
           page={page}
           pageSize={pageSize}

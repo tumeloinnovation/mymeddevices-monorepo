@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings as catalog_settings
 from app.core.database import get_db
-from app.core.dependencies import get_current_user, require_role
+from app.core.dependencies import get_current_user, get_current_user_optional, require_role
 from app.core.rate_limiting import RateLimiterDependency
 from app.domains.auth.models.user import User
 from app.domains.catalog.dependencies import CatalogServiceDep
@@ -622,9 +622,6 @@ async def bulk_import_products(
                 "weight_kg": _parse_float(row.get("weight_kg")),
                 "brand": row.get("brand") or None,
                 "model_number": row.get("model_number") or None,
-                "kmpdb_registration_number": row.get("kmpdb_registration_number") or None,
-                "ppb_classification": row.get("ppb_classification") or None,
-                "ce_marking_or_fda_clearance": row.get("ce_marking_or_fda_clearance") or None,
                 "warranty_info": row.get("warranty_info") or None,
                 "permalink": row.get("permalink") or None,
                 "meta_title": row.get("meta_title") or None,
@@ -954,7 +951,7 @@ async def get_product_completeness(
 
 @router.post("/ai/generate-descriptions", response_model=AIAssistResponse, tags=["Vendor Catalog"])
 async def generate_product_descriptions(
-    data: AIDescriptionRequest, current_user: Annotated[User, Depends(get_current_user)]
+    data: AIDescriptionRequest, current_user: Annotated[User | None, Depends(get_current_user_optional)]
 ):
     """Generate AI-powered product descriptions from name and brand (before product creation)."""
     ai_service = AIAssistService()
@@ -1085,6 +1082,19 @@ async def upload_product_image(
         if file_ext not in [".jpg", ".jpeg", ".png", ".webp", ".gif"]:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported image format")
 
+        # Validate image magic bytes
+        header = await file.read(512)
+        await file.seek(0)
+        is_valid_image = (
+            header.startswith(b"\xff\xd8\xff")
+            or header.startswith(b"\x89PNG\r\n\x1a\n")
+            or header.startswith(b"GIF87a")
+            or header.startswith(b"GIF89a")
+            or (header.startswith(b"RIFF") and b"WEBP" in header[:16])
+        )
+        if not is_valid_image:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image content: signature mismatch")
+
         filename = f"{uuid.uuid4()}{file_ext}"
         filepath = os.path.join(catalog_settings.UPLOAD_DIR, filename)
 
@@ -1168,15 +1178,20 @@ async def list_product_variants(id: uuid.UUID, db: AsyncSession = Depends(get_db
 async def create_product_variant(
     id: uuid.UUID,
     data: ProductVariantCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db),
 ):
     """Create a single product variant."""
     service = CatalogService(db)
     try:
-        variant = await service.create_variant(product_id=id, **data.model_dump(exclude_unset=True))
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
+        variant = await service.create_variant(
+            vendor_id=vendor_id, product_id=id, **data.model_dump(exclude_unset=True)
+        )
         return variant
     except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -1189,13 +1204,15 @@ async def create_product_variant(
 async def create_variant_matrix(
     id: uuid.UUID,
     data: VariantMatrixRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db),
 ):
     """Generate variant matrix combinations from attribute groups."""
     service = CatalogService(db)
     try:
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
         variants = await service.create_variant_matrix(
+            vendor_id=vendor_id,
             product_id=id,
             attribute_groups=data.attribute_groups,
             base_sku_prefix=data.base_sku_prefix,
@@ -1203,6 +1220,8 @@ async def create_variant_matrix(
         )
         return variants
     except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -1211,15 +1230,20 @@ async def update_product_variant(
     id: uuid.UUID,
     variant_id: uuid.UUID,
     data: ProductVariantUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db),
 ):
     """Update a product variant."""
     service = CatalogService(db)
     try:
-        variant = await service.update_variant(variant_id=variant_id, **data.model_dump(exclude_unset=True))
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
+        variant = await service.update_variant(
+            vendor_id=vendor_id, product_id=id, variant_id=variant_id, **data.model_dump(exclude_unset=True)
+        )
         return variant
     except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -1229,14 +1253,20 @@ async def update_product_variant(
 async def delete_product_variant(
     id: uuid.UUID,
     variant_id: uuid.UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a product variant."""
     service = CatalogService(db)
-    deleted = await service.delete_variant(variant_id=variant_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variant not found")
+    try:
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
+        deleted = await service.delete_variant(vendor_id=vendor_id, product_id=id, variant_id=variant_id)
+        if not deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Variant not found")
+    except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 # ============================================================================
@@ -1260,13 +1290,15 @@ async def list_bundle_items(id: uuid.UUID, db: AsyncSession = Depends(get_db)):
 async def add_bundle_item(
     id: uuid.UUID,
     data: BundleItemCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db),
 ):
     """Add a component item to a bundle product."""
     service = CatalogService(db)
     try:
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
         item = await service.add_bundle_item(
+            vendor_id=vendor_id,
             bundle_product_id=id,
             component_product_id=data.component_product_id,
             quantity=data.quantity,
@@ -1275,6 +1307,8 @@ async def add_bundle_item(
         )
         return item
     except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -1283,15 +1317,20 @@ async def update_bundle_item(
     id: uuid.UUID,
     item_id: uuid.UUID,
     data: BundleItemUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db),
 ):
     """Update a bundle component item."""
     service = CatalogService(db)
     try:
-        item = await service.update_bundle_item(item_id=item_id, **data.model_dump(exclude_unset=True))
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
+        item = await service.update_bundle_item(
+            vendor_id=vendor_id, bundle_product_id=id, item_id=item_id, **data.model_dump(exclude_unset=True)
+        )
         return item
     except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -1299,14 +1338,20 @@ async def update_bundle_item(
 async def remove_bundle_item(
     id: uuid.UUID,
     item_id: uuid.UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db),
 ):
     """Remove a component item from a bundle product."""
     service = CatalogService(db)
-    deleted = await service.remove_bundle_item(item_id=item_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bundle item not found")
+    try:
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
+        deleted = await service.remove_bundle_item(vendor_id=vendor_id, bundle_product_id=id, item_id=item_id)
+        if not deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Bundle item not found")
+    except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
 # ============================================================================
@@ -1334,13 +1379,15 @@ async def list_related_products(
 async def add_related_product(
     id: uuid.UUID,
     data: RelatedProductCreate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db),
 ):
     """Link a related product (cross_sell, upsell, accessory, spare_part)."""
     service = CatalogService(db)
     try:
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
         rel = await service.add_related_product(
+            vendor_id=vendor_id,
             product_id=id,
             related_product_id=data.related_product_id,
             relation_type=data.relation_type,
@@ -1349,6 +1396,8 @@ async def add_related_product(
         )
         return rel
     except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
 
@@ -1358,11 +1407,17 @@ async def add_related_product(
 async def remove_related_product(
     id: uuid.UUID,
     relation_id: uuid.UUID,
-    current_user: Annotated[User, Depends(get_current_user)],
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
     db: AsyncSession = Depends(get_db),
 ):
     """Remove a related product link."""
     service = CatalogService(db)
-    deleted = await service.remove_related_product(relation_id=relation_id)
-    if not deleted:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relation not found")
+    try:
+        vendor_id = str(vendor_profile.id) if vendor_profile else None
+        deleted = await service.remove_related_product(vendor_id=vendor_id, product_id=id, relation_id=relation_id)
+        if not deleted:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Relation not found")
+    except ValueError as e:
+        if "not found" in str(e).lower():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))

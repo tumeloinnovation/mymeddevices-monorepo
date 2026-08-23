@@ -1,4 +1,7 @@
+import logging
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -62,6 +65,7 @@ async def get_my_cart(
 ):
     """Retrieve the current active cart for a user or guest."""
     user_id = current_user.id if current_user else None
+    logger.info(f"[BACKEND CART] get_my_cart requested: user_id={user_id}, cart_token={cart_token}")
     cart = await service.get_or_create_cart(user_id=user_id, cart_token=cart_token)
 
     # Load items
@@ -70,6 +74,7 @@ async def get_my_cart(
         # Fallback if get_by_id failed (should not happen for a newly created cart)
         return success_response(cart)
 
+    logger.info(f"[BACKEND CART] returning cart {cart.id} with {len(cart_with_items.items)} items")
     return success_response(cart_with_items)
 
 
@@ -82,6 +87,7 @@ async def add_cart_item(
 ):
     """Add an item to the current cart."""
     user_id = current_user.id if current_user else None
+    logger.info(f"[BACKEND CART] add_cart_item called: user_id={user_id}, cart_token={cart_token}, item={item_in.model_dump()}")
 
     cart = await service.get_or_create_cart(user_id=user_id, cart_token=cart_token)
 
@@ -91,6 +97,7 @@ async def add_cart_item(
     if not cart_with_items:
         # Fallback if get_by_id failed - return the cart object we have
         return success_response(cart)
+    logger.info(f"[BACKEND CART] add_cart_item success: cart={cart.id}, items_count={len(cart_with_items.items)}")
     return success_response(cart_with_items)
 
 

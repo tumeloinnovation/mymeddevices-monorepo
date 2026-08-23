@@ -28,6 +28,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
     Home,
     Package,
@@ -76,6 +77,7 @@ import {
 } from '@/components/ui/dialog';
 import { useLogout } from '@/hooks/useLogout';
 import { LogoutModal } from '@/components/auth/LogoutModal';
+import { useLoyaltyPoints } from '@/lib/hooks/useLoyalty';
 
 export function DashboardSidebar() {
     const pathname = usePathname();
@@ -84,6 +86,7 @@ export function DashboardSidebar() {
     const { isMobile, setOpenMobile } = useSidebar();
     const wishlistItems = useWishlistStore((state) => state.items);
     const { handleLogout, isLoggingOut } = useLogout({ redirectPath: '/' });
+    const { points: loyaltyPoints, isLoading: loyaltyLoading } = useLoyaltyPoints({ enabled: !!user });
     const [isLoginOpen, setIsLoginOpen] = useState(false);
 
     // Navigation groups with categories
@@ -299,9 +302,13 @@ export function DashboardSidebar() {
                                                     <Gift className="w-3.5 h-3.5 text-amber-500" />
                                                     Rewards
                                                 </span>
-                                                <span className="font-bold text-[11px] px-1.5 py-0.2 rounded bg-amber-500/20">
-                                                    {user?.loyaltyPoints ?? (user as any)?.loyalty_points ?? 0} pts
-                                                </span>
+                                                {loyaltyLoading ? (
+                                                    <Skeleton className="h-4 w-12 rounded bg-amber-500/20" />
+                                                ) : (
+                                                    <span className="font-bold text-[11px] px-1.5 py-0.2 rounded bg-amber-500/20">
+                                                        {loyaltyPoints.toLocaleString()} pts
+                                                    </span>
+                                                )}
                                             </Link>
                                         </div>
                                     </DropdownMenuLabel>

@@ -43,6 +43,8 @@ export { Switch } from "./components/ui/switch"
 export { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "./components/ui/table"
 export { Textarea } from "./components/ui/textarea"
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./components/ui/tooltip"
+export { RichTextEditor } from "./components/ui/rich-text-editor"
+export type { RichTextEditorProps } from "./components/ui/rich-text-editor"
 
 // Hooks
 export { useIsMobile as useMobile } from "./hooks/use-mobile"

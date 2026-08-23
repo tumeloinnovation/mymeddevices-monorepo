@@ -3,8 +3,24 @@
  * Centralized field mapping between local address format and WooCommerce format
  */
 
-import type { Address } from '@/lib/store/useAddressStore';
-import type { ShippingAddress, BillingAddress } from '@/lib/data/types';
+import type { Address } from '../store/useAddressStore';
+
+export interface ShippingAddress {
+  first_name?: string;
+  last_name?: string;
+  company?: string;
+  address_1?: string;
+  address_2?: string;
+  city?: string;
+  state?: string;
+  postcode?: string;
+  country?: string;
+}
+
+export interface BillingAddress extends ShippingAddress {
+  email?: string;
+  phone?: string;
+}
 
 /**
  * Convert local Address format to WooCommerce shipping address format
@@ -177,3 +193,11 @@ export const ADDRESSES_META_KEY = '_mymed_saved_addresses';
  * Meta data key for storing custom tags in WooCommerce
  */
 export const CUSTOM_TAGS_META_KEY = '_mymed_custom_address_tags';
+
+/**
+ * Capitalize the first letter of a tag for display
+ */
+export function capitalizeTag(tag: string | undefined): string {
+  if (!tag) return '';
+  return tag.charAt(0).toUpperCase() + tag.slice(1);
+}

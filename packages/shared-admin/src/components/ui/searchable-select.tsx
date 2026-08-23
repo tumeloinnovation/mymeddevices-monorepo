@@ -1,7 +1,8 @@
-"use client"
+"use client";
 
 import * as React from "react"
 import { Check, ChevronDown, Loader2, Search, X, Plus } from "lucide-react"
+import { Popover } from "radix-ui"
 import { cn } from "../../lib/utils"
 import { Badge } from "./badge"
 import { Button } from "./button"
@@ -53,7 +54,7 @@ export function SearchableSelect({
   const [internalCreateError, setInternalCreateError] = React.useState<string | null>(null)
 
   const selectedOption = React.useMemo(
-    () => options.find((option) => option.value === value),
+    () => options.find((option) => option.value === value || option.label === value),
     [options, value]
   )
 
@@ -110,50 +111,55 @@ export function SearchableSelect({
   }
 
   return (
-    <div className="relative w-full">
-      <Button
-        type="button"
-        variant="outline"
-        disabled={disabled || loading || effectiveCreateLoading}
-        onClick={() => setOpen(!open)}
-        className={cn(
-          "w-full justify-between text-left font-normal h-9 px-3 py-2 text-xs",
-          !value && "text-muted-foreground",
-          className
-        )}
-      >
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          {loading || effectiveCreateLoading ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-          ) : renderValue ? (
-            <>{renderValue(selectedOption)}</>
-          ) : selectedOption ? (
-            <>
-              <span className="truncate">{selectedOption.label}</span>
-              {selectedOption.badge && (
-                <Badge variant="secondary" className="ml-auto shrink-0 text-[9px]">
-                  {selectedOption.badge}
-                </Badge>
-              )}
-            </>
-          ) : (
-            <span className="truncate">{placeholder}</span>
+    <Popover.Root open={open && !disabled} onOpenChange={setOpen}>
+      <Popover.Trigger asChild>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={disabled || loading || effectiveCreateLoading}
+          className={cn(
+            "w-full justify-between text-left font-normal h-9 px-3 py-2 text-xs",
+            !value && "text-muted-foreground",
+            className
           )}
-        </div>
-        <div className="flex items-center gap-1 shrink-0">
-          {value && !disabled && !loading && !effectiveCreateLoading && (
-            <X
-              className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-pointer"
-              onClick={handleClear}
-            />
-          )}
-          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground opacity-50" />
-        </div>
-      </Button>
+        >
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {loading || effectiveCreateLoading ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+            ) : renderValue ? (
+              <>{renderValue(selectedOption)}</>
+            ) : selectedOption ? (
+              <>
+                <span className="truncate">{selectedOption.label}</span>
+                {selectedOption.badge && (
+                  <Badge variant="secondary" className="ml-auto shrink-0 text-[9px]">
+                    {selectedOption.badge}
+                  </Badge>
+                )}
+              </>
+            ) : (
+              <span className="truncate">{placeholder}</span>
+            )}
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            {value && !disabled && !loading && !effectiveCreateLoading && (
+              <X
+                className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                onClick={handleClear}
+              />
+            )}
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground opacity-50" />
+          </div>
+        </Button>
+      </Popover.Trigger>
 
-      {open && (
-        <div className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border bg-white dark:bg-zinc-950 p-1 shadow-md max-h-60 overflow-y-auto">
-          <div className="flex items-center gap-2 border-b px-2 py-1 mb-1">
+      <Popover.Portal>
+        <Popover.Content
+          align="start"
+          sideOffset={4}
+          className="z-50 w-[var(--radix-popover-trigger-width)] min-w-[200px] rounded-md border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 p-1 shadow-lg max-h-60 overflow-y-auto"
+        >
+          <div className="flex items-center gap-2 border-b border-zinc-100 dark:border-zinc-800 px-2 py-1 mb-1">
             <Search className="h-3.5 w-3.5 opacity-50 shrink-0" />
             <input
               type="text"
@@ -164,6 +170,7 @@ export function SearchableSelect({
               }}
               placeholder={searchPlaceholder}
               className="w-full bg-transparent text-xs outline-none py-1"
+              autoFocus
             />
           </div>
 
@@ -201,8 +208,8 @@ export function SearchableSelect({
               </button>
             ))
           )}
-        </div>
-      )}
-    </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
   )
 }

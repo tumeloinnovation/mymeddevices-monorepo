@@ -21,7 +21,7 @@ const CategoriesPage: React.FC = () => {
         {categories.map((category) => (
           <Link
             key={category.id}
-            href={`/categories/${category.slug}`}
+            href={`/products?category=${category.slug}`}
             aria-label={`Browse ${category.name} products`}
             className="group flex flex-col items-center text-center bg-card border border-border rounded-2xl p-6 transition-all duration-200 ease-in-out hover:shadow-lg hover:border-primary focus:outline-none focus:ring-2 focus:ring-ring"
           >
@@ -40,7 +40,7 @@ const CategoriesPage: React.FC = () => {
             </h3>
 
             <span className="text-sm text-muted-foreground bg-muted/50 px-3 py-1 rounded-full">
-              {category.count} items
+              {category.count ?? 0} {(category.count ?? 0) === 1 ? 'item' : 'items'}
             </span>
           </Link>
         ))}

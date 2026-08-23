@@ -12,7 +12,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Numeric, String, Text, UniqueConstraint
 from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -43,6 +43,9 @@ class MobileMoneyPayment(Base, IDMixin, AuditMixin):
     """
 
     __tablename__ = "mobile_money_payments"
+    __table_args__ = (
+        UniqueConstraint("transaction_id", name="uq_mobile_money_payments_transaction_id"),
+    )
 
     # Core fields
     order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)

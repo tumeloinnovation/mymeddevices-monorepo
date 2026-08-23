@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import String, cast, func, or_, select
+from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -508,11 +508,29 @@ class CatalogService:
         )
 
         # Filters
-        if category_id:
-            query = query.where(Product.category_id == category_id)
         if category_slug:
-            subq = select(Category.id).where(Category.slug == category_slug)
-            query = query.where(Product.category_id.in_(subq))
+            cat_res = await self.db.execute(
+                select(Category.id).where(Category.slug == category_slug, Category.is_deleted == False)
+            )
+            target_cat_id = cat_res.scalar_one_or_none()
+            if target_cat_id:
+                child_cats_res = await self.db.execute(
+                    select(Category.id).where(Category.parent_id == target_cat_id, Category.is_deleted == False)
+                )
+                all_cat_ids = [target_cat_id] + list(child_cats_res.scalars().all())
+                query = query.where(Product.category_id.in_(all_cat_ids))
+            else:
+                query = query.where(Product.category_id == None)
+        elif category_id:
+            try:
+                target_uuid = uuid.UUID(str(category_id))
+                child_cats_res = await self.db.execute(
+                    select(Category.id).where(Category.parent_id == target_uuid, Category.is_deleted == False)
+                )
+                all_cat_ids = [target_uuid] + list(child_cats_res.scalars().all())
+                query = query.where(Product.category_id.in_(all_cat_ids))
+            except Exception:
+                query = query.where(Product.category_id == category_id)
         if search:
             search_term = f"%{search}%"
             query = query.where(
@@ -726,7 +744,7 @@ class CatalogService:
     # ========================================================================
 
     async def get_categories(self, active_only: bool = True) -> list[Any]:
-        """Get all root categories with children recursively built in memory."""
+        """Get all root categories with children recursively built in memory with accurate product counts."""
         query = select(Category).where(Category.is_deleted == False)
         if active_only:
             query = query.where(Category.is_active == True)
@@ -735,9 +753,18 @@ class CatalogService:
         result = await self.db.execute(query)
         all_categories = result.scalars().all()
 
+        # Compute direct product counts per category
+        count_query = select(Product.category_id, func.count(Product.id)).where(Product.is_deleted == False)
+        if active_only:
+            count_query = count_query.where(Product.status == "published")
+        count_query = count_query.group_by(Product.category_id)
+
+        counts_res = await self.db.execute(count_query)
+        direct_counts = {row[0]: row[1] for row in counts_res.all() if row[0] is not None}
+
         from app.domains.catalog.schemas.category_schemas import CategoryTreeResponse
 
-        nodes = {}
+        nodes: dict[uuid.UUID, CategoryTreeResponse] = {}
         for cat in all_categories:
             nodes[cat.id] = CategoryTreeResponse(
                 id=cat.id,
@@ -748,6 +775,7 @@ class CatalogService:
                 parent_id=cat.parent_id,
                 sort_order=cat.sort_order,
                 is_active=cat.is_active,
+                product_count=direct_counts.get(cat.id, 0),
                 children=[],
             )
 
@@ -763,12 +791,36 @@ class CatalogService:
                 else:
                     roots.append(node)
 
+        # Rollup product counts from descendants to parent categories
+        def rollup_counts(node: CategoryTreeResponse) -> int:
+            children_total = sum(rollup_counts(child) for child in node.children)
+            node.product_count = node.product_count + children_total
+            return node.product_count
+
+        for root in roots:
+            rollup_counts(root)
+
         return roots
 
     async def get_category_by_slug(self, slug: str) -> Category | None:
         """Get a category by slug."""
         result = await self.db.execute(select(Category).where(Category.slug == slug, Category.is_deleted == False))
-        return result.scalar_one_or_none()
+        category = result.scalar_one_or_none()
+        if category:
+            # Query product count for this category and any child categories
+            child_ids_res = await self.db.execute(
+                select(Category.id).where(Category.parent_id == category.id, Category.is_deleted == False)
+            )
+            cat_ids = [category.id] + [cid for cid in child_ids_res.scalars().all()]
+            product_count_res = await self.db.execute(
+                select(func.count(Product.id)).where(
+                    Product.category_id.in_(cat_ids),
+                    Product.is_deleted == False,
+                    Product.status == "published",
+                )
+            )
+            category.product_count = product_count_res.scalar() or 0
+        return category
 
     async def create_category(self, **kwargs) -> Category:
         """Create a new category (admin only)."""
@@ -876,8 +928,24 @@ class CatalogService:
     async def get_brands(
         self, active_only: bool = True, approval_status: str | None = None, page: int = 1, page_size: int = 20
     ) -> tuple[list[Brand], int]:
-        """Get brands with pagination."""
-        query = select(Brand).where(Brand.is_deleted == False)
+        """Get brands with pagination and dynamic product counts."""
+        product_count_subq = (
+            select(func.count(Product.id))
+            .where(
+                Product.is_deleted == False,
+                or_(
+                    Product.brand_id == Brand.id,
+                    and_(
+                        Product.brand_id.is_(None),
+                        func.lower(Product.brand) == func.lower(Brand.name),
+                    ),
+                ),
+            )
+            .correlate(Brand)
+            .scalar_subquery()
+        )
+
+        query = select(Brand, product_count_subq.label("product_count")).where(Brand.is_deleted == False)
         if active_only:
             query = query.where(Brand.is_active == True)
         if approval_status:
@@ -896,20 +964,54 @@ class CatalogService:
         query = query.order_by(Brand.sort_order, Brand.name)
         query = query.offset((page - 1) * page_size).limit(page_size)
         result = await self.db.execute(query)
-        brands = list(result.scalars().all())
+        rows = result.all()
+        brands = []
+        for brand, count in rows:
+            brand.product_count = count or 0
+            brands.append(brand)
 
         return brands, total
 
     async def get_brand_by_id(self, brand_id: str | uuid.UUID) -> Brand | None:
-        """Get a brand by ID."""
+        """Get a brand by ID with product count."""
         b_id = uuid.UUID(str(brand_id)) if not isinstance(brand_id, uuid.UUID) else brand_id
         result = await self.db.execute(select(Brand).where(Brand.id == b_id, Brand.is_deleted == False))
-        return result.scalar_one_or_none()
+        brand = result.scalar_one_or_none()
+        if brand:
+            product_count_res = await self.db.execute(
+                select(func.count(Product.id)).where(
+                    Product.is_deleted == False,
+                    or_(
+                        Product.brand_id == brand.id,
+                        and_(
+                            Product.brand_id.is_(None),
+                            func.lower(Product.brand) == func.lower(brand.name),
+                        ),
+                    ),
+                )
+            )
+            brand.product_count = product_count_res.scalar() or 0
+        return brand
 
     async def get_brand_by_slug(self, slug: str) -> Brand | None:
-        """Get a brand by slug."""
+        """Get a brand by slug with product count."""
         result = await self.db.execute(select(Brand).where(Brand.slug == slug, Brand.is_deleted == False))
-        return result.scalar_one_or_none()
+        brand = result.scalar_one_or_none()
+        if brand:
+            product_count_res = await self.db.execute(
+                select(func.count(Product.id)).where(
+                    Product.is_deleted == False,
+                    or_(
+                        Product.brand_id == brand.id,
+                        and_(
+                            Product.brand_id.is_(None),
+                            func.lower(Product.brand) == func.lower(brand.name),
+                        ),
+                    ),
+                )
+            )
+            brand.product_count = product_count_res.scalar() or 0
+        return brand
 
     async def create_brand(self, **kwargs) -> Brand:
         """Create a new brand (admin only)."""
@@ -930,6 +1032,7 @@ class CatalogService:
         self.db.add(brand)
         await self.db.commit()
         await self.db.refresh(brand)
+        brand.product_count = 0
 
         logger.info(f"Brand created: {brand.id} - {brand.name}")
         return brand
@@ -948,6 +1051,20 @@ class CatalogService:
 
         await self.db.commit()
         await self.db.refresh(brand)
+
+        product_count_res = await self.db.execute(
+            select(func.count(Product.id)).where(
+                Product.is_deleted == False,
+                or_(
+                    Product.brand_id == brand.id,
+                    and_(
+                        Product.brand_id.is_(None),
+                        func.lower(Product.brand) == func.lower(brand.name),
+                    ),
+                ),
+            )
+        )
+        brand.product_count = product_count_res.scalar() or 0
 
         logger.info(f"Brand updated: {brand_id}")
         return brand
@@ -1002,6 +1119,7 @@ class CatalogService:
         self.db.add(brand)
         await self.db.commit()
         await self.db.refresh(brand)
+        brand.product_count = 0
 
         logger.info(f"Quick brand created and auto-approved: {brand.id} - {brand.name}")
         return brand
@@ -1025,6 +1143,20 @@ class CatalogService:
 
         await self.db.commit()
         await self.db.refresh(brand)
+
+        product_count_res = await self.db.execute(
+            select(func.count(Product.id)).where(
+                Product.is_deleted == False,
+                or_(
+                    Product.brand_id == brand.id,
+                    and_(
+                        Product.brand_id.is_(None),
+                        func.lower(Product.brand) == func.lower(brand.name),
+                    ),
+                ),
+            )
+        )
+        brand.product_count = product_count_res.scalar() or 0
 
         logger.info(f"Brand approved: {brand_id} - {brand.name}")
         return brand
@@ -1272,44 +1404,41 @@ class CatalogService:
         )
         return list(result.scalars().all())
 
-    async def create_variant(self, product_id: uuid.UUID, **kwargs) -> ProductVariant:
-        """Create a new product variant."""
-        product = await self.db.get(Product, product_id)
-        if not product:
-            raise ValueError("Product not found")
+    async def create_variant(
+        self, vendor_id: str | uuid.UUID | None, product_id: uuid.UUID, **kwargs
+    ) -> ProductVariant:
+        """Create a new product variant with vendor ownership check."""
+        product = await self._get_vendor_product(vendor_id, product_id)
 
         if product.product_type != "variable":
             product.product_type = "variable"
 
         # If marked default, unset other defaults
         if kwargs.get("is_default"):
-            await self.db.execute(select(ProductVariant).where(ProductVariant.product_id == product_id))
-            # update all existing variants is_default = False
             from sqlalchemy import update
 
             await self.db.execute(
-                update(ProductVariant).where(ProductVariant.product_id == product_id).values(is_default=False)
+                update(ProductVariant).where(ProductVariant.product_id == product.id).values(is_default=False)
             )
 
-        variant = ProductVariant(product_id=product_id, **kwargs)
+        variant = ProductVariant(product_id=product.id, **kwargs)
         self.db.add(variant)
         await self.db.commit()
         await self.db.refresh(variant)
 
-        await self._sync_variable_product_stock(product_id)
+        await self._sync_variable_product_stock(product.id)
         return variant
 
     async def create_variant_matrix(
         self,
+        vendor_id: str | uuid.UUID | None,
         product_id: uuid.UUID,
         attribute_groups: dict[str, list[str]],
         base_sku_prefix: str | None = None,
         default_stock: int = 0,
     ) -> list[ProductVariant]:
-        """Generate matrix combinations from attribute groups."""
-        product = await self.db.get(Product, product_id)
-        if not product:
-            raise ValueError("Product not found")
+        """Generate matrix combinations from attribute groups with vendor ownership check."""
+        product = await self._get_vendor_product(vendor_id, product_id)
 
         import itertools
 
@@ -1328,7 +1457,7 @@ class CatalogService:
             sku = f"{sku_prefix}-{sku_suffix}"
 
             variant = ProductVariant(
-                product_id=product_id,
+                product_id=product.id,
                 name=variant_name,
                 sku=sku,
                 stock_quantity=default_stock,
@@ -1342,16 +1471,19 @@ class CatalogService:
 
         product.product_type = "variable"
         await self.db.commit()
-        await self._sync_variable_product_stock(product_id)
+        await self._sync_variable_product_stock(product.id)
 
         for v in created_variants:
             await self.db.refresh(v)
         return created_variants
 
-    async def update_variant(self, variant_id: uuid.UUID, **kwargs) -> ProductVariant:
-        """Update a product variant."""
+    async def update_variant(
+        self, vendor_id: str | uuid.UUID | None, product_id: uuid.UUID, variant_id: uuid.UUID, **kwargs
+    ) -> ProductVariant:
+        """Update a product variant with vendor ownership check."""
+        product = await self._get_vendor_product(vendor_id, product_id)
         variant = await self.db.get(ProductVariant, variant_id)
-        if not variant:
+        if not variant or variant.product_id != product.id:
             raise ValueError("Variant not found")
 
         if kwargs.get("is_default"):
@@ -1370,15 +1502,18 @@ class CatalogService:
         await self._sync_variable_product_stock(variant.product_id)
         return variant
 
-    async def delete_variant(self, variant_id: uuid.UUID) -> bool:
-        """Delete a variant."""
+    async def delete_variant(
+        self, vendor_id: str | uuid.UUID | None, product_id: uuid.UUID, variant_id: uuid.UUID
+    ) -> bool:
+        """Delete a variant with vendor ownership check."""
+        product = await self._get_vendor_product(vendor_id, product_id)
         variant = await self.db.get(ProductVariant, variant_id)
-        if not variant:
+        if not variant or variant.product_id != product.id:
             return False
-        product_id = variant.product_id
+        prod_id = variant.product_id
         await self.db.delete(variant)
         await self.db.commit()
-        await self._sync_variable_product_stock(product_id)
+        await self._sync_variable_product_stock(prod_id)
         return True
 
     # ========================================================================
@@ -1397,28 +1532,27 @@ class CatalogService:
 
     async def add_bundle_item(
         self,
+        vendor_id: str | uuid.UUID | None,
         bundle_product_id: uuid.UUID,
         component_product_id: uuid.UUID,
         quantity: int = 1,
         sort_order: int = 0,
         is_optional: bool = False,
     ) -> BundleItem:
-        """Add a component item to a bundle product."""
-        bundle_product = await self.db.get(Product, bundle_product_id)
-        if not bundle_product:
-            raise ValueError("Bundle product not found")
+        """Add a component item to a bundle product with vendor ownership check."""
+        bundle_product = await self._get_vendor_product(vendor_id, bundle_product_id)
 
         component_product = await self.db.get(Product, component_product_id)
         if not component_product:
             raise ValueError("Component product not found")
 
-        if bundle_product_id == component_product_id:
+        if bundle_product.id == component_product_id:
             raise ValueError("A product cannot be a component of itself")
 
         bundle_product.product_type = "bundle"
 
         item = BundleItem(
-            bundle_product_id=bundle_product_id,
+            bundle_product_id=bundle_product.id,
             component_product_id=component_product_id,
             quantity=quantity,
             sort_order=sort_order,
@@ -1433,10 +1567,13 @@ class CatalogService:
         )
         return res.scalar_one()
 
-    async def update_bundle_item(self, item_id: uuid.UUID, **kwargs) -> BundleItem:
-        """Update a bundle component item."""
+    async def update_bundle_item(
+        self, vendor_id: str | uuid.UUID | None, bundle_product_id: uuid.UUID, item_id: uuid.UUID, **kwargs
+    ) -> BundleItem:
+        """Update a bundle component item with vendor ownership check."""
+        bundle_product = await self._get_vendor_product(vendor_id, bundle_product_id)
         item = await self.db.get(BundleItem, item_id)
-        if not item:
+        if not item or item.bundle_product_id != bundle_product.id:
             raise ValueError("Bundle item not found")
 
         for key, value in kwargs.items():
@@ -1449,10 +1586,13 @@ class CatalogService:
         )
         return res.scalar_one()
 
-    async def remove_bundle_item(self, item_id: uuid.UUID) -> bool:
-        """Remove a component item from a bundle."""
+    async def remove_bundle_item(
+        self, vendor_id: str | uuid.UUID | None, bundle_product_id: uuid.UUID, item_id: uuid.UUID
+    ) -> bool:
+        """Remove a component item from a bundle with vendor ownership check."""
+        bundle_product = await self._get_vendor_product(vendor_id, bundle_product_id)
         item = await self.db.get(BundleItem, item_id)
-        if not item:
+        if not item or item.bundle_product_id != bundle_product.id:
             return False
         await self.db.delete(item)
         await self.db.commit()
@@ -1480,23 +1620,24 @@ class CatalogService:
 
     async def add_related_product(
         self,
+        vendor_id: str | uuid.UUID | None,
         product_id: uuid.UUID,
         related_product_id: uuid.UUID,
         relation_type: str,
         sort_order: int = 0,
         is_bidirectional: bool = True,
     ) -> RelatedProduct:
-        """Link two products (cross_sell, upsell, accessory, spare_part)."""
+        """Link two products with vendor ownership check."""
         if product_id == related_product_id:
             raise ValueError("A product cannot be related to itself")
 
-        p1 = await self.db.get(Product, product_id)
+        p1 = await self._get_vendor_product(vendor_id, product_id)
         p2 = await self.db.get(Product, related_product_id)
         if not p1 or not p2:
             raise ValueError("Target products not found")
 
         rel = RelatedProduct(
-            product_id=product_id,
+            product_id=p1.id,
             related_product_id=related_product_id,
             relation_type=relation_type,
             sort_order=sort_order,
@@ -1508,7 +1649,7 @@ class CatalogService:
         if is_bidirectional and relation_type in ("cross_sell", "accessory"):
             reverse_rel = RelatedProduct(
                 product_id=related_product_id,
-                related_product_id=product_id,
+                related_product_id=p1.id,
                 relation_type=relation_type,
                 sort_order=sort_order,
                 is_bidirectional=True,
@@ -1524,10 +1665,13 @@ class CatalogService:
         )
         return res.scalar_one()
 
-    async def remove_related_product(self, relation_id: uuid.UUID) -> bool:
-        """Remove a related product link."""
+    async def remove_related_product(
+        self, vendor_id: str | uuid.UUID | None, product_id: uuid.UUID, relation_id: uuid.UUID
+    ) -> bool:
+        """Remove a related product link with vendor ownership check."""
+        product = await self._get_vendor_product(vendor_id, product_id)
         rel = await self.db.get(RelatedProduct, relation_id)
-        if not rel:
+        if not rel or rel.product_id != product.id:
             return False
 
         # If bidirectional, remove reverse relationship if it exists

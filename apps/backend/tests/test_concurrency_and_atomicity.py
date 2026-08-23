@@ -205,12 +205,22 @@ async def test_coupon_usage_limit_and_per_user_limit_guards(db_session: AsyncSes
         is_active=True,
     )
     db_session.add(user2)
+    await db_session.flush()
+
+    order2 = Order(
+        id=uuid.uuid4(),
+        user_id=user2.id,
+        status=OrderStatus.PENDING,
+        currency="KES",
+        total_amount=Decimal("4950.00"),
+    )
+    db_session.add(order2)
     await db_session.commit()
 
     usage2 = await service.record_coupon_usage(
         coupon_id=coupon.id,
         user_id=user2.id,
-        order_id=order.id,
+        order_id=order2.id,
         discount_amount=Decimal("50.00"),
     )
     assert usage2.coupon_id == coupon.id
@@ -226,13 +236,23 @@ async def test_coupon_usage_limit_and_per_user_limit_guards(db_session: AsyncSes
         is_active=True,
     )
     db_session.add(user3)
+    await db_session.flush()
+
+    order3 = Order(
+        id=uuid.uuid4(),
+        user_id=user3.id,
+        status=OrderStatus.PENDING,
+        currency="KES",
+        total_amount=Decimal("4950.00"),
+    )
+    db_session.add(order3)
     await db_session.commit()
 
     with pytest.raises(BusinessRuleError, match="reached its usage limit"):
         await service.record_coupon_usage(
             coupon_id=coupon.id,
             user_id=user3.id,
-            order_id=order.id,
+            order_id=order3.id,
             discount_amount=Decimal("50.00"),
         )
 

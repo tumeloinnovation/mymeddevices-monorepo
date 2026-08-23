@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from app.domains.shopping.models.sub_order import SubOrder
     from app.domains.vendor.models.vendor_profile import VendorProfile
 
-from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, func
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -35,7 +35,7 @@ class LedgerTransactionType(str, enum.Enum):
     ADJUSTMENT = "adjustment"  # Manual adjustment by admin
 
 
-class VendorLedger(Base):
+class VendorLedger(Base, IDMixin):
     """
     VendorLedger tracks the current balance for each vendor.
 
@@ -47,11 +47,14 @@ class VendorLedger(Base):
     """
 
     __tablename__ = "vendor_ledgers"
-    __table_args__ = (Index("ix_vendor_ledgers_vendor_id", "vendor_id"),)
+    __table_args__ = (
+        Index("ix_vendor_ledgers_vendor_id", "vendor_id"),
+        CheckConstraint("balance >= 0", name="chk_vendor_ledger_balance_non_negative"),
+    )
 
-    # Primary Key is the vendor_id
+    # Foreign Key to vendor_profiles
     vendor_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("vendor_profiles.id", ondelete="CASCADE"), primary_key=True
+        UUID(as_uuid=True), ForeignKey("vendor_profiles.id", ondelete="CASCADE"), unique=True, nullable=False
     )
 
     # Current available balance (can be negative for overdrafts in some cases)

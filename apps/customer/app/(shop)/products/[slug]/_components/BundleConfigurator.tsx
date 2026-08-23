@@ -1,20 +1,38 @@
 'use client'
 
-import React, { useState, useMemo } from 'react'
-import { ShoppingCart, Package, Check, ExternalLink, Info } from 'lucide-react'
+import React, { useState, useMemo, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import {
+  ShoppingCart,
+  Check,
+  Layers,
+  Plus,
+  Minus,
+  Package,
+  Zap,
+  CheckCircle2,
+  Truck,
+  ShieldCheck,
+  ArrowRight,
+  Trash2,
+} from 'lucide-react'
 import type { Product } from '@/lib/data/types'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import useCartStore from '@/lib/store/useCartStore'
-import Link from 'next/link'
 import { formatCurrency } from '@/lib/utils/utils'
+import { toast } from 'sonner'
 
 interface BundleConfiguratorProps {
   product: Product
   relatedProducts: Product[]
+  quantity: number
+  setQuantity: (q: number) => void
+  onAddOnsChange?: (total: number) => void
 }
 
-interface BundleItem {
+interface BundleOptionItem {
   id: string
   name: string
   slug?: string
@@ -25,34 +43,56 @@ interface BundleItem {
   isSelected: boolean
 }
 
-export default function BundleConfigurator({ product, relatedProducts }: BundleConfiguratorProps) {
-  const addToCart = useCartStore((state) => state.addItem)
-  const [added, setAdded] = useState(false)
-  const [bundleQty, setBundleQty] = useState(1)
+export default function BundleConfigurator({
+  product,
+  relatedProducts,
+  quantity,
+  setQuantity,
+  onAddOnsChange,
+}: BundleConfiguratorProps) {
+  const router = useRouter()
+  const addToCartStore = useCartStore((state) => state.addItem)
+  const updateQuantityStore = useCartStore((state) => state.updateQuantity)
+  const removeFromCartStore = useCartStore((state) => state.removeItem)
+  const isInCart = useCartStore((state) => state.isInCart(product.id))
+  const cartQuantity = useCartStore((state) => state.getItemQuantity(product.id))
 
-  const [items, setItems] = useState<BundleItem[]>(() => {
-    const list: BundleItem[] = []
+  const [added, setAdded] = useState(false)
+
+  // Primary product image
+  const primaryImage =
+    product.images?.[0]?.src ||
+    (product as any).imageUrl ||
+    (product as any).image_url ||
+    ''
+
+  const [options, setOptions] = useState<BundleOptionItem[]>(() => {
+    const list: BundleOptionItem[] = []
 
     // Populate from backend bundle_items
     if (product.bundle_items && product.bundle_items.length > 0) {
       product.bundle_items.forEach((item) => {
-        list.push({
-          id: String(item.component_product?.id || item.id),
-          name: item.component_product?.name || 'Component Item',
-          slug: item.component_product?.slug,
-          price: item.component_product?.price || 0,
-          imageUrl: item.component_product?.image_url,
-          quantity: item.quantity || 1,
-          isRequired: !item.is_optional,
-          isSelected: true, // all items default selected (required auto-selected; optional can be unchecked)
-        })
+        const isOpt = Boolean(item.is_optional)
+        if (isOpt) {
+          list.push({
+            id: String(item.component_product?.id || item.id),
+            name: item.component_product?.name || 'Component Option',
+            slug: item.component_product?.slug,
+            price: item.component_product?.price || 0,
+            imageUrl:
+              item.component_product?.image_url ||
+              (item.component_product as any)?.images?.[0]?.src,
+            quantity: item.quantity || 1,
+            isRequired: false,
+            isSelected: false,
+          })
+        }
       })
     }
 
-    // Optional: also surface related products as add-ons only if this is a bundle
-    if (product.product_type === 'bundle' && relatedProducts.length > 0) {
+    // Surface related products as available add-on options for bundle products
+    if (product.product_type === 'bundle' && relatedProducts && relatedProducts.length > 0) {
       relatedProducts.forEach((rel) => {
-        // Don't duplicate items already in bundle_items
         const alreadyAdded = list.some((l) => l.id === String(rel.id))
         if (!alreadyAdded) {
           list.push({
@@ -60,7 +100,7 @@ export default function BundleConfigurator({ product, relatedProducts }: BundleC
             name: rel.name,
             slug: rel.slug,
             price: typeof rel.price === 'number' ? rel.price : parseFloat(rel.price || '0'),
-            imageUrl: rel.images?.[0]?.src,
+            imageUrl: rel.images?.[0]?.src || (rel as any).imageUrl,
             quantity: 1,
             isRequired: false,
             isSelected: false,
@@ -72,14 +112,51 @@ export default function BundleConfigurator({ product, relatedProducts }: BundleC
     return list
   })
 
-  const hasBundle = items.length > 0
-  const hasOptional = items.some((i) => !i.isRequired)
+  const isBundle =
+    product.product_type === 'bundle' ||
+    (Boolean(product.bundle_items) && (product.bundle_items?.length ?? 0) > 0)
 
-  const toggleItem = (id: string) => {
-    setItems((prev) =>
+  // Sync quantity with cart store when cart status changes
+  useEffect(() => {
+    if (isInCart && cartQuantity > 0) {
+      setQuantity(cartQuantity)
+    }
+  }, [isInCart, cartQuantity, setQuantity])
+
+  // Sync selected add-ons price with parent
+  useEffect(() => {
+    const optTotal = options
+      .filter((i) => i.isSelected)
+      .reduce((acc, i) => acc + i.price * i.quantity, 0)
+    onAddOnsChange?.(optTotal)
+  }, [options, onAddOnsChange])
+
+  if (!isBundle) return null
+
+  const toggleOption = (id: string) => {
+    setOptions((prev) =>
       prev.map((item) => {
-        if (item.id === id && !item.isRequired) {
-          return { ...item, isSelected: !item.isSelected }
+        if (item.id === id) {
+          const nextSelected = !item.isSelected
+          // If the kit is already in cart, dynamically add/remove the add-on from cart
+          if (isInCart) {
+            if (nextSelected) {
+              addToCartStore(
+                {
+                  id: item.id,
+                  name: item.name,
+                  price: item.price,
+                  image: item.imageUrl || '',
+                } as any,
+                (item.quantity || 1) * quantity
+              )
+              toast.success(`Added ${item.name} to your cart`)
+            } else {
+              removeFromCartStore(item.id)
+              toast.info(`Removed ${item.name} from your cart`)
+            }
+          }
+          return { ...item, isSelected: nextSelected }
         }
         return item
       })
@@ -91,266 +168,297 @@ export default function BundleConfigurator({ product, relatedProducts }: BundleC
     [product.price]
   )
 
-  const { optionalsTotal, grandTotal, selectedOptionalCount } = useMemo(() => {
-    const optTotal = items
-      .filter((i) => !i.isRequired && i.isSelected)
+  const { optionalsTotal, grandTotal, selectedCount } = useMemo(() => {
+    const optTotal = options
+      .filter((i) => i.isSelected)
       .reduce((acc, i) => acc + i.price * i.quantity, 0)
-    const grand = (mainProductPrice + optTotal) * bundleQty
-    const count = items.filter((i) => !i.isRequired && i.isSelected).length
-    return { optionalsTotal: optTotal, grandTotal: grand, selectedOptionalCount: count }
-  }, [items, mainProductPrice, bundleQty])
+    const grand = (mainProductPrice + optTotal) * quantity
+    const count = options.filter((i) => i.isSelected).length
+    return { optionalsTotal: optTotal, grandTotal: grand, selectedCount: count }
+  }, [options, mainProductPrice, quantity])
 
-  const requiredItems = items.filter((i) => i.isRequired)
-  const optionalItems = items.filter((i) => !i.isRequired)
+  const handleQuantityUpdate = (newQty: number) => {
+    if (isInCart) {
+      if (newQty <= 0) {
+        removeFromCartStore(product.id)
+        options.forEach((item) => removeFromCartStore(item.id))
+        setQuantity(1)
+        toast.info('Kit removed from cart')
+      } else {
+        setQuantity(newQty)
+        updateQuantityStore(product.id, newQty)
+        options
+          .filter((i) => i.isSelected)
+          .forEach((item) => {
+            updateQuantityStore(item.id, (item.quantity || 1) * newQty)
+          })
+      }
+    } else {
+      setQuantity(Math.max(1, newQty))
+    }
+  }
 
   const handleAddBundleToCart = () => {
-    // Add the main bundle product
-    addToCart(
+    // 1. Add the main bundle / base product
+    addToCartStore(
       {
         id: product.id,
         name: product.name,
         price: mainProductPrice,
-        image: product.images?.[0]?.src || '',
-        quantity: bundleQty,
-      } as any
+        image: primaryImage,
+      } as any,
+      quantity
     )
 
-    // Add each selected optional item individually
-    items
-      .filter((i) => !i.isRequired && i.isSelected)
+    // 2. Add each selected optional add-on individually scaled by quantity
+    options
+      .filter((i) => i.isSelected)
       .forEach((item) => {
-        addToCart({
-          id: item.id,
-          name: item.name,
-          price: item.price,
-          image: item.imageUrl || '',
-          quantity: item.quantity,
-        } as any)
+        addToCartStore(
+          {
+            id: item.id,
+            name: item.name,
+            price: item.price,
+            image: item.imageUrl || '',
+          } as any,
+          (item.quantity || 1) * quantity
+        )
       })
 
     setAdded(true)
-    setTimeout(() => setAdded(false), 3000)
+    toast.success(`Added ${product.name} kit${selectedCount > 0 ? ` with ${selectedCount} add-on${selectedCount > 1 ? 's' : ''}` : ''} to cart!`)
+    setTimeout(() => setAdded(false), 2500)
   }
 
-  if (!hasBundle) return null
+  const handleBuyNow = () => {
+    if (!isInCart) {
+      handleAddBundleToCart()
+    }
+    router.push('/checkout')
+  }
 
   return (
-    <div className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-amber-50/50 dark:bg-amber-950/10 overflow-hidden">
+    <div className="rounded-2xl border border-border/80 bg-card text-card-foreground p-4 sm:p-5 shadow-xs flex flex-col gap-4">
       {/* Header */}
-      <div className="px-5 py-4 border-b border-amber-200 dark:border-amber-900/50 bg-amber-100/60 dark:bg-amber-900/20 flex items-center justify-between">
+      <div className="flex items-center justify-between pb-3 border-b border-border/60">
         <div className="flex items-center gap-2">
-          <Package className="w-4 h-4 text-amber-700 dark:text-amber-400" />
-          <span className="font-semibold text-sm text-amber-900 dark:text-amber-200">
-            What&apos;s in this Bundle
-          </span>
+          <Package className="w-4 h-4 text-primary" />
+          <h3 className="text-xs font-bold uppercase tracking-wider text-foreground">
+            Kit & Optional Add-ons
+          </h3>
         </div>
-        <Badge className="bg-amber-600 text-white text-[10px] px-2 py-0.5 border-0">
-          {requiredItems.length} item{requiredItems.length !== 1 ? 's' : ''} included
+        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800 text-[11px] font-semibold">
+          IN STOCK
         </Badge>
       </div>
 
-      <div className="p-5 space-y-4">
-        {/* Required / Included Items */}
-        {requiredItems.length > 0 && (
-          <div className="space-y-2">
-            {hasOptional && (
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Always Included
-              </p>
+      {/* Optional Add-ons Checklist */}
+      {options.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between px-0.5">
+            <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              Select Add-ons
+            </span>
+            {selectedCount > 0 && (
+              <span className="text-xs font-semibold text-primary font-mono">
+                +{selectedCount} added (+KES {formatCurrency(optionalsTotal)})
+              </span>
             )}
-            <div className="space-y-2">
-              {requiredItems.map((item) => (
-                <BundleItemRow key={item.id} item={item} onToggle={toggleItem} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Optional Add-ons */}
-        {optionalItems.length > 0 && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                Optional Add-ons
-              </p>
-              <Info className="w-3 h-3 text-gray-400" />
-            </div>
-            <div className="space-y-2">
-              {optionalItems.map((item) => (
-                <BundleItemRow key={item.id} item={item} onToggle={toggleItem} />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Price Breakdown */}
-        <div className="pt-3 border-t border-amber-200 dark:border-amber-800 space-y-1.5">
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600 dark:text-gray-400">Bundle base price</span>
-            <span className="font-medium text-gray-900 dark:text-gray-100 tabular-nums">
-              KES {formatCurrency(mainProductPrice)}
-            </span>
           </div>
 
-          {optionalsTotal > 0 && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600 dark:text-gray-400">
-                Add-ons ({selectedOptionalCount})
-              </span>
-              <span className="font-medium text-gray-900 dark:text-gray-100 tabular-nums">
-                + KES {formatCurrency(optionalsTotal)}
-              </span>
-            </div>
-          )}
+          <div className="flex flex-col gap-2">
+            {options.map((option) => (
+              <div
+                key={option.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => toggleOption(option.id)}
+                onKeyDown={(e) => {
+                  if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault()
+                    toggleOption(option.id)
+                  }
+                }}
+                className={`group flex items-center justify-between gap-3 p-2.5 rounded-xl border transition-all duration-200 cursor-pointer select-none ${
+                  option.isSelected
+                    ? 'border-primary/60 bg-primary/[0.04] dark:bg-primary/[0.08] shadow-2xs'
+                    : 'border-border/70 bg-card hover:bg-muted/30 hover:border-border'
+                }`}
+              >
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  {/* Custom Checkbox */}
+                  <div
+                    className={`w-4 h-4 rounded flex items-center justify-center border transition-colors shrink-0 ${
+                      option.isSelected
+                        ? 'bg-primary border-primary text-primary-foreground'
+                        : 'border-muted-foreground/40 bg-background group-hover:border-primary'
+                    }`}
+                  >
+                    {option.isSelected && <Check className="w-3 h-3 stroke-[3]" />}
+                  </div>
 
-          {bundleQty > 1 && (
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-600 dark:text-gray-400">Quantity</span>
-              <span className="font-medium text-gray-900 dark:text-gray-100 tabular-nums">
-                × {bundleQty}
-              </span>
-            </div>
-          )}
+                  {/* Thumbnail */}
+                  <div className="w-11 h-11 rounded-lg bg-background border border-border/60 p-1 flex items-center justify-center shrink-0 overflow-hidden">
+                    {option.imageUrl ? (
+                      <img src={option.imageUrl} alt={option.name} className="w-full h-full object-contain mix-blend-multiply dark:mix-blend-normal" />
+                    ) : (
+                      <Layers className="w-4 h-4 text-muted-foreground/40" />
+                    )}
+                  </div>
 
-          <div className="flex items-center justify-between pt-1.5 border-t border-amber-200/70 dark:border-amber-800/50">
-            <span className="font-semibold text-gray-900 dark:text-gray-100">Total</span>
-            <span className="text-lg font-bold text-amber-700 dark:text-amber-400 tabular-nums">
-              KES {formatCurrency(grandTotal)}
-            </span>
+                  {/* Title and Price Stacked */}
+                  <div className="flex flex-col min-w-0 flex-1">
+                    <span className="text-xs font-medium text-foreground leading-snug line-clamp-2 group-hover:text-primary transition-colors">
+                      {option.name}
+                    </span>
+                    <span className="text-xs font-bold text-primary font-mono tabular-nums mt-0.5">
+                      {option.price > 0 ? `+KES ${formatCurrency(option.price)}` : 'Free'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
+      )}
 
-        {/* Quantity + CTA row */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden shrink-0">
-            <button
-              type="button"
-              onClick={() => setBundleQty((q) => Math.max(1, q - 1))}
-              className="px-3 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
-              aria-label="Decrease quantity"
-            >
-              −
-            </button>
-            <div className="px-4 py-2.5 font-semibold text-gray-900 dark:text-gray-100 min-w-[40px] text-center text-sm">
-              {bundleQty}
-            </div>
-            <button
-              type="button"
-              onClick={() => setBundleQty((q) => q + 1)}
-              className="px-3 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors text-sm font-medium"
-              aria-label="Increase quantity"
-            >
-              +
-            </button>
-          </div>
-          <Button
-            onClick={handleAddBundleToCart}
-            className={`flex-1 font-semibold transition-all duration-200 ${
-              added
-                ? 'bg-green-600 hover:bg-green-600 text-white'
-                : 'bg-amber-600 hover:bg-amber-500 text-white'
-            }`}
-            size="default"
+      {/* Quantity Stepper */}
+      <div className="flex items-center justify-between pt-2 border-t border-border/60 text-xs">
+        <span className="font-semibold text-foreground">
+          {isInCart ? 'Quantity in Cart' : 'Quantity'}
+        </span>
+        <div className="flex items-center border border-border bg-background rounded-xl overflow-hidden h-9 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => handleQuantityUpdate(quantity - 1)}
+            disabled={!isInCart && quantity <= 1}
+            className="w-8 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            aria-label="Decrease bundle quantity"
           >
-            <ShoppingCart className="w-4 h-4 mr-2" />
-            {added
-              ? 'Added to Cart!'
-              : selectedOptionalCount > 0
-              ? `Add Bundle + ${selectedOptionalCount} Add-on${selectedOptionalCount > 1 ? 's' : ''} to Cart`
-              : 'Add Bundle to Cart'}
-          </Button>
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+          <div className="px-2.5 font-bold text-foreground text-xs font-mono min-w-[28px] text-center select-none">
+            {quantity}
+          </div>
+          <button
+            type="button"
+            onClick={() => handleQuantityUpdate(quantity + 1)}
+            className="w-8 h-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted/60 transition-colors"
+            aria-label="Increase bundle quantity"
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
         </div>
       </div>
-    </div>
-  )
-}
 
-// ─── Sub-component ────────────────────────────────────────────────────────────
-
-interface BundleItemRowProps {
-  item: BundleItem
-  onToggle: (id: string) => void
-}
-
-function BundleItemRow({ item, onToggle }: BundleItemRowProps) {
-  return (
-    <div
-      onClick={() => !item.isRequired && onToggle(item.id)}
-      className={`flex items-center gap-3 p-3 rounded-lg border transition-all ${
-        item.isRequired
-          ? 'border-amber-200 dark:border-amber-800 bg-white dark:bg-gray-900/50 cursor-default'
-          : item.isSelected
-          ? 'border-emerald-300 bg-emerald-50 dark:bg-emerald-950/20 dark:border-emerald-800 cursor-pointer'
-          : 'border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900/30 hover:border-gray-300 dark:hover:border-gray-700 cursor-pointer'
-      }`}
-    >
-      {/* Checkbox (only for optional items) */}
-      {!item.isRequired && (
-        <div
-          className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-            item.isSelected
-              ? 'bg-emerald-600 border-emerald-600'
-              : 'border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800'
-          }`}
-        >
-          {item.isSelected && <Check className="w-2.5 h-2.5 text-white" />}
+      {/* Selected Items Breakdown */}
+      {(selectedCount > 0 || quantity > 1) && (
+        <div className="p-2.5 rounded-xl bg-muted/40 dark:bg-muted/20 border border-border/60 flex items-center justify-between text-xs">
+          <span className="text-muted-foreground">
+            Total {isInCart ? 'in Cart' : 'Kit Price'}:
+          </span>
+          <span className="font-bold text-primary font-mono text-sm">
+            KES {formatCurrency(grandTotal)}
+          </span>
         </div>
       )}
 
-      {/* Included checkmark (for required items) */}
-      {item.isRequired && (
-        <div className="w-4 h-4 rounded-full bg-amber-100 dark:bg-amber-900/40 border border-amber-300 dark:border-amber-700 flex items-center justify-center shrink-0">
-          <Check className="w-2.5 h-2.5 text-amber-700 dark:text-amber-400" />
-        </div>
-      )}
+      {/* Action Buttons */}
+      <div className="flex flex-col gap-2.5">
+        {isInCart && cartQuantity > 0 ? (
+          <div className="flex flex-col gap-2.5">
+            <div className="flex items-center gap-2">
+              {/* View Cart & Checkout */}
+              <Button
+                asChild
+                className="flex-1 h-11 bg-primary hover:bg-primary/90 text-white font-semibold rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+              >
+                <Link href="/cart">
+                  <ShoppingCart className="w-4 h-4" />
+                  <span>View Cart & Checkout</span>
+                  <ArrowRight className="w-4 h-4" />
+                </Link>
+              </Button>
 
-      {/* Thumbnail */}
-      <div className="w-10 h-10 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 flex items-center justify-center overflow-hidden shrink-0">
-        {item.imageUrl ? (
-          <img src={item.imageUrl} alt={item.name} className="w-full h-full object-contain p-1" />
+              {/* Remove Kit from Cart */}
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  removeFromCartStore(product.id)
+                  options.forEach((item) => removeFromCartStore(item.id))
+                  setQuantity(1)
+                  toast.info('Kit removed from cart')
+                }}
+                className="h-11 w-11 shrink-0 p-0 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-border cursor-pointer"
+                title="Remove Kit from Cart"
+                aria-label="Remove Kit from Cart"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* In Cart Status Indicator */}
+            <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+              <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                <CheckCircle2 className="w-3.5 h-3.5" /> Item is in your cart ({quantity} {quantity === 1 ? 'unit' : 'units'})
+              </span>
+              <Link href="/checkout" className="text-primary hover:underline font-medium inline-flex items-center gap-0.5">
+                Direct Checkout <ArrowRight className="w-3 h-3" />
+              </Link>
+            </div>
+          </div>
         ) : (
-          <Package className="w-4 h-4 text-gray-400" />
-        )}
-      </div>
-
-      {/* Info */}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1">
-          <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate leading-tight">
-            {item.name}
-          </p>
-          {item.slug && (
-            <Link
-              href={`/products/${item.slug}`}
-              onClick={(e) => e.stopPropagation()}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
-              title="View product"
+          <>
+            <Button
+              type="button"
+              onClick={handleAddBundleToCart}
+              className={`w-full h-11 font-semibold rounded-xl transition-all duration-300 shadow-sm flex items-center justify-center gap-2 cursor-pointer ${
+                added
+                  ? 'bg-emerald-600 hover:bg-emerald-600 text-white'
+                  : 'bg-primary hover:bg-primary/90 text-primary-foreground'
+              }`}
             >
-              <ExternalLink className="w-3 h-3" />
-            </Link>
-          )}
-        </div>
-        <div className="flex items-center gap-2 mt-0.5">
-          <p className="text-xs text-gray-500 dark:text-gray-400 tabular-nums">
-            {item.price > 0 ? `KES ${formatCurrency(item.price)}` : 'Included'}
-            {item.quantity > 1 && ` × ${item.quantity}`}
-          </p>
-        </div>
+              {added ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 text-white" />
+                  <span>Added to Cart!</span>
+                </>
+              ) : (
+                <>
+                  <ShoppingCart className="w-4 h-4" />
+                  <span>
+                    {selectedCount > 0
+                      ? `Add Kit to Cart — KES ${formatCurrency(grandTotal)}`
+                      : `Add to Cart — KES ${formatCurrency(grandTotal)}`}
+                  </span>
+                </>
+              )}
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleBuyNow}
+              className="w-full h-10 border-primary/30 text-primary hover:bg-primary/5 dark:hover:bg-primary/10 rounded-xl font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors"
+            >
+              <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
+              <span>Buy Now with Instant Checkout</span>
+            </Button>
+          </>
+        )}
       </div>
 
-      {/* Status label */}
-      <div className="shrink-0">
-        {item.isRequired ? (
-          <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-100 dark:bg-amber-900/40 px-1.5 py-0.5 rounded">
-            Included
-          </span>
-        ) : item.isSelected ? (
-          <span className="text-[10px] font-medium text-emerald-700 dark:text-emerald-400">
-            Added
-          </span>
-        ) : (
-          <span className="text-[10px] text-gray-400">+ Add</span>
-        )}
+      {/* Quick Trust Highlights */}
+      <div className="pt-2 border-t border-border/60 flex flex-col gap-1.5 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <Truck className="w-3.5 h-3.5 text-primary shrink-0" />
+          <span>Fast Delivery Across Kenya</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <ShieldCheck className="w-3.5 h-3.5 text-primary shrink-0" />
+          <span>PPB Approved & Genuine Device</span>
+        </div>
       </div>
     </div>
   )

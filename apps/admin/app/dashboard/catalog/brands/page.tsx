@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import Link from "next/link";
 import {
   Search,
   Plus,
@@ -16,6 +17,9 @@ import {
   Upload,
   Link as LinkIcon,
   Image as ImageIcon,
+  Pencil,
+  Trash2,
+  Package,
 } from "lucide-react";
 import { catalogService, Brand } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
@@ -569,7 +573,9 @@ export default function BrandsPage() {
                   <TableHead className="h-[34px] text-center">
                     Status
                   </TableHead>
-                  <TableHead className="h-[34px] w-10" />
+                  <TableHead className="h-[34px] w-[140px] text-right">
+                    Actions
+                  </TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -600,14 +606,25 @@ export default function BrandsPage() {
                       </span>
                     </TableCell>
                     <TableCell className="p-2 text-right">
-                      <span className="text-sm text-foreground tabular-nums">
-                        {brand.product_count.toLocaleString()}
-                      </span>
+                      {brand.product_count > 0 ? (
+                        <Link
+                          href={`/dashboard/catalog/products?search=${encodeURIComponent(brand.name)}`}
+                          className="inline-flex items-center gap-1.5 font-medium text-foreground hover:text-primary transition-colors tabular-nums group"
+                          title={`View ${brand.product_count} products for ${brand.name}`}
+                        >
+                          <Package className="h-3.5 w-3.5 text-muted-foreground group-hover:text-primary" />
+                          <span>{brand.product_count.toLocaleString()}</span>
+                        </Link>
+                      ) : (
+                        <span className="text-sm text-muted-foreground tabular-nums">
+                          0
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="p-2 text-center">
                       <StatusBadge isActive={brand.is_active} />
                     </TableCell>
-                    <TableCell className="p-2">
+                    <TableCell className="p-2 text-right">
                       <RowActions brand={brand} onEdit={handleEdit} onDelete={handleDelete} />
                     </TableCell>
                   </TableRow>
@@ -1069,35 +1086,61 @@ function RowActions({
   onDelete: (brand: Brand) => void;
 }) {
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="icon-sm" variant="ghost" className="h-7 w-7">
-          <MoreVertical className="h-3.5 w-3.5" />
+    <div className="flex items-center justify-end gap-1">
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+        title="Edit brand"
+        onClick={() => onEdit(brand)}
+      >
+        <Pencil className="h-3.5 w-3.5" />
+        <span className="sr-only">Edit {brand.name}</span>
+      </Button>
+
+      <Button
+        asChild
+        size="icon-sm"
+        variant="ghost"
+        className="h-7 w-7 text-muted-foreground hover:text-foreground"
+        title={`View products for ${brand.name}`}
+      >
+        <Link href={`/dashboard/catalog/products?search=${encodeURIComponent(brand.name)}`}>
+          <Package className="h-3.5 w-3.5" />
+          <span className="sr-only">View products for {brand.name}</span>
+        </Link>
+      </Button>
+
+      {brand.website_url && (
+        <Button
+          asChild
+          size="icon-sm"
+          variant="ghost"
+          className="h-7 w-7 text-muted-foreground hover:text-foreground"
+          title="Visit website"
+        >
+          <a
+            href={brand.website_url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Globe className="h-3.5 w-3.5" />
+            <span className="sr-only">Visit {brand.name} website</span>
+          </a>
         </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
-        <DropdownMenuItem onClick={() => onEdit(brand)}>Edit brand</DropdownMenuItem>
-        {brand.website_url && (
-          <>
-            <DropdownMenuItem asChild>
-              <a
-                href={brand.website_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 cursor-pointer"
-              >
-                <Globe className="h-3.5 w-3.5" />
-                Visit website
-              </a>
-            </DropdownMenuItem>
-          </>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-destructive" onClick={() => onDelete(brand)}>
-          Delete brand
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+      )}
+
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+        title="Delete brand"
+        onClick={() => onDelete(brand)}
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+        <span className="sr-only">Delete {brand.name}</span>
+      </Button>
+    </div>
   );
 }
 

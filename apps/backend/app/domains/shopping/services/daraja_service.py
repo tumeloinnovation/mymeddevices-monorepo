@@ -238,8 +238,12 @@ class DarajaService:
             logger.warning("Daraja callback received without CheckoutRequestID")
             return {"status": "ignored", "reason": "Missing CheckoutRequestID"}
 
-        # Find associated payment record
-        stmt = select(MobileMoneyPayment).where(MobileMoneyPayment.transaction_id == checkout_req_id)
+        # Find associated payment record with row lock to serialize concurrent callbacks
+        stmt = (
+            select(MobileMoneyPayment)
+            .where(MobileMoneyPayment.transaction_id == checkout_req_id)
+            .with_for_update()
+        )
         result = await self.db.execute(stmt)
         payment = result.scalar_one_or_none()
 
@@ -275,8 +279,11 @@ class DarajaService:
             payment.status = MobileMoneyPaymentStatus.VERIFIED
             payment.notes = f"M-Pesa Verified: {mpesa_receipt} ({result_desc})"
 
-            # Update Order status
-            order = await self.db.get(Order, payment.order_id)
+            # Update Order status under row lock
+            order_stmt = select(Order).where(Order.id == payment.order_id).with_for_update()
+            order_res = await self.db.execute(order_stmt)
+            order = order_res.scalar_one_or_none()
+
             if order and order.status != OrderStatus.PROCESSING:
                 order.status = OrderStatus.PROCESSING
                 timeline = OrderTimelineEvent(

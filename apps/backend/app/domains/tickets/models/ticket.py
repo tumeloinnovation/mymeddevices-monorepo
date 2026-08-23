@@ -60,8 +60,8 @@ class TicketReply(Base):
     ticket_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("tickets.id", ondelete="CASCADE"), nullable=False
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     is_internal: Mapped[str] = mapped_column(SQLEnum("yes", "no", name="yes_no"), default="no", nullable=False)
@@ -69,4 +69,4 @@ class TicketReply(Base):
 
     # Relationships
     ticket: Mapped["Ticket"] = relationship("Ticket", back_populates="replies")
-    user: Mapped["User"] = relationship("User", backref="ticket_replies")
+    user: Mapped["User | None"] = relationship("User", backref="ticket_replies")

@@ -1,160 +1,369 @@
-import React, { useState, useMemo } from 'react'
-import { Star, Truck, ShieldCheck, Award, HeadphonesIcon, ChevronDown } from 'lucide-react'
+'use client'
+
+import React, { useState, useMemo, useEffect } from 'react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import {
+  Star,
+  Truck,
+  ShieldCheck,
+  Award,
+  HeadphonesIcon,
+  Trash2,
+  ShoppingCart,
+  AlertCircle,
+  CheckCircle2,
+  ArrowRight,
+  Zap,
+  Heart,
+  Share2,
+  GitCompare,
+  MessageCircle,
+  Facebook,
+  Twitter,
+  Plus,
+  Minus,
+  Loader2,
+} from 'lucide-react'
 import RelatedProductsModal from './RelatedProductsModal'
-import DirectCheckout from '../../../checkout/_components/DirectCheckout'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
-import { Heart, Share2, GitCompare, MessageCircle, Facebook, Twitter } from 'lucide-react'
 import { Product } from '@/lib/data/types'
 import { useCompareStore } from '@/lib/store/useCompareStore'
-import useCartStore  from '@/lib/store/useCartStore'
+import useCartStore from '@/lib/store/useCartStore'
 import { useWishlistStore } from '@/lib/store/useWishlistStore'
 import { formatCurrency } from '@/lib/utils/utils'
+import { SafeHtml } from '@mymeddevices/shared-ui'
+import { toast } from 'sonner'
 
 type Props = {
   product: Product
   quantity: number
   setQuantity: (n: number) => void
+  relatedProducts?: Product[]
+  hidePurchaseActions?: boolean
+  extraPrice?: number
 }
 
-export default function ProductInfo({ product, quantity, setQuantity }: Props) {
-  const addToCartStore = useCartStore((state) => state.addItem);
-  const updateQuantityStore = useCartStore((state) => state.updateQuantity);
-  const removeFromCart = useCartStore((state) => state.removeItem);
-  const addToWishlist = useWishlistStore((state) => state.addItem);
-  const removeFromWishlist = useWishlistStore((state) => state.removeItem);
-  const wishlistItems = useWishlistStore((state) => state.items);
-  const wishlistHydrated = useWishlistStore((state) => state.hydrated);
-  const addToCompare = useCompareStore((state) => state.addItem);
-  const removeFromCompare = useCompareStore((state) => state.removeItem);
-  const compareItems = useCompareStore((state) => state.items);
-  const compareHydrated = useCompareStore((state) => state.hydrated);
-  const canAddMoreCompare = useCompareStore((state) => state.canAddMore);
+export default function ProductInfo({ product, quantity, setQuantity, relatedProducts, hidePurchaseActions = false, extraPrice = 0 }: Props) {
+  const router = useRouter()
+  const [isAdding, setIsAdding] = useState(false)
+  const [isAdded, setIsAdded] = useState(false)
 
-  const isInWishlist = (id: number | string) => wishlistItems.some((item) => item.id === id || item.sku === id);
-  const isInCompare = (id: number | string) => compareItems.some((item) => item.id === id || item.sku === id || item.slug === id);
+  const addToCartStore = useCartStore((state) => state.addItem)
+  const updateQuantityStore = useCartStore((state) => state.updateQuantity)
+  const removeFromCart = useCartStore((state) => state.removeItem)
+  const addToWishlist = useWishlistStore((state) => state.addItem)
+  const removeFromWishlist = useWishlistStore((state) => state.removeItem)
+  const wishlistItems = useWishlistStore((state) => state.items)
+  const wishlistHydrated = useWishlistStore((state) => state.hydrated)
+  const addToCompare = useCompareStore((state) => state.addItem)
+  const removeFromCompare = useCompareStore((state) => state.removeItem)
+  const compareItems = useCompareStore((state) => state.items)
+  const compareHydrated = useCompareStore((state) => state.hydrated)
+  const canAddMoreCompare = useCompareStore((state) => state.canAddMore)
 
-  const addToCart = (qty: number = quantity) => {
-    if (qty === 0) {
-      removeFromCart(product.id);
-      return;
-    }
-    if (qty === 1) {
-      addToCartStore(product as any, qty);
-    } else {
-      updateQuantityStore(product.id, qty);
-    }
-  }
-
-  const [added, setAdded] = useState(false)
   const [isRelatedModalOpen, setIsRelatedModalOpen] = useState(false)
+  const [isShareOpen, setIsShareOpen] = useState(false)
 
-  // Variant selection state
-  const [selectedVariant, setSelectedVariant] = useState<string | null>(null)
-
-  // Get available variants
-  const variants = product.variants || []
-
-  // Calculate current price based on selected variant or base price
-  const currentPrice = useMemo(() => {
-    if (selectedVariant) {
-      const variant = variants.find(v => v.id === selectedVariant)
-      if (variant) return variant.price
-    }
-    return parseFloat(product.price) || 0
-  }, [selectedVariant, variants, product.price])
-
-  // Total price for display
-  const totalPrice = useMemo(() => {
-    return currentPrice * quantity
-  }, [currentPrice, quantity])
-
-  // Calculate price range for variable products
-  const priceRange = useMemo(() => {
-    if (variants.length === 0) return null;
-    const prices = variants.map(v => (v as any).calculated_price || (v as any).override_price || (parseFloat(product.price) + ((v as any).price_adjustment || 0)));
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    if (min === max || isNaN(min) || isNaN(max)) return null;
-    return { min, max };
-  }, [variants, product.price]);
-
-  const requiresVariantSelection = product.product_type === 'variable' && variants.length > 0 && !selectedVariant;
-  const isBundle = product.product_type === 'bundle';
-
-  const handleWishlistToggle = () => {
-    if (isInWishlist(product.id)) {
-      removeFromWishlist(product.id);
-    } else {
-      addToWishlist(product as any);
-    }
-  };
-
-  const handleCompareToggle = () => {
-    if (isInCompare(product.id)) {
-      removeFromCompare(product.id);
-    } else if (canAddMoreCompare()) {
-      // store the full Product object in compare
-      addToCompare(product as any);
-      setIsRelatedModalOpen(true);
-    }
-  };
-
-  const [isShareOpen, setIsShareOpen] = useState(false);
-
-  const handleShare = (platform: string) => {
-    const url = `${window.location.origin}/products/${product.slug}`;
-    const text = `Check out this product: ${product.name}`;
-
-    let shareUrl = '';
-    switch (platform) {
-      case 'facebook':
-        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`;
-        break;
-      case 'twitter':
-        shareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
-        break;
-      case 'whatsapp':
-        shareUrl = `https://wa.me/?text=${encodeURIComponent(text + ' ' + url)}`;
-        break;
-      default:
-        return;
-    }
-
-    window.open(shareUrl, '_blank', 'noopener,noreferrer');
-    setIsShareOpen(false);
-  };
-
-  const price = parseFloat(product.price) || 0
+  // Variants list
+  const variants = useMemo(() => product?.variants || [], [product?.variants])
 
   // Group variants by attribute type
   const variantGroups = useMemo(() => {
     if (variants.length === 0) return {}
 
     const groups: Record<string, Set<string>> = {}
-    variants.forEach(variant => {
-      Object.entries(variant.attributes).forEach(([key, value]) => {
-        if (!groups[key]) groups[key] = new Set()
-        groups[key].add(value)
-      })
+    variants.forEach((variant) => {
+      if (variant.attributes && typeof variant.attributes === 'object') {
+        Object.entries(variant.attributes).forEach(([key, value]) => {
+          if (value && typeof value === 'string' && value.trim()) {
+            if (!groups[key]) groups[key] = new Set()
+            groups[key].add(value)
+          }
+        })
+      }
     })
 
-    // Convert Sets to arrays
     const result: Record<string, string[]> = {}
     Object.entries(groups).forEach(([key, values]) => {
-      result[key] = Array.from(values)
+      if (values.size > 0) {
+        result[key] = Array.from(values)
+      }
     })
     return result
   }, [variants])
 
-  // Get available variant combinations
-  const getAvailableVariants = (selectedAttrs: Record<string, string>) => {
-    return variants.filter(variant => {
-      return Object.entries(selectedAttrs).every(([key, value]) =>
-        variant.attributes[key] === value
-      )
+  const attributeKeys = useMemo(() => Object.keys(variantGroups), [variantGroups])
+  const hasAttributeVariants = variants.length > 0 && attributeKeys.length > 0
+  const hasNamedVariants = variants.length > 0 && attributeKeys.length === 0
+
+  // Selected variant ID for direct variant selection (if variants have no attributes)
+  const [selectedVariantId, setSelectedVariantId] = useState<string | null>(() => {
+    if (!variants || variants.length === 0) return null
+    const defaultV = variants.find((v) => v.is_default && v.is_active !== false) || variants.find((v) => v.is_active !== false) || variants[0]
+    return defaultV?.id || null
+  })
+
+  // Selected attributes map
+  const [selectedAttributes, setSelectedAttributes] = useState<Record<string, string>>(() => {
+    if (!variants || variants.length === 0) return {}
+    const defaultVariant = variants.find((v) => v.is_default && v.is_active !== false) || variants.find((v) => v.is_active !== false) || variants[0]
+    const initial: Record<string, string> = { ...(defaultVariant?.attributes || {}) }
+    attributeKeys.forEach((key) => {
+      if (!initial[key] && variantGroups[key]?.[0]) {
+        initial[key] = variantGroups[key][0]
+      }
     })
+    return initial
+  })
+
+  // Synchronize variant selection on product/variant changes
+  useEffect(() => {
+    if (!variants || variants.length === 0) {
+      setSelectedVariantId(null)
+      setSelectedAttributes({})
+      return
+    }
+
+    const defaultV = variants.find((v) => v.is_default && v.is_active !== false) || variants.find((v) => v.is_active !== false) || variants[0]
+
+    if (hasAttributeVariants) {
+      setSelectedAttributes((prev) => {
+        const next: Record<string, string> = {}
+        attributeKeys.forEach((key) => {
+          if (prev[key] && variantGroups[key]?.includes(prev[key])) {
+            next[key] = prev[key]
+          } else if (defaultV?.attributes?.[key]) {
+            next[key] = defaultV.attributes[key]
+          } else if (variantGroups[key]?.[0]) {
+            next[key] = variantGroups[key][0]
+          }
+        })
+        return next
+      })
+    }
+
+    if (hasNamedVariants || (!hasAttributeVariants && variants.length > 0)) {
+      setSelectedVariantId((prev) => {
+        if (prev && variants.some((v) => v.id === prev && v.is_active !== false)) {
+          return prev
+        }
+        return defaultV?.id || null
+      })
+    }
+  }, [product.id, variants, hasAttributeVariants, hasNamedVariants, attributeKeys, variantGroups])
+
+  // Determine currently active variant matching all chosen attributes or selected variant id
+  const activeVariant = useMemo(() => {
+    if (variants.length === 0) return null
+    if (hasAttributeVariants) {
+      const allSelected = attributeKeys.length > 0 && attributeKeys.every((k) => Boolean(selectedAttributes[k]))
+      if (allSelected) {
+        const found = variants.find(
+          (v) =>
+            v.is_active !== false &&
+            Object.entries(selectedAttributes).every(([k, val]) => v.attributes?.[k] === val)
+        )
+        if (found) return found
+      }
+      return variants.find((v) => v.is_default && v.is_active !== false) || variants.find((v) => v.is_active !== false) || variants[0] || null
+    }
+    // Named variants without attribute key-values
+    if (selectedVariantId) {
+      const found = variants.find((v) => v.id === selectedVariantId && v.is_active !== false)
+      if (found) return found
+    }
+    return variants.find((v) => v.is_default && v.is_active !== false) || variants.find((v) => v.is_active !== false) || variants[0] || null
+  }, [variants, hasAttributeVariants, attributeKeys, selectedAttributes, selectedVariantId])
+
+  const requiresVariantSelection = hasAttributeVariants && !activeVariant
+  const isBundle = product.product_type === 'bundle' || product.type === 'bundle'
+
+  // Cart item key for variant or base product
+  const cartItemKey = activeVariant ? `${product.id}-${activeVariant.id}` : String(product.id)
+  const isInCart = useCartStore((state) => state.isInCart(product.id, activeVariant?.id))
+  const cartQuantity = useCartStore((state) => state.getItemQuantity(product.id, activeVariant?.id))
+
+  // Sync quantity with cart store when variant or product changes
+  useEffect(() => {
+    if (isInCart && cartQuantity > 0) {
+      setQuantity(cartQuantity)
+    } else {
+      setQuantity(1)
+    }
+  }, [isInCart, cartQuantity, activeVariant?.id, setQuantity])
+
+  // Base price (promotional/regular aware)
+  const basePrice = useMemo(() => {
+    if (product.on_sale && product.sale_price) {
+      return parseFloat(product.sale_price) || 0
+    }
+    return parseFloat(product.price) || 0
+  }, [product.on_sale, product.sale_price, product.price])
+
+  const regularPrice = useMemo(() => {
+    return parseFloat(product.regular_price || product.price) || 0
+  }, [product.regular_price, product.price])
+
+  // Current active unit price
+  const currentPrice = useMemo(() => {
+    let price = basePrice
+    if (activeVariant) {
+      if (activeVariant.calculated_price !== undefined && activeVariant.calculated_price !== null && !isNaN(Number(activeVariant.calculated_price))) {
+        price = Number(activeVariant.calculated_price)
+      } else if (activeVariant.override_price !== undefined && activeVariant.override_price !== null && !isNaN(Number(activeVariant.override_price))) {
+        price = Number(activeVariant.override_price)
+      } else if (activeVariant.price !== undefined && activeVariant.price !== null && !isNaN(Number(activeVariant.price))) {
+        price = Number(activeVariant.price)
+      } else if (activeVariant.price_adjustment !== undefined && activeVariant.price_adjustment !== null) {
+        price = basePrice + Number(activeVariant.price_adjustment)
+      }
+    }
+    return price + (extraPrice || 0)
+  }, [activeVariant, basePrice, extraPrice])
+
+  // Total price for display
+  const totalPrice = useMemo(() => {
+    return currentPrice * quantity
+  }, [currentPrice, quantity])
+
+  // Price range for unselected variable products
+  const priceRange = useMemo(() => {
+    if (variants.length === 0) return null
+    const prices = variants.map((v) => {
+      if (v.calculated_price !== undefined && v.calculated_price !== null) return Number(v.calculated_price)
+      if (v.override_price !== undefined && v.override_price !== null) return Number(v.override_price)
+      if (v.price !== undefined && v.price !== null) return Number(v.price)
+      return basePrice + Number(v.price_adjustment || 0)
+    })
+    const min = Math.min(...prices)
+    const max = Math.max(...prices)
+    if (min === max || isNaN(min) || isNaN(max)) return null
+    return { min, max }
+  }, [variants, basePrice])
+
+  // Stock calculations
+  const rawStock = activeVariant?.stock_quantity ?? product.stock_quantity
+  const availableStock = rawStock !== undefined && rawStock !== null && !isNaN(Number(rawStock)) ? Number(rawStock) : 9999
+  const isOutOfStock = product.stock_status === 'outofstock' || (
+    Boolean(product.manage_stock) && availableStock <= 0
+  )
+
+  // Cart operations
+  const handleAddToCart = () => {
+    if (requiresVariantSelection) {
+      toast.error('Please select all product options before adding to cart.')
+      return
+    }
+
+    if (isOutOfStock) {
+      toast.error('This product is currently out of stock.')
+      return
+    }
+
+    setIsAdding(true)
+
+    const itemToAdd: any = {
+      ...product,
+      id: cartItemKey,
+      product_id: String(product.id),
+      product_variant_id: activeVariant?.id || undefined,
+      name: activeVariant
+        ? `${product.name} (${activeVariant.name || Object.values(activeVariant.attributes || {}).join(', ')})`
+        : product.name,
+      sku: activeVariant?.sku || product.sku,
+      price: currentPrice,
+      regular_price: regularPrice,
+      sale_price: product.sale_price,
+      on_sale: product.on_sale,
+      images: activeVariant?.image_url ? [{ src: activeVariant.image_url }] : product.images,
+      stock_quantity: availableStock,
+      manage_stock: product.manage_stock,
+      quantity: quantity,
+    }
+
+    try {
+      addToCartStore(itemToAdd, quantity)
+      toast.success(`Added ${quantity > 1 ? `${quantity}x ` : ''}"${product.name}" to cart!`)
+      setIsAdded(true)
+      setTimeout(() => setIsAdded(false), 2500)
+    } catch (err) {
+      console.error('Failed to add to cart:', err)
+      toast.error('Failed to add item to cart.')
+    } finally {
+      setIsAdding(false)
+    }
+  }
+
+  const handleBuyNow = () => {
+    if (requiresVariantSelection) {
+      toast.error('Please select all product options first.')
+      return
+    }
+    if (isOutOfStock) {
+      toast.error('This product is currently out of stock.')
+      return
+    }
+    handleAddToCart()
+    router.push('/checkout')
+  }
+
+  const handleQuantityUpdate = (newQty: number) => {
+    if (newQty <= 0) {
+      removeFromCart(cartItemKey, activeVariant?.id)
+      setQuantity(1)
+      toast.info('Item removed from cart')
+    } else {
+      setQuantity(newQty)
+      updateQuantityStore(cartItemKey, newQty, activeVariant?.id)
+    }
+  }
+
+  const isInWishlist = (id: number | string) =>
+    wishlistItems.some((item) => item.id === id || item.sku === id)
+  const isInCompare = (id: number | string) =>
+    compareItems.some((item) => item.id === id || item.sku === id || item.slug === id)
+
+  const handleWishlistToggle = () => {
+    if (isInWishlist(product.id)) {
+      removeFromWishlist(product.id)
+    } else {
+      addToWishlist(product as any)
+    }
+  }
+
+  const handleCompareToggle = () => {
+    if (isInCompare(product.id)) {
+      removeFromCompare(product.id)
+    } else if (canAddMoreCompare()) {
+      addToCompare(product as any)
+      setIsRelatedModalOpen(true)
+    }
+  }
+
+  const handleShare = (platform: string) => {
+    const url = `${window.location.origin}/products/${product.slug}`
+    const text = `Check out this product: ${product.name}`
+
+    let shareUrl = ''
+    switch (platform) {
+      case 'facebook':
+        shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`
+        break
+      case 'twitter':
+        shareUrl = `https://twitter.com/intent/tweet?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`
+        break
+      case 'whatsapp':
+        shareUrl = `https://wa.me/?text=${encodeURIComponent(text + ' ' + url)}`
+        break
+      default:
+        return
+    }
+
+    window.open(shareUrl, '_blank', 'noopener,noreferrer')
+    setIsShareOpen(false)
   }
 
   const trustSignals = [
@@ -197,21 +406,20 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
         )}
       </div>
 
-      {/* Stock Status, Rating & Reviews - Combined Row */}
+      {/* Stock Status, Rating & Reviews */}
       <div className="flex items-center flex-wrap gap-3">
-        {/* Stock Status */}
-        {product.stock_status === 'instock' ? (
+        {!isOutOfStock ? (
           <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-900/40 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800">
-            IN STOCK
+            IN STOCK {product.manage_stock && typeof rawStock === 'number' && rawStock > 0 ? `(${rawStock})` : ''}
           </Badge>
         ) : (
-          <Badge variant="outline" className="text-gray-600">
+          <Badge variant="outline" className="text-red-600 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/30">
             OUT OF STOCK
           </Badge>
         )}
         {product.on_sale && (
-          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-900/40 dark:text-red-400 border-red-200 dark:border-red-800">
-            SALE
+          <Badge className="bg-red-100 text-red-700 hover:bg-red-100 dark:bg-red-900/40 dark:text-red-400 border-red-200 dark:border-red-800 font-medium">
+            Sale
           </Badge>
         )}
         {isBundle && (
@@ -220,7 +428,7 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
           </Badge>
         )}
 
-        {/* Rating & Reviews - Using real data */}
+        {/* Rating & Reviews */}
         <div className="flex items-center gap-2">
           <div className="flex items-center">
             {[...Array(5)].map((_, i) => (
@@ -245,71 +453,108 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
 
       {/* Price Section */}
       <div className="space-y-1">
-        <div className="flex items-baseline gap-2">
-          {priceRange && !selectedVariant ? (
+        <div className="flex items-baseline flex-wrap gap-2">
+          {priceRange && requiresVariantSelection ? (
             <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 font-mono">
               KES {formatCurrency(priceRange.min)} — KES {formatCurrency(priceRange.max)}
             </span>
           ) : (
-            <span className="text-3xl font-bold text-gray-900 dark:text-gray-100 font-mono">
+            <span className="text-3xl font-bold text-primary font-mono">
               KES {formatCurrency(currentPrice)}
             </span>
           )}
-          {product.on_sale && product.sale_price && (
+          {product.on_sale && regularPrice > currentPrice && (
             <span className="text-lg text-gray-400 line-through font-mono">
-              KES {formatCurrency(parseFloat(product.sale_price))}
+              KES {formatCurrency(regularPrice)}
             </span>
           )}
         </div>
         {quantity > 1 && (
           <p className="text-sm text-gray-600 dark:text-gray-400">
-            Total: <span className="font-semibold text-gray-900 dark:text-gray-100 font-mono">KES {formatCurrency(totalPrice)}</span>
+            Total ({quantity} items): <span className="font-semibold text-gray-900 dark:text-gray-100 font-mono">KES {formatCurrency(totalPrice)}</span>
           </p>
         )}
       </div>
 
-      {/* Variant Selection */}
-      {variants.length > 0 && Object.keys(variantGroups).length > 0 && (
-        <div className="space-y-4">
+
+      {/* Variant Selection (Attribute-based) */}
+      {!isBundle && hasAttributeVariants && (
+        <div className="space-y-4 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Product Options</h3>
+            {requiresVariantSelection && (
+              <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5" /> Please select all options
+              </span>
+            )}
+          </div>
           {Object.entries(variantGroups).map(([attrName, options]) => (
             <div key={attrName} className="space-y-2">
-              <label className="text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">
-                {attrName.replace(/_/g, ' ')}
+              <label className="text-xs font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wider">
+                {attrName.replace(/_/g, ' ')}: <span className="text-primary font-medium">{selectedAttributes[attrName] || 'Choose'}</span>
               </label>
               <div className="flex flex-wrap gap-2">
-                {options.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    onClick={() => {
-                      // Find matching variant with this attribute
-                      const matchingVariant = variants.find(v =>
-                        v.attributes[attrName] === option
-                      )
-                      if (matchingVariant) {
-                        setSelectedVariant(matchingVariant.id)
-                      }
-                    }}
-                    className={`px-4 py-2 rounded-lg border text-sm font-medium transition-colors ${
-                      selectedVariant && variants.find(v => v.id === selectedVariant)?.attributes[attrName] === option
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'
-                    }`}
-                  >
-                    {option}
-                  </button>
-                ))}
+                {options.map((option) => {
+                  const isSelected = selectedAttributes[attrName] === option
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => {
+                        setSelectedAttributes((prev) => ({
+                          ...prev,
+                          [attrName]: option,
+                        }))
+                      }}
+                      className={`px-4 py-2 rounded-xl border text-sm font-medium transition-all ${
+                        isSelected
+                          ? 'bg-primary text-primary-foreground border-primary shadow-sm scale-102'
+                          : 'bg-card text-foreground border-border hover:border-primary/50 hover:bg-muted/50'
+                      }`}
+                    >
+                      {option}
+                    </button>
+                  )
+                })}
               </div>
             </div>
           ))}
         </div>
       )}
 
+      {/* Variant Selection (Name-based fallback when attributes aren't key-value) */}
+      {!isBundle && hasNamedVariants && (
+        <div className="space-y-3 pt-2 border-t border-gray-100 dark:border-gray-800">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Product Options</h3>
+          <div className="flex flex-wrap gap-2">
+            {variants.map((v) => {
+              const isSelected = activeVariant?.id === v.id
+              const vPrice = v.calculated_price ?? v.override_price ?? v.price ?? (basePrice + (v.price_adjustment || 0))
+              return (
+                <button
+                  key={v.id}
+                  type="button"
+                  onClick={() => setSelectedVariantId(v.id)}
+                  className={`px-4 py-2 rounded-xl border text-sm font-medium transition-all flex items-center gap-2 ${
+                    isSelected
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                      : 'bg-card text-foreground border-border hover:border-primary/50 hover:bg-muted/50'
+                  }`}
+                >
+                  <span>{v.name || 'Option'}</span>
+                  {vPrice > 0 && <span className="text-xs opacity-80">(KES {formatCurrency(vPrice)})</span>}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Short Description */}
       {product.short_description && (
-        <div
-          className="text-sm text-gray-600 dark:text-gray-400"
-          dangerouslySetInnerHTML={{ __html: product.short_description }}
+        <SafeHtml
+          className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed"
+          html={product.short_description}
         />
       )}
 
@@ -389,54 +634,151 @@ export default function ProductInfo({ product, quantity, setQuantity }: Props) {
         </Popover>
       </div>
 
-      {/* Quantity Selector with Add to Cart — hidden for bundles (BundleConfigurator owns this CTA) */}
-      {!isBundle && (
-        <div className="flex items-center gap-3">
-          <div className="flex items-center border rounded-lg overflow-hidden">
-            <button
-              type="button"
-              onClick={() => setQuantity(Math.max(1, quantity - 1))}
-              className="px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              aria-label="Decrease quantity"
-            >
-              -
-            </button>
-            <div className="px-4 py-2.5 font-medium text-gray-900 dark:text-gray-100 min-w-[50px] text-center">
-              {quantity}
-            </div>
-            <button
-              type="button"
-              onClick={() => setQuantity(quantity + 1)}
-              className="px-4 py-2.5 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              aria-label="Increase quantity"
-            >
-              +
-            </button>
-          </div>
-          <Button
-            onClick={() => {
-              addToCart()
-              setAdded(true)
-            }}
-            className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium"
-            size="lg"
-          >
-            {added ? 'Added to Cart' : 'Add to Cart'}
-          </Button>
-        </div>
-      )}
+      {/* Action Buttons */}
+      {!hidePurchaseActions && (
+        <div className="flex flex-col gap-3 pt-2">
+          {isInCart && cartQuantity > 0 ? (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                {/* Quantity Controls in Cart */}
+                <div className="flex items-center justify-between border border-border bg-card rounded-xl overflow-hidden h-11 w-32 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleQuantityUpdate(quantity - 1)}
+                    className="w-10 h-full hover:bg-muted text-muted-foreground hover:text-foreground transition-colors flex items-center justify-center cursor-pointer"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <div className="flex-1 font-semibold text-foreground text-center text-sm font-mono select-none">
+                    {quantity}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={Boolean(product.manage_stock) && typeof availableStock === 'number' && quantity >= availableStock}
+                    onClick={() => handleQuantityUpdate(quantity + 1)}
+                    className="w-10 h-full hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center cursor-pointer"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
 
-      {/* Buy Now Button — hidden for bundles */}
-      {!isBundle && (
-        <DirectCheckout
-          productName={product.name}
-          price={currentPrice}
-          quantity={quantity}
-          onAddToCart={() => {
-            addToCart()
-            setAdded(true)
-          }}
-        />
+                {/* View Cart & Checkout Button */}
+                <Button
+                  asChild
+                  className="flex-1 h-11 bg-primary hover:bg-primary/90 text-white font-medium rounded-xl shadow-sm transition-all flex items-center justify-center gap-2"
+                >
+                  <Link href="/cart">
+                    <ShoppingCart className="h-4 w-4" />
+                    <span>View Cart & Checkout</span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+
+                {/* Remove from Cart */}
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    removeFromCart(cartItemKey, activeVariant?.id)
+                    setQuantity(1)
+                    toast.info('Item removed from cart')
+                  }}
+                  className="h-11 w-11 shrink-0 p-0 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 border-border cursor-pointer"
+                  title="Remove from Cart"
+                  aria-label="Remove from Cart"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+
+              {/* Added to cart indicator / Direct checkout link */}
+              <div className="flex items-center justify-between text-xs text-muted-foreground px-1">
+                <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400 font-medium">
+                  <CheckCircle2 className="h-4 w-4" /> Item is in your cart ({quantity} {quantity === 1 ? 'unit' : 'units'})
+                </span>
+                <Link href="/checkout" className="text-primary hover:underline font-medium inline-flex items-center gap-1">
+                  Direct Checkout <ArrowRight className="h-3 w-3" />
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-3">
+                {/* Quantity Controls Before Cart */}
+                <div className="flex items-center justify-between border border-border bg-card rounded-xl overflow-hidden h-11 w-32 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    disabled={quantity <= 1 || isOutOfStock}
+                    className="w-10 h-full hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center cursor-pointer"
+                    aria-label="Decrease quantity"
+                  >
+                    <Minus className="h-4 w-4" />
+                  </button>
+                  <div className="flex-1 font-semibold text-foreground text-center text-sm font-mono select-none">
+                    {quantity}
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isOutOfStock || (Boolean(product.manage_stock) && typeof availableStock === 'number' && quantity >= availableStock)}
+                    onClick={() => setQuantity(quantity + 1)}
+                    className="w-10 h-full hover:bg-muted text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors flex items-center justify-center cursor-pointer"
+                    aria-label="Increase quantity"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </div>
+
+                {/* Add to Cart button */}
+                <Button
+                  onClick={handleAddToCart}
+                  disabled={isOutOfStock || requiresVariantSelection || isAdding}
+                  className="flex-1 bg-primary hover:bg-primary/90 text-white font-medium h-11 rounded-xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {isAdding ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Adding...</span>
+                    </>
+                  ) : isAdded ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 text-emerald-300" />
+                      <span>Added to Cart!</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="h-4 w-4" />
+                      <span>
+                        {isOutOfStock
+                          ? 'Out of Stock'
+                          : requiresVariantSelection
+                          ? 'Select Options to Add to Cart'
+                          : quantity > 1
+                          ? `Add ${quantity} to Cart`
+                          : 'Add to Cart'}
+                      </span>
+                    </>
+                  )}
+                </Button>
+              </div>
+
+              {/* Buy Now button */}
+              {!isOutOfStock && !requiresVariantSelection && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleBuyNow}
+                  disabled={isAdding}
+                  className="w-full h-10 border-primary/30 text-primary hover:bg-primary/5 dark:hover:bg-primary/10 rounded-xl font-medium flex items-center justify-center gap-2 cursor-pointer transition-colors"
+                >
+                  <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
+                  <span>Buy Now with Instant Checkout</span>
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Trust Signals */}

@@ -17,8 +17,9 @@ import { PhoneInput } from '@/components/ui/phone-input';
 import { useAuthStore } from '@mymeddevices/shared-core';
 import { useCustomerProfile, useUpdateCustomerProfile, useUploadAvatar } from '@/lib/hooks/useDashboard';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { profileSchema, type ProfileFormData } from '@/lib/data/profile-validation';
+
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -56,8 +57,9 @@ export function PersonalInfo() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const form = useForm<ProfileFormData>({
-    resolver: zodResolver(profileSchema),
+    resolver: standardSchemaResolver(profileSchema),
     defaultValues: {
+
       firstName: '',
       lastName: '',
       displayName: '',

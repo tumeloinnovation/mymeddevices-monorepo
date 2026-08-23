@@ -83,9 +83,6 @@ class TypesenseProductDTO:
         else:
             self.certifications = certs
 
-        self.kmpdb_registration_number = doc.get("kmpdb_registration_number")
-        self.ppb_classification = doc.get("ppb_classification")
-        self.ce_marking_or_fda_clearance = doc.get("ce_marking_or_fda_clearance")
         self.warranty_info = doc.get("warranty_info")
         self.meta_title = doc.get("meta_title")
         self.meta_description = doc.get("meta_description")
@@ -182,9 +179,6 @@ class TypesenseClient:
                 {"name": "category_slug", "type": "string", "optional": True, "facet": True},
                 {"name": "brand", "type": "string", "optional": True, "facet": True},
                 {"name": "model_number", "type": "string", "optional": True},
-                {"name": "kmpdb_registration_number", "type": "string", "optional": True},
-                {"name": "ppb_classification", "type": "string", "optional": True, "facet": True},
-                {"name": "ce_marking_or_fda_clearance", "type": "string", "optional": True},
                 {"name": "warranty_info", "type": "string", "optional": True},
                 {"name": "meta_title", "type": "string", "optional": True},
                 {"name": "meta_description", "type": "string", "optional": True},
@@ -250,9 +244,6 @@ class TypesenseClient:
             "category_slug": product.category.slug if product.category else "",
             "brand": product.brand or "",
             "model_number": product.model_number or "",
-            "kmpdb_registration_number": product.kmpdb_registration_number or "",
-            "ppb_classification": product.ppb_classification or "",
-            "ce_marking_or_fda_clearance": product.ce_marking_or_fda_clearance or "",
             "warranty_info": product.warranty_info or "",
             "meta_title": product.meta_title or "",
             "meta_description": product.meta_description or "",

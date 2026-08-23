@@ -63,8 +63,8 @@ export function useCategories(options?: Omit<UseQueryOptions<any>, 'queryKey' | 
         parent: item.parent_id || 0,
         description: item.description || '',
         display: item.display || 'default',
-        image: item.image_url ? { src: item.image_url } : null,
-        count: item.count || item.product_count || 0,
+        image: (item.image_url || item.icon_url || item.image?.src) ? { src: item.image_url || item.icon_url || item.image?.src } : null,
+        count: item.product_count ?? item.count ?? 0,
         subCategories: item.children || [],
       } as Category));
     },
@@ -112,8 +112,8 @@ export function useCategoryBySlug(
         parent: item.parent_id || 0,
         description: item.description || '',
         display: item.display || 'default',
-        image: item.image_url ? { src: item.image_url } : null,
-        count: item.count || item.product_count || 0,
+        image: (item.image_url || item.icon_url || item.image?.src) ? { src: item.image_url || item.icon_url || item.image?.src } : null,
+        count: item.product_count ?? item.count ?? 0,
         subCategories: item.children || [],
       } as Category;
     },
@@ -255,8 +255,8 @@ export function useCategoryTree(options?: Omit<UseQueryOptions<any>, 'queryKey' 
         parent: item.parent_id || 0,
         description: item.description || '',
         display: item.display || 'default',
-        image: item.image_url ? { src: item.image_url } : null,
-        count: item.count || item.product_count || 0,
+        image: (item.image_url || item.icon_url || item.image?.src) ? { src: item.image_url || item.icon_url || item.image?.src } : null,
+        count: item.product_count ?? item.count ?? 0,
         subCategories: item.children || [],
       } as Category));
     },
@@ -303,8 +303,8 @@ export function useSubcategories(
         parent: item.parent_id || 0,
         description: item.description || '',
         display: item.display || 'default',
-        image: item.image_url ? { src: item.image_url } : null,
-        count: item.count || item.product_count || 0,
+        image: (item.image_url || item.icon_url || item.image?.src) ? { src: item.image_url || item.icon_url || item.image?.src } : null,
+        count: item.product_count ?? item.count ?? 0,
         subCategories: item.children || [],
       } as Category));
     },

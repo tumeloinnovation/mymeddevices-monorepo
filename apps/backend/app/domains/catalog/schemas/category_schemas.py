@@ -70,6 +70,7 @@ class CategoryTreeResponse(BaseModel):
     parent_id: uuid.UUID | None = None
     sort_order: int
     is_active: bool
+    product_count: int = 0
     children: list["CategoryTreeResponse"] = []
 
     model_config = ConfigDict(from_attributes=True)

@@ -2,7 +2,7 @@
 
 import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { useCategoryBySlug, useCategoryProducts } from "@/lib/hooks/useCategories";
+import { useCategoryBySlug, useCategoryProducts, useCategories } from "@/lib/hooks/useCategories";
 import ShopPage from "../../../_components/ShopPage";
 
 interface CategoryDetailPageProps {
@@ -13,6 +13,7 @@ const CategoryDetailPage: React.FC<CategoryDetailPageProps> = ({ slug }) => {
   const router = useRouter();
   const { data: category, isLoading: categoryLoading, isError: categoryError } = useCategoryBySlug(slug);
   const { data: products, isLoading: productsLoading, isError: productsError } = useCategoryProducts(slug);
+  const { data: categories = [] } = useCategories();
 
   // Handle fallback if category slug is intent-based or custom
   useEffect(() => {
@@ -26,7 +27,7 @@ const CategoryDetailPage: React.FC<CategoryDetailPageProps> = ({ slug }) => {
     return (
       <ShopPage
         products={[]}
-        categories={[]}
+        categories={categories}
         initialSelectedCategory={slug}
         isLoading={true}
       />
@@ -37,7 +38,7 @@ const CategoryDetailPage: React.FC<CategoryDetailPageProps> = ({ slug }) => {
     return (
       <ShopPage
         products={products}
-        categories={[]}
+        categories={categories}
         initialSelectedCategory={slug}
       />
     );
@@ -46,7 +47,7 @@ const CategoryDetailPage: React.FC<CategoryDetailPageProps> = ({ slug }) => {
   return (
     <ShopPage
       products={products}
-      categories={[]}
+      categories={categories}
       initialSelectedCategory={slug}
     />
   );

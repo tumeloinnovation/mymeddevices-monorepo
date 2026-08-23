@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from app.domains.auth.models.otp import OTP
     from app.domains.auth.models.token_device import RefreshToken, UserDevice
     from app.domains.customers.models.customer_profile import CustomerProfile
+    from app.domains.logistics.models.driver_profile import DriverProfile
     from app.domains.vendor.models.vendor_profile import VendorProfile
 
 
@@ -51,6 +52,13 @@ class User(Base, IDMixin, AuditMixin):
     )
     customer_profile: Mapped[Optional["CustomerProfile"]] = relationship(
         "CustomerProfile", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )
+    driver_profile: Mapped[Optional["DriverProfile"]] = relationship(
+        "DriverProfile",
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan",
+        foreign_keys="[DriverProfile.user_id]",
     )
 
     @property

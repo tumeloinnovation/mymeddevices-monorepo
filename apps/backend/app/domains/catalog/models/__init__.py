@@ -1,6 +1,14 @@
 from .brand import Brand
+from .bundle import Bundle, BundleComponent, BundleDiscountType
 from .bundle_item import BundleItem
 from .category import Category
+from .category_attribute import (
+    AttributeAllowedValue,
+    AttributeDataType,
+    CategoryAttributeDefinition,
+    VariantAttributeValue,
+)
+from .manufacturer import Manufacturer
 from .product import Product
 from .product_image import ProductImage
 from .product_variant import ProductVariant
@@ -11,9 +19,17 @@ from .tag import Tag, product_tags
 __all__ = [
     "Brand",
     "Category",
+    "CategoryAttributeDefinition",
+    "AttributeAllowedValue",
+    "VariantAttributeValue",
+    "AttributeDataType",
+    "Manufacturer",
     "Product",
     "ProductImage",
     "ProductVariant",
+    "Bundle",
+    "BundleComponent",
+    "BundleDiscountType",
     "BundleItem",
     "RelatedProduct",
     "Tag",

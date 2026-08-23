@@ -50,11 +50,16 @@ class OrderItemBase(BaseModel):
 class OrderItemResponse(OrderItemBase):
     id: uuid.UUID
     product_name: str
+    vendor_name: str | None = None
+    sku: str | None = None
     fulfillment_status: str = "pending"
     tracking_number: str | None = None
     tracking_url: str | None = None
     total_price: int
     product: ProductMinResponse | None = None
+    tax_category_code: str | None = "STANDARD_VAT_16"
+    tax_rate_snapshot: float | None = 0.16
+    tax_amount_snapshot: float | None = 0.0
 
     @field_validator("total_price", mode="before")
     @classmethod
@@ -90,6 +95,7 @@ class ShippingAddress(BaseModel):
     shipping_amount: float | None = None
     packaging_fee: float | None = None
     services_fee: float | None = None
+    tax_amount: float | None = None
     discount_amount: float | None = None
 
     model_config = ConfigDict(from_attributes=True)
@@ -101,6 +107,7 @@ class OrderBase(BaseModel):
     shipping_amount: int | None = 0
     packaging_fee: int | None = 100
     services_fee: int | None = 50
+    tax_amount: int | None = 0
     discount_amount: int | None = 0
     subtotal: int | None = 0
     payment_method: str | None = "cod"
@@ -111,7 +118,7 @@ class OrderBase(BaseModel):
     internal_notes: str | None = None
 
     @field_validator(
-        "total_amount", "shipping_amount", "packaging_fee", "services_fee", "discount_amount", "subtotal", mode="before"
+        "total_amount", "shipping_amount", "packaging_fee", "services_fee", "tax_amount", "discount_amount", "subtotal", mode="before"
     )
     @classmethod
     def round_order_amounts(cls, v: Union[int, float, str, None]) -> int | float | str | None:
@@ -145,6 +152,9 @@ class UserMinResponse(BaseModel):
     first_name: str | None = None
     last_name: str | None = None
     email: str
+    phone: str | None = None
+    role: str | None = None
+    company_name: str | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -164,6 +174,9 @@ class OrderResponse(OrderBase):
     order_number: int | None = None
     user_id: uuid.UUID | None = None
     guest_token: str | None = None
+    loyalty_discount: float | None = None
+    loyalty_points_redeemed: int | None = None
+    shipping_subsidy_amount: float | None = None
     created_at: datetime
     updated_at: datetime | None
     items: list[OrderItemResponse]

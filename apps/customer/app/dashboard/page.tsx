@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { useDashboardStats, useCustomerOrders } from '@/hooks/useDashboard';
 import { useAuthStore } from '@mymeddevices/shared-core';
 import { formatCurrency } from '@/lib/utils/utils';
+import { useLoyaltyPoints } from '@/lib/hooks/useLoyalty';
 import {
     Package,
     Heart,
@@ -35,6 +36,7 @@ export default function DashboardPage() {
         1,
         10
     );
+    const { points: loyaltyPoints, tier: loyaltyTier, isLoading: loyaltyLoading } = useLoyaltyPoints();
 
     const recentOrders = ordersData?.slice(0, 3);
 
@@ -44,8 +46,6 @@ export default function DashboardPage() {
     );
 
     const firstName = user?.firstName || user?.displayName?.split(' ')[0] || 'Guest';
-    const loyaltyPoints = user?.loyaltyPoints ?? (user as any)?.loyalty_points ?? 0;
-    const loyaltyTier = (user?.loyaltyTier as string) || 'bronze';
 
     const getInitial = (name: string | undefined) =>
         name ? name[0].toUpperCase() : '';
@@ -239,7 +239,11 @@ export default function DashboardPage() {
                         </CardHeader>
                         <CardContent className="space-y-4">
                             <div className="text-center py-2">
-                                <p className="text-3xl font-semibold">{loyaltyPoints}</p>
+                                {loyaltyLoading ? (
+                                    <Skeleton className="h-8 w-20 mx-auto" />
+                                ) : (
+                                    <p className="text-3xl font-semibold">{loyaltyPoints.toLocaleString()}</p>
+                                )}
                                 <p className="text-xs text-muted-foreground">Loyalty Points</p>
                             </div>
                             <LoyaltyProgress tier={loyaltyTier} points={loyaltyPoints} />

@@ -4,6 +4,7 @@ export const WIZARD_STEPS = [
   { id: "general", label: "General Info", description: "Identity & categorization" },
   { id: "pricing", label: "Pricing & Fee", description: "Base price & storefront fee" },
   { id: "inventory", label: "Stock & Physical", description: "SKU, inventory & weight" },
+  { id: "variants", label: "Product Variants", description: "Options, pricing & stock" },
   { id: "gallery", label: "Clinical Gallery", description: "Product imagery & shot types" },
   { id: "ai", label: "MedAI & Specs", description: "Content generation & technical specs" },
   { id: "review", label: "Review & Publish", description: "Final validation & submission" },

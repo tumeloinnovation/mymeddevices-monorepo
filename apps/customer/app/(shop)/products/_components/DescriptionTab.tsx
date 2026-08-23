@@ -1,4 +1,5 @@
 import React from 'react'
+import { SafeHtml } from '@mymeddevices/shared-ui'
 
 type Props = {
   description?: string
@@ -10,12 +11,12 @@ export default function DescriptionTab({ description }: Props) {
       <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-primary">
         Product Description
       </h3>
-      <div
+      <SafeHtml
         className="prose dark:prose-invert max-w-none text-gray-700 dark:text-muted-foreground"
-        dangerouslySetInnerHTML={{
-          __html: description || '<p>No description available.</p>',
-        }}
+        html={description}
+        fallback={<p className="text-muted-foreground">No description available.</p>}
       />
     </div>
   )
 }
+

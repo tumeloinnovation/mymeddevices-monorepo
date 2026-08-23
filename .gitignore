@@ -40,6 +40,7 @@ CMakeFiles/CMakeTmp/
 .env.test.local
 .env.production.local
 apps/backend/.env
+apps/backend/keys/*.pem
 
 # OS
 .DS_Store

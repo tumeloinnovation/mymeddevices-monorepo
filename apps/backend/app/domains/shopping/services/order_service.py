@@ -19,17 +19,19 @@ from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.models.order import (
     Order,
     OrderItem,
+    OrderItemFulfillmentStatus,
     OrderStatus,
     OrderTimelineEvent,
 )
 from app.domains.shopping.models.sub_order import SubOrder, SubOrderStatus
-from app.domains.shopping.services.cart_calculation_service import CartCalculationService
+from app.domains.shopping.services.cart_calculation_service import CartCalculationService, OFFICE_LAT, OFFICE_LON
 from app.domains.shopping.services.order_state_machine import InvalidStateTransitionError, OrderStateMachine
 
 
 class CheckoutService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, driver_assignment_service: "DriverAssignmentServiceDep | None" = None):
         self.db = db
+        self.driver_assignment_service = driver_assignment_service
 
     async def _generate_order_number(self) -> int:
         """Generate a unique order number.
@@ -102,7 +104,10 @@ class CheckoutService:
                 stmt = (
                     select(Cart)
                     .where(Cart.id == cart_id)
-                    .options(selectinload(Cart.items).selectinload(CartItem.product))
+                    .options(
+                        selectinload(Cart.items).selectinload(CartItem.product),
+                        selectinload(Cart.items).selectinload(CartItem.product_variant),
+                    )
                     .execution_options(populate_existing=True)
                 )
                 result = await self.db.execute(stmt)
@@ -161,11 +166,20 @@ class CheckoutService:
                 # Auto-assign nearest active driver if company rider delivery
                 assigned_driver_id = None
                 if totals.get("logistics_type") == "company_rider":
-                    driver_stmt = select(User).where(User.role == "driver", User.is_active == True)
-                    driver_result = await self.db.execute(driver_stmt)
-                    drivers = driver_result.scalars().all()
-                    if drivers:
-                        assigned_driver_id = drivers[0].id
+                    # Use logistics domain DriverAssignmentService if available
+                    if self.driver_assignment_service:
+                        driver = await self.driver_assignment_service.get_available_drivers(
+                            location=(OFFICE_LAT, OFFICE_LON)
+                        )
+                        if driver:
+                            assigned_driver_id = driver[0].id
+                    else:
+                        # Fallback to legacy implementation
+                        driver_stmt = select(User).where(User.role == "driver", User.is_active == True)
+                        driver_result = await self.db.execute(driver_stmt)
+                        drivers = driver_result.scalars().all()
+                        if drivers:
+                            assigned_driver_id = drivers[0].id
 
                 # Update shipping address with calculated logistics metadata & fees breakdown
                 updated_shipping_address = dict(shipping_address) if shipping_address else {}
@@ -175,6 +189,7 @@ class CheckoutService:
                 updated_shipping_address["shipping_amount"] = totals.get("shipping_amount", 0.0)
                 updated_shipping_address["packaging_fee"] = totals.get("packaging_fee", 100.0)
                 updated_shipping_address["services_fee"] = totals.get("services_fee", 50.0)
+                updated_shipping_address["tax_amount"] = totals.get("tax_amount", 0.0)
                 updated_shipping_address["discount_amount"] = totals.get("discount_amount", 0.0)
                 updated_shipping_address["subtotal"] = totals.get("subtotal", 0.0)
 
@@ -210,12 +225,9 @@ class CheckoutService:
                 )
                 self.db.add(order)
 
-                # Record coupon usage for applied discounts so per-user/global limits are enforced.
+                # Record coupon usage for applied discounts so per-user/global limits are enforced under lock.
                 applied_discounts = totals.get("applied_discounts") or []
                 if applied_discounts and user_id:
-                    from datetime import datetime
-
-                    from app.domains.shopping.models.coupon import CouponUsage
                     from app.domains.shopping.services.coupon_service import CouponService
 
                     coupon_service = CouponService(self.db)
@@ -223,27 +235,16 @@ class CheckoutService:
                         coupon_code = discount_info.get("coupon_code")
                         if not coupon_code:
                             continue
-                        is_valid, coupon, err = await coupon_service.validate_coupon(
-                            code=coupon_code,
-                            order_subtotal=float(totals.get("subtotal", 0.0)),
-                            user_id=user_id,
-                            cart_id=cart.id,
-                            for_checkout=True,
-                        )
-                        if not is_valid or not coupon:
-                            raise BusinessRuleError(f"Applied coupon '{coupon_code}' is invalid: {err}")
+                        coupon = await coupon_service.get_by_code(coupon_code)
+                        if not coupon:
+                            raise BusinessRuleError(f"Applied coupon '{coupon_code}' is invalid")
 
-                        self.db.add(
-                            CouponUsage(
-                                id=uuid.uuid4(),
-                                coupon_id=coupon.id,
-                                user_id=user_id,
-                                order_id=order.id,
-                                vendor_id=coupon.vendor_id,
-                                discount_amount=Decimal(str(discount_info.get("discount_amount") or 0)),
-                                used_at=datetime.now(UTC),
-                                is_refunded=False,
-                            )
+                        await coupon_service.record_coupon_usage(
+                            coupon_id=coupon.id,
+                            user_id=user_id,
+                            order_id=order.id,
+                            discount_amount=Decimal(str(discount_info.get("discount_amount") or 0)),
+                            vendor_id=coupon.vendor_id,
                         )
 
                 # 4. Group cart items by vendor for SubOrder creation
@@ -263,10 +264,15 @@ class CheckoutService:
                     # Calculate vendor subtotal with precise rounding
                     vendor_subtotal = 0.0
                     for item in items:
-                        unit_price = round(
-                            float(item.product.price) if item.product and item.product.price is not None else 0.0, 2
-                        )
-                        vendor_subtotal += unit_price * item.quantity
+                        if item.unit_price is not None:
+                            unit_p = round(float(item.unit_price), 2)
+                        elif item.product_variant and item.product_variant.calculated_price is not None:
+                            unit_p = round(float(item.product_variant.calculated_price), 2)
+                        elif item.product and item.product.price is not None:
+                            unit_p = round(float(item.product.price), 2)
+                        else:
+                            unit_p = 0.0
+                        vendor_subtotal += unit_p * item.quantity
 
                     # Create SubOrder
                     sub_order = SubOrder(
@@ -281,34 +287,95 @@ class CheckoutService:
 
                     # Create OrderItems for this vendor (Fix 1.1: Atomic stock deduction)
                     for item in items:
-                        # Perform atomic stock reduction at database level to prevent race conditions
-                        stock_stmt = (
-                            update(Product)
-                            .where(Product.id == item.product_id, Product.stock_quantity >= item.quantity)
-                            .values(
-                                stock_quantity=Product.stock_quantity - item.quantity,
-                                stock_status=case(
-                                    (Product.stock_quantity - item.quantity <= 0, "outofstock"),
-                                    else_=Product.stock_status,
-                                ),
-                            )
-                        )
-                        stock_res = await self.db.execute(stock_stmt)
-                        if result_rowcount(stock_res) == 0:
-                            raise ConflictError(f"Insufficient stock available for product: {item.product.name}")
-
-                        unit_p = round(float(item.product.price) if item.product.price is not None else 0.0, 2)
+                        if item.unit_price is not None:
+                            unit_p = round(float(item.unit_price), 2)
+                        elif item.product_variant and item.product_variant.calculated_price is not None:
+                            unit_p = round(float(item.product_variant.calculated_price), 2)
+                        elif item.product and item.product.price is not None:
+                            unit_p = round(float(item.product.price), 2)
+                        else:
+                            unit_p = 0.0
                         item_subtotal = round(unit_p * item.quantity, 2)
+
+                        if item.product_variant_id:
+                            from app.domains.catalog.models.product_variant import ProductVariant
+
+                            # 1. Decrement variant stock atomically
+                            var_stmt = (
+                                update(ProductVariant)
+                                .where(
+                                    ProductVariant.id == item.product_variant_id,
+                                    ProductVariant.stock_quantity >= item.quantity,
+                                    ProductVariant.is_active == True,
+                                )
+                                .values(stock_quantity=ProductVariant.stock_quantity - int(item.quantity))
+                            )
+                            var_res = await self.db.execute(var_stmt)
+                            if result_rowcount(var_res) == 0:
+                                raise ConflictError(
+                                    f"Insufficient stock available for variant of product: {item.product.name}"
+                                )
+
+                            # 2. Also decrement aggregate Product stock
+                            prod_stmt = (
+                                update(Product)
+                                .where(Product.id == item.product_id, Product.stock_quantity >= item.quantity)
+                                .values(
+                                    stock_quantity=Product.stock_quantity - int(item.quantity),
+                                    stock_status=case(
+                                        (Product.stock_quantity - int(item.quantity) <= 0, "outofstock"),
+                                        else_=Product.stock_status,
+                                    ),
+                                )
+                            )
+                            await self.db.execute(prod_stmt)
+                        else:
+                            # Simple product atomic stock reduction
+                            stock_stmt = (
+                                update(Product)
+                                .where(Product.id == item.product_id, Product.stock_quantity >= item.quantity)
+                                .values(
+                                    stock_quantity=Product.stock_quantity - item.quantity,
+                                    stock_status=case(
+                                        (Product.stock_quantity - item.quantity <= 0, "outofstock"),
+                                        else_=Product.stock_status,
+                                    ),
+                                )
+                            )
+                            stock_res = await self.db.execute(stock_stmt)
+                            if result_rowcount(stock_res) == 0:
+                                raise ConflictError(f"Insufficient stock available for product: {item.product.name}")
+
+                        # Calculate tax for this line item (16% VAT default or exempt)
+                        is_taxable = True
+                        vat_rate_val = Decimal("0.16")
+                        tax_cat_code = "STANDARD_VAT_16"
+                        if item.product:
+                            if hasattr(item.product, "has_vat") and item.product.has_vat is False:
+                                is_taxable = False
+                                vat_rate_val = Decimal("0.00")
+                                tax_cat_code = "EXEMPT_MEDICAL_DEVICE"
+                            elif hasattr(item.product, "vat_rate") and item.product.vat_rate is not None:
+                                vat_rate_val = Decimal(str(item.product.vat_rate)) / Decimal("100")
+
+                        item_tax_amount = (
+                            (Decimal(str(item_subtotal)) * vat_rate_val) if is_taxable else Decimal("0.00")
+                        )
 
                         order_item = OrderItem(
                             id=uuid.uuid4(),
                             order_id=order.id,
                             sub_order_id=sub_order.id,
                             product_id=item.product_id,
+                            product_variant_id=item.product_variant_id,
                             vendor_id=item.product.vendor_id,
                             quantity=item.quantity,
                             unit_price=unit_p,
                             subtotal=item_subtotal,
+                            # Tax snapshot
+                            tax_category_code=tax_cat_code,
+                            tax_rate_snapshot=vat_rate_val,
+                            tax_amount_snapshot=item_tax_amount.quantize(Decimal("0.01")),
                         )
                         self.db.add(order_item)
 
@@ -488,6 +555,7 @@ class OrderService:
 
         stmt = select(Order).options(
             selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),
+            selectinload(Order.items).selectinload(OrderItem.vendor),
             selectinload(Order.user),
             selectinload(Order.timeline_events),
             selectinload(Order.mobile_money_payments),
@@ -545,6 +613,7 @@ class OrderService:
 
         stmt = select(Order).options(
             selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),
+            selectinload(Order.items).selectinload(OrderItem.vendor),
             selectinload(Order.user),
             selectinload(Order.timeline_events),
             selectinload(Order.mobile_money_payments),
@@ -560,7 +629,14 @@ class OrderService:
 
         return orders, int(total)
 
-    async def update_order_status(self, order_id: uuid.UUID, new_status: str, auto_rollup: bool = False) -> Order:
+    async def update_order_status(
+        self,
+        order_id: uuid.UUID,
+        new_status: str,
+        auto_rollup: bool = False,
+        user_id: uuid.UUID | None = None,
+        user_name: str | None = None,
+    ) -> Order:
         """Update order status with state machine validation."""
         # Use transaction block for atomic status update
         async with self._transaction():
@@ -590,11 +666,13 @@ class OrderService:
                 )
                 self.db.add(event)
 
+                author_suffix = f" by {user_name}" if user_name else ""
                 timeline_event = OrderTimelineEvent(
                     id=uuid.uuid4(),
                     order_id=order_id,
                     status=new_status,
-                    message=f"Order status updated to {new_status}",
+                    message=f"Order status updated to {new_status}{author_suffix}",
+                    created_by=user_id,
                 )
                 self.db.add(timeline_event)
 
@@ -673,10 +751,95 @@ class OrderService:
                 await self._rollup_status_from_item(item)
 
         # Transaction commits automatically
+        # Auto-dispatch: create Delivery + assign driver once all items are packed
+        await self._maybe_dispatch_delivery(item.order_id)
+
         # Refresh and return
         stmt = select(OrderItem).where(OrderItem.id == item_id)
         result = await self.db.execute(stmt)
         return result.scalar_one()
+
+    async def _maybe_dispatch_delivery(self, order_id: uuid.UUID) -> None:
+        """Auto-dispatch once all order items are packed.
+
+        Creates a Delivery record (if none exists) and, for company-rider
+        orders, assigns the best available driver. Failures are logged and
+        swallowed so a dispatch hiccup never blocks the vendor's status update.
+        """
+        from app.domains.logistics.models.delivery import Delivery
+        from app.domains.logistics.services.delivery_service import DeliveryService
+        from app.domains.logistics.services.driver_assignment_service import DriverAssignmentService
+
+        try:
+            order_stmt = select(Order).where(Order.id == order_id).options(selectinload(Order.items))
+            order = (await self.db.execute(order_stmt)).scalar_one_or_none()
+            if not order:
+                return
+
+            active_items = [
+                i for i in order.items if i.fulfillment_status != OrderItemFulfillmentStatus.CANCELLED.value
+            ]
+            if not active_items:
+                return
+            if not all(i.fulfillment_status == OrderItemFulfillmentStatus.PACKED.value for i in active_items):
+                return
+
+            shipping_address = order.shipping_address or {}
+            logistics_type = shipping_address.get("logistics_type", "courier")
+            if logistics_type not in ("company_rider", "courier"):
+                return
+
+            dispatch_key = f"order-packed:{order_id}"
+            existing = (
+                await self.db.execute(
+                    select(Delivery).where(
+                        or_(
+                            Delivery.order_id == order_id,
+                            Delivery.dispatch_idempotency_key == dispatch_key,
+                        )
+                    )
+                )
+            ).scalar_one_or_none()
+            if existing:
+                return
+
+            delivery_service = DeliveryService(self.db)
+            delivery = await delivery_service.create_delivery_from_order(
+                order_id,
+                apply_stored_driver=False,
+                dispatch_idempotency_key=dispatch_key,
+            )
+
+            if logistics_type == "company_rider":
+                assignment_service = DriverAssignmentService(self.db)
+                try:
+                    assigned_driver = await assignment_service.assign_best_driver(
+                        delivery_id=delivery.id,
+                        pickup_location=(OFFICE_LAT, OFFICE_LON),
+                    )
+                    if assigned_driver is None:
+                        raise BusinessRuleError("No available drivers")
+                except Exception as assignment_error:
+                    logger.warning(f"Delivery assignment pending for {delivery.id}: {assignment_error}")
+                    await self.db.rollback()
+                    self.db.add(
+                        OutboxEvent(
+                            id=uuid.uuid4(),
+                            aggregate_type="Delivery",
+                            aggregate_id=str(delivery.id),
+                            event_type="DeliveryDispatchRetry",
+                            payload={
+                                "delivery_id": str(delivery.id),
+                                "order_id": str(order_id),
+                                "pickup_latitude": OFFICE_LAT,
+                                "pickup_longitude": OFFICE_LON,
+                            },
+                            status=OutboxStatus.PENDING,
+                        )
+                    )
+                    await self.db.commit()
+        except Exception as err:
+            logger.error(f"Auto-dispatch failed for order {order_id}: {err}")
 
     async def update_sub_order_status(self, sub_order_id: uuid.UUID, new_status: str, vendor_id: uuid.UUID) -> SubOrder:
         """Update sub-order status with validation."""

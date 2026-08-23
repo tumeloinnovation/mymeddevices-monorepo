@@ -12,9 +12,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.logging import logger
+from app.core.cors_middleware import add_cors_middleware
 from app.core.middleware import ContentLengthLimitMiddleware, RequestLoggingMiddleware
 from app.core.security_headers import APIProtectionMiddleware, NoCacheMiddleware, SecurityHeadersMiddleware
 from app.core.tasks import start_cleanup_scheduler, start_outbox_relay_scheduler
+from app.domains.admin.api.analytics_api import router as admin_analytics_router
+from app.domains.admin.api.bundles_api import router as admin_bundles_router
+from app.domains.admin.api.marketing_campaigns_api import router as marketing_campaigns_router
 from app.domains.admin.api.reviews_moderation_api import router as admin_reviews_router
 from app.domains.admin.api.system_api import router as system_router
 from app.domains.admin.api.users_management_api import router as users_management_router
@@ -26,6 +30,7 @@ from app.domains.customers.api.customer_api import router as customer_router
 from app.domains.recommendations.api.recommendations_api import router as recommendations_router
 from app.domains.returns.api.returns_api import router as returns_router
 from app.domains.shopping.api.admin_orders_api import router as admin_orders_router
+from app.domains.shopping.api.admin_promotions_api import router as admin_promotions_router
 from app.domains.shopping.api.admin_shopping_api import router as admin_shopping_router
 from app.domains.shopping.api.banner_api import public_router as public_banners_router
 from app.domains.shopping.api.banner_api import router as admin_banners_router
@@ -46,6 +51,13 @@ from app.domains.vendor.api.vendor_analytics_api import router as vendor_analyti
 from app.domains.vendor.api.vendor_api import router as vendor_router
 from app.domains.vendor.api.vendor_earnings_api import router as vendor_earnings_router
 from app.domains.vendor.api.vendor_reviews_api import router as vendor_reviews_router
+from app.domains.vendor.api.offers_api import router as vendor_offers_router
+from app.domains.logistics.api.routing_api import router as logistics_routing_router
+from app.domains.logistics.api.delivery_api import router as logistics_delivery_router
+from app.domains.logistics.api.driver_api import router as logistics_driver_router
+from app.domains.logistics.api.driver_matching_api import router as logistics_driver_matching_router
+from app.domains.logistics.api.tracking_api import router as logistics_tracking_router
+from app.domains.logistics.api.live_tracking_api import router as live_tracking_router
 
 
 @asynccontextmanager
@@ -173,15 +185,8 @@ async def integrity_error_handler(request, exc: IntegrityError):
     )
 
 
-# Add CORS Middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-API-Version", "Content-Disposition"],
-)
+# Add Custom CORS Middleware (supports wildcard patterns for local networks)
+add_cors_middleware(app)
 
 # Add security headers middleware (runs before logging, so headers are logged)
 app.add_middleware(SecurityHeadersMiddleware)
@@ -203,6 +208,7 @@ app.include_router(vendor_router, prefix="/api/v1")
 app.include_router(vendor_analytics_router, prefix="/api/v1")
 app.include_router(vendor_earnings_router, prefix="/api/v1")
 app.include_router(vendor_reviews_router, prefix="/api/v1")
+app.include_router(vendor_offers_router, prefix="/api/v1")
 app.include_router(catalog_router, prefix="/api/v1/catalog")
 app.include_router(storefront_router, prefix="/api/v1/storefront")
 app.include_router(cart_router, prefix="/api/v1/shopping")
@@ -223,13 +229,25 @@ app.include_router(mobile_money_router, prefix="/api/v1")
 app.include_router(mpesa_stk_router, prefix="/api/v1")
 app.include_router(admin_banners_router, prefix="/api/v1")
 app.include_router(public_banners_router, prefix="/api/v1/shopping")
+app.include_router(admin_promotions_router, prefix="/api/v1")
+app.include_router(admin_analytics_router, prefix="/api/v1")
+app.include_router(admin_bundles_router, prefix="/api/v1/admin")
+app.include_router(marketing_campaigns_router, prefix="/api/v1")
+app.include_router(system_router, prefix="/api/v1")
 app.include_router(system_router, prefix="/api/v1/admin")
 app.include_router(users_management_router, prefix="/api/v1/admin")
 app.include_router(admin_reviews_router, prefix="/api/v1")
+app.include_router(logistics_routing_router, prefix="/api/v1")
+app.include_router(logistics_delivery_router, prefix="/api/v1/logistics")
+app.include_router(logistics_driver_router, prefix="/api/v1/logistics")
+app.include_router(logistics_driver_matching_router, prefix="/api/v1")
+app.include_router(logistics_tracking_router, prefix="/api/v1/logistics")
+app.include_router(live_tracking_router, prefix="/api/v1")
 
 # Serve uploaded static files
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 os.makedirs(settings.AVATAR_UPLOAD_DIR, exist_ok=True)
+os.makedirs(settings.DELIVERY_PROOF_UPLOAD_DIR, exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 

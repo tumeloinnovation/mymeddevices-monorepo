@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -119,6 +119,9 @@ class CouponRestriction(Base, IDMixin):
 
 class CouponUsage(Base, IDMixin):
     __tablename__ = "coupon_usages"
+    __table_args__ = (
+        UniqueConstraint("coupon_id", "order_id", name="uq_coupon_usages_coupon_order"),
+    )
 
     coupon_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("coupons.id", ondelete="CASCADE"), nullable=False, index=True

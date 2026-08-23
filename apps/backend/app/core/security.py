@@ -48,10 +48,16 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None, auth
     if "auth_time" not in to_encode:
         to_encode["auth_time"] = auth_time or int(now.timestamp())
 
-    private_key = settings.JWT_PRIVATE_KEY
-    if not private_key:
-        raise RuntimeError("JWT_PRIVATE_KEY is not configured")
-    return jwt.encode(to_encode, private_key, algorithm=settings.ALGORITHM)
+    # For HS256, use SECRET_KEY. For RS256, use JWT_PRIVATE_KEY.
+    if settings.ALGORITHM == "HS256":
+        key = settings.SECRET_KEY
+        if not key:
+            raise RuntimeError("SECRET_KEY is not configured")
+    else:
+        key = settings.JWT_PRIVATE_KEY
+        if not key:
+            raise RuntimeError("JWT_PRIVATE_KEY is not configured")
+    return jwt.encode(to_encode, key, algorithm=settings.ALGORITHM)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -89,10 +95,16 @@ def verify_access_token(token: str) -> dict[str, Any] | None:
         The decoded token payload if valid, None otherwise
     """
     try:
-        public_key = settings.JWT_PUBLIC_KEY
-        if not public_key:
-            raise RuntimeError("JWT_PUBLIC_KEY is not configured")
-        payload = jwt.decode(token, public_key, algorithms=[settings.ALGORITHM])
+        # For HS256, use SECRET_KEY. For RS256, use JWT_PUBLIC_KEY.
+        if settings.ALGORITHM == "HS256":
+            key = settings.SECRET_KEY
+            if not key:
+                raise RuntimeError("SECRET_KEY is not configured")
+        else:
+            key = settings.JWT_PUBLIC_KEY
+            if not key:
+                raise RuntimeError("JWT_PUBLIC_KEY is not configured")
+        payload = jwt.decode(token, key, algorithms=[settings.ALGORITHM])
         return payload
     except PyJWTError:
         return None

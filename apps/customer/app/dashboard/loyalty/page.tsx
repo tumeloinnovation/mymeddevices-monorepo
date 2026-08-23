@@ -1,16 +1,14 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { customerLoyaltyApi } from '@/lib/api/endpoints/loyalty';
-import { 
-  Gift, 
-  ShoppingBag, 
-  History, 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  Gift,
+  ShoppingBag,
+  History,
+  TrendingUp,
+  TrendingDown,
   Crown,
   Shield,
   Award,
@@ -21,6 +19,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useLoyaltySummary, useLoyaltyLedger } from '@/lib/hooks/useLoyalty';
 
 const tierIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   bronze: Shield,
@@ -31,16 +30,10 @@ const tierIcons: Record<string, React.ComponentType<{ className?: string }>> = {
 
 export default function LoyaltyPage() {
   // Fetch summary
-  const { data: summary, isLoading: summaryLoading } = useQuery({
-    queryKey: ['loyalty-summary'],
-    queryFn: () => customerLoyaltyApi.getSummary(),
-  });
+  const { data: summary, isLoading: summaryLoading } = useLoyaltySummary();
 
   // Fetch ledger
-  const { data: ledger, isLoading: ledgerLoading } = useQuery({
-    queryKey: ['loyalty-ledger'],
-    queryFn: () => customerLoyaltyApi.getLedger({ limit: 10 }),
-  });
+  const { data: ledger, isLoading: ledgerLoading } = useLoyaltyLedger({ limit: 10 });
 
   if (summaryLoading || !summary) {
     return (

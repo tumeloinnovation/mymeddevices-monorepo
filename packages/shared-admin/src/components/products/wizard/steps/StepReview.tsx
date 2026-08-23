@@ -30,8 +30,9 @@ export function StepReview({ role, imagePreviews, isSubmitting, onSubmit }: Step
   const vatRateDecimal = rawVatRate > 1 ? rawVatRate / 100 : rawVatRate;
 
   const platformPricing = calculatePlatformPricing(basePriceVal, costPriceVal);
-  const vatAmount = Math.round(platformPricing.customerPrice * vatRateDecimal * 100) / 100;
-  const finalCustomerPriceWithVat = Math.round((platformPricing.customerPrice + vatAmount) * 100) / 100;
+  const finalCustomerPrice = platformPricing.customerPrice;
+  const saleActive = watch("sale_active");
+  const compareAtPrice = watch("compare_at_price");
 
   const primaryImageSrc = imagePreviews[primaryImageIndex] || imagePreviews[0];
 
@@ -44,7 +45,7 @@ export function StepReview({ role, imagePreviews, isSubmitting, onSubmit }: Step
               <Eye className="h-4 w-4 text-zinc-500" /> Listing Summary Verification
             </CardTitle>
             <CardDescription className="text-xs text-zinc-500 dark:text-zinc-400">
-              Confirm product attributes and pricing before publishing to the marketplace
+              Confirm product attributes, pricing, and variations before publishing to the marketplace
             </CardDescription>
           </div>
           <Badge className="bg-emerald-600 text-white font-mono text-[10px] uppercase">
@@ -64,6 +65,18 @@ export function StepReview({ role, imagePreviews, isSubmitting, onSubmit }: Step
                 <span className="font-bold text-zinc-900 dark:text-zinc-100">{nameVal}</span>
               </div>
               <div className="p-3 border border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
+                <span className="text-zinc-500">Medical Category:</span>
+                <span className="font-semibold text-emerald-700 dark:text-emerald-400">
+                  {watch("category_name") || "General Medical Equipment"}
+                </span>
+              </div>
+              {watch("brand_name") && (
+                <div className="p-3 border border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
+                  <span className="text-zinc-500">Manufacturer / Brand:</span>
+                  <span className="font-semibold text-zinc-800 dark:text-zinc-200">{watch("brand_name")}</span>
+                </div>
+              )}
+              <div className="p-3 border border-zinc-200 dark:border-zinc-800 flex justify-between items-center">
                 <span className="text-zinc-500">SKU / Stock Level:</span>
                 <span>{skuVal} ({stockQty} units available)</span>
               </div>
@@ -71,12 +84,18 @@ export function StepReview({ role, imagePreviews, isSubmitting, onSubmit }: Step
                 <span className="text-zinc-500">Seller Base Payout:</span>
                 <span className="font-bold text-purple-600 dark:text-purple-400">KES {basePriceVal.toLocaleString()}</span>
               </div>
+              {saleActive && compareAtPrice && Number(compareAtPrice) > 0 && (
+                <div className="p-3 border border-rose-200 dark:border-rose-900 bg-rose-50/40 dark:bg-rose-950/20 flex justify-between items-center">
+                  <span className="text-rose-700 dark:text-rose-300 font-bold uppercase text-[11px]">Compare-At Original Price:</span>
+                  <span className="font-bold text-zinc-400 line-through">KES {Number(compareAtPrice).toLocaleString()}</span>
+                </div>
+              )}
               <div className="p-3 border-2 border-emerald-600 dark:border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20 flex justify-between items-center">
                 <span className="text-emerald-800 dark:text-emerald-300 font-bold uppercase text-[11px]">
-                  Storefront Customer Price (VAT Inc.):
+                  Storefront Customer Price:
                 </span>
                 <span className="font-bold text-emerald-600 dark:text-emerald-400 text-base">
-                  KES {finalCustomerPriceWithVat.toLocaleString()}
+                  KES {finalCustomerPrice.toLocaleString()}
                 </span>
               </div>
             </div>

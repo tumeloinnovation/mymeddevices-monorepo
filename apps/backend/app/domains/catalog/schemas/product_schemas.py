@@ -88,9 +88,6 @@ class ProductCreate(BaseModel):
     model_number: str | None = Field(None, max_length=255)
     specifications: dict | None = None
     certifications: list | None = None
-    kmpdb_registration_number: str | None = Field(None, max_length=255)
-    ppb_classification: str | None = Field(None, max_length=100)
-    ce_marking_or_fda_clearance: str | None = Field(None, max_length=255)
     warranty_info: str | None = None
 
     # SEO
@@ -98,6 +95,11 @@ class ProductCreate(BaseModel):
     meta_title: str | None = Field(None, max_length=255)
     meta_description: str | None = Field(None, max_length=500)
     tags: list[str] | None = None
+
+    # Merchandising
+    is_featured: bool = False
+    is_clinical_pick: bool = False
+    is_on_sale: bool = False
 
 
 class ProductUpdate(BaseModel):
@@ -140,16 +142,17 @@ class ProductUpdate(BaseModel):
     model_number: str | None = Field(None, max_length=255)
     specifications: dict | None = None
     certifications: list | None = None
-    kmpdb_registration_number: str | None = Field(None, max_length=255)
-    ppb_classification: str | None = Field(None, max_length=100)
-    ce_marking_or_fda_clearance: str | None = Field(None, max_length=255)
     warranty_info: str | None = None
 
     # SEO
     meta_title: str | None = Field(None, max_length=255)
     meta_description: str | None = Field(None, max_length=500)
     tags: list[str] | None = None
+
+    # Merchandising
+    is_featured: bool | None = None
     is_clinical_pick: bool | None = None
+    is_on_sale: bool | None = None
 
     # Status (admin can change status directly)
     status: str | None = Field(None, description="Product status: draft, pending_review, published, archived")
@@ -368,9 +371,6 @@ class ProductResponse(BaseModel):
     model_number: str | None = None
     specifications: dict | None = None
     certifications: list | None = None
-    kmpdb_registration_number: str | None = None
-    ppb_classification: str | None = None
-    ce_marking_or_fda_clearance: str | None = None
     warranty_info: str | None = None
 
     # SEO
@@ -394,6 +394,23 @@ class ProductResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def resolve_brand_name(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            brand_rel = data.get("brand_relation")
+            if isinstance(brand_rel, dict) and brand_rel.get("name"):
+                brand_val = data.get("brand")
+                if not brand_val or (isinstance(brand_val, str) and len(brand_val) == 36 and "-" in brand_val):
+                    data["brand"] = brand_rel["name"]
+        elif hasattr(data, "__dict__"):
+            brand_rel = data.__dict__.get("brand_relation")
+            if brand_rel and getattr(brand_rel, "name", None):
+                brand_val = getattr(data, "brand", None)
+                if not brand_val or (isinstance(brand_val, str) and len(brand_val) == 36 and "-" in brand_val):
+                    data.brand = brand_rel.name
+        return data
+
 
 class ProductListResponse(BaseModel):
     """Paginated product list for vendor dashboard"""
@@ -415,6 +432,7 @@ class StorefrontProductResponse(BaseModel):
     id: uuid.UUID
     category_id: uuid.UUID | None = None
     category_name: str | None = None
+    category_slug: str | None = None
 
     # Basic info
     product_type: str = "simple"
@@ -450,9 +468,6 @@ class StorefrontProductResponse(BaseModel):
     model_number: str | None = None
     specifications: dict | None = None
     certifications: list | None = None
-    kmpdb_registration_number: str | None = None
-    ppb_classification: str | None = None
-    ce_marking_or_fda_clearance: str | None = None
     warranty_info: str | None = None
 
     # SEO
@@ -479,6 +494,12 @@ class StorefrontProductResponse(BaseModel):
                 brand_val = data.get("brand")
                 if not brand_val or (isinstance(brand_val, str) and len(brand_val) == 36 and "-" in brand_val):
                     data["brand"] = brand_rel["name"]
+            cat_rel = data.get("category")
+            if isinstance(cat_rel, dict):
+                if not data.get("category_name") and cat_rel.get("name"):
+                    data["category_name"] = cat_rel["name"]
+                if not data.get("category_slug") and cat_rel.get("slug"):
+                    data["category_slug"] = cat_rel["slug"]
         elif hasattr(data, "__dict__"):
             # Check ORM instance __dict__ directly to avoid triggering async lazy load / MissingGreenlet
             brand_rel = data.__dict__.get("brand_relation")
@@ -486,6 +507,12 @@ class StorefrontProductResponse(BaseModel):
                 brand_val = getattr(data, "brand", None)
                 if not brand_val or (isinstance(brand_val, str) and len(brand_val) == 36 and "-" in brand_val):
                     data.brand = brand_rel.name
+            cat_rel = data.__dict__.get("category")
+            if cat_rel:
+                if not getattr(data, "category_name", None) and getattr(cat_rel, "name", None):
+                    data.category_name = cat_rel.name
+                if not getattr(data, "category_slug", None) and getattr(cat_rel, "slug", None):
+                    data.category_slug = cat_rel.slug
         return data
 
 

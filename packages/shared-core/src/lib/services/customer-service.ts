@@ -160,8 +160,8 @@ export const customerService = {
     try {
       const response = await apiClient.get<any>('/customers/me');
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -178,9 +178,9 @@ export const customerService = {
     try {
       const response = await apiClient.put<any>('/customers/me', data);
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Profile updated successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -198,8 +198,8 @@ export const customerService = {
     try {
       const response = await apiClient.get<any>('/customers/me/loyalty');
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -220,8 +220,8 @@ export const customerService = {
     try {
       const response = await apiClient.get<any>('/customers/addresses');
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -238,9 +238,9 @@ export const customerService = {
     try {
       const response = await apiClient.post<any>('/customers/addresses', data);
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Address added successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -258,9 +258,9 @@ export const customerService = {
     try {
       const response = await apiClient.put<any>(`/customers/addresses/${id}`, data);
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Address updated successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -292,8 +292,8 @@ export const customerService = {
     try {
       const response = await apiClient.get<any>('/customers/addresses/default/shipping');
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       return null;
@@ -310,8 +310,8 @@ export const customerService = {
     try {
       const response = await apiClient.get<any>('/customers/addresses/default/billing');
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       return null;
@@ -331,9 +331,9 @@ export const customerService = {
         { type }
       );
 
-      if (response && response.data) {
+      if (response) {
         toast.success(`Default ${type} address updated`);
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -355,8 +355,8 @@ export const customerService = {
     try {
       const response = await apiClient.get<any>('/customers/wishlist');
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       return [];
@@ -376,9 +376,9 @@ export const customerService = {
         notes,
       });
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Added to wishlist');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -398,8 +398,8 @@ export const customerService = {
         notes,
       });
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -451,9 +451,9 @@ export const customerService = {
         action,
       });
 
-      if (response && response.data) {
-        toast.success(`${response.data.added_count} items added to cart`);
-        return response.data;
+      if (response) {
+        toast.success(`${response.added_count} items added to cart`);
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -475,8 +475,8 @@ export const customerService = {
     try {
       const response = await apiClient.get<any>('/customers/reviews');
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response;
       }
 
       return [];
@@ -493,9 +493,9 @@ export const customerService = {
     try {
       const response = await apiClient.post<any>('/customers/reviews', data);
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Review submitted successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');
@@ -513,9 +513,9 @@ export const customerService = {
     try {
       const response = await apiClient.put<any>(`/customers/reviews/${id}`, data);
 
-      if (response && response.data) {
+      if (response) {
         toast.success('Review updated successfully');
-        return response.data;
+        return response;
       }
 
       throw new Error('Invalid response format');

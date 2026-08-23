@@ -1,6 +1,6 @@
 export type ProductStatus = 'draft' | 'pending_review' | 'published' | 'archived';
 export type PPBClassification = 'Class A' | 'Class B' | 'Class C' | 'Class D' | 'Unclassified';
-export type StockStatus = 'instock' | 'outofstock' | 'onbackorder';
+export type StockStatus = 'instock' | 'outofstock' | 'onbackorder' | 'backorder' | 'ondemand';
 
 export interface MedicalVariantAttributes {
   folds?: 2 | 3 | 4 | 5 | number;
@@ -169,9 +169,6 @@ export interface Product {
   model_number?: string;
   specifications?: Record<string, any>;
   certifications?: string[];
-  ppb_classification?: PPBClassification;
-  ce_marking_or_fda_clearance?: string;
-  kmpdb_registration_number?: string;
   warranty_info?: string;
   meta_title?: string;
   meta_description?: string;
@@ -211,6 +208,14 @@ export interface ProductCreate {
   price?: number;
   cost_price?: number;
   base_price?: number;
+  markup_price?: number;
+  commission_fee?: number;
+  wholesale_price?: number;
+  compare_at_price?: number;
+  sale_price?: number;
+  is_on_sale?: boolean;
+  is_featured?: boolean;
+  is_clinical_pick?: boolean;
   currency?: string;
   stock_quantity?: number;
   low_stock_threshold?: number;
@@ -221,9 +226,6 @@ export interface ProductCreate {
   model_number?: string;
   specifications?: Record<string, any>;
   certifications?: string[];
-  ppb_classification?: PPBClassification;
-  ce_marking_or_fda_clearance?: string;
-  kmpdb_registration_number?: string;
   warranty_info?: string;
   meta_title?: string;
   meta_description?: string;
@@ -276,6 +278,7 @@ export interface CategoryTree {
   parent_id?: string | null;
   sort_order: number;
   is_active: boolean;
+  product_count?: number;
   children: CategoryTree[];
 }
 
@@ -393,3 +396,137 @@ export interface TagListResponse {
   page: number;
   page_size: number;
 }
+
+// ============================================================================
+// Authoritative Decoupled Catalog Architecture Types
+// ============================================================================
+
+export interface Manufacturer {
+  id: string;
+  name: string;
+  slug: string;
+  country_of_origin?: string;
+  website_url?: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AttributeDataType = 'STRING' | 'NUMBER' | 'BOOLEAN' | 'ENUM' | 'MULTI_SELECT';
+
+export interface AttributeAllowedValue {
+  id: string;
+  attribute_id: string;
+  value: string;
+  display_label: string;
+  sort_order: number;
+}
+
+export interface CategoryAttributeDefinition {
+  id: string;
+  category_id: string;
+  code: string;
+  name: string;
+  data_type: AttributeDataType;
+  unit?: string;
+  is_required: boolean;
+  is_variant_defining: boolean;
+  is_filterable: boolean;
+  is_searchable: boolean;
+  display_order: number;
+  allowed_values?: AttributeAllowedValue[];
+}
+
+export interface VariantAttributeValue {
+  id: string;
+  product_variant_id: string;
+  attribute_id: string;
+  value_text?: string;
+  value_number?: number;
+  value_boolean?: boolean;
+  allowed_value_id?: string;
+}
+
+export type SellingUnit = 'PIECE' | 'BOX' | 'PACK' | 'CARTON' | 'CASE';
+export type OfferStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' | 'OUT_OF_STOCK';
+
+export interface OfferInventory {
+  id: string;
+  vendor_offer_id: string;
+  quantity_on_hand: number;
+  quantity_reserved: number;
+  available_quantity: number;
+  low_stock_threshold: number;
+  warehouse_location?: string;
+  updated_at: string;
+}
+
+export interface VendorOffer {
+  id: string;
+  vendor_id: string;
+  product_variant_id: string;
+  vendor_sku?: string;
+  vendor_price: number;
+  compare_at_vendor_price?: number;
+  selling_unit: SellingUnit;
+  package_quantity: number;
+  min_order_quantity: number;
+  max_order_quantity?: number;
+  lead_time_days: number;
+  warranty_months: number;
+  status: OfferStatus;
+  calculated_customer_price?: number;
+  inventory?: OfferInventory;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BuyBoxCandidateResponse {
+  offer_id: string;
+  vendor_id: string;
+  vendor_name: string;
+  selling_unit: SellingUnit;
+  package_quantity: number;
+  package_display_label: string;
+  vendor_price: number;
+  customer_price: number;
+  unit_customer_price: number;
+  lead_time_days: number;
+  warranty_months: number;
+  available_stock: number;
+  is_buy_box_winner: boolean;
+}
+
+export type BundleDiscountType = 'FIXED_AMOUNT' | 'PERCENTAGE';
+
+export interface BundleComponentSummary {
+  id: string;
+  product_id: string;
+  product_name: string;
+  product_slug: string;
+  quantity: number;
+  sort_order: number;
+  gross_unit_price?: number;
+  allocated_discount?: number;
+  net_unit_price?: number;
+  winning_vendor_name?: string;
+}
+
+export interface BundleSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  discount_type: BundleDiscountType;
+  discount_value: number;
+  funding_source: string;
+  is_active: boolean;
+  is_available: boolean;
+  gross_customer_price?: number;
+  discount_amount?: number;
+  net_customer_price?: number;
+  components: BundleComponentSummary[];
+  created_at: string;
+  updated_at: string;
+}
+

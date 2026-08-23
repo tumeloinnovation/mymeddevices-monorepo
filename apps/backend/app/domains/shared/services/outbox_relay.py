@@ -39,6 +39,7 @@ class OutboxRelay:
             )
             .order_by(OutboxEvent.created_at.asc())
             .limit(limit)
+            .with_for_update(skip_locked=True)
         )
 
         result = await self.db.execute(stmt)
@@ -47,7 +48,8 @@ class OutboxRelay:
         processed_count = 0
         for event in events:
             try:
-                await self._dispatch(event)
+                async with self.db.begin_nested():
+                    await self._dispatch(event)
                 event.status = OutboxStatus.PROCESSED
                 event.processed_at = datetime.now(UTC)
                 event.last_error = None
@@ -221,14 +223,38 @@ class OutboxRelay:
             logger.info(f"Dispatching OrderShipped event for {event.aggregate_id}")
             pass
 
+        elif event.event_type == "DeliveryDispatchRetry":
+            from app.domains.logistics.models.delivery import Delivery
+            from app.domains.logistics.services.driver_assignment_service import DriverAssignmentService
+
+            delivery_result = await self.db.execute(
+                select(Delivery).where(Delivery.id == uuid.UUID(event.aggregate_id))
+            )
+            delivery = delivery_result.scalar_one_or_none()
+            if not delivery or delivery.assigned_driver_id is not None:
+                return
+
+            payload = event.payload or {}
+            assigned_driver = await DriverAssignmentService(self.db).assign_best_driver(
+                delivery_id=delivery.id,
+                pickup_location=(payload.get("pickup_latitude"), payload.get("pickup_longitude")),
+            )
+            if assigned_driver is None:
+                raise RuntimeError("No available drivers")
+
         elif event.event_type == "StaffInvitationCreated":
             payload = event.payload or {}
             email = payload.get("email")
             first_name = payload.get("first_name") or "Staff Member"
+            role = payload.get("role") or "staff"
+            temp_password = payload.get("temp_password")
             if email:
                 try:
-                    await self.email_service.send_account_welcome(
-                        user_email=email, user_name=first_name, account_id=str(event.aggregate_id)
+                    await self.email_service.send_staff_invitation(
+                        user_email=email,
+                        first_name=first_name,
+                        role=role,
+                        temp_password=temp_password,
                     )
                 except Exception as e:
                     logger.error(f"Error sending staff invitation email: {e}")

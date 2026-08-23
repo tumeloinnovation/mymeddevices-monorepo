@@ -1,14 +1,19 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.auth.models.user import User
+from app.domains.logistics.models.delivery import Delivery
+from app.domains.logistics.services.delivery_service import DeliveryService
+from app.domains.logistics.services.tracking_service import TrackingService
 from app.domains.shopping.api.dependencies import get_optional_current_user
-from app.domains.shopping.models.order import OrderStatus
+from app.domains.shopping.models.order import Order, OrderStatus
 from app.domains.shopping.schemas.order_schemas import OrderResponse
 from app.domains.shopping.services.order_service import OrderService
 
@@ -134,12 +139,106 @@ async def track_order(
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db),
 ):
-    """Track an order with full history."""
+    """Track an order using live logistics delivery progress when available."""
     service = OrderService(db)
     order = await service.get_order(order_id_or_number)
 
     if not order or (order.user_id != current_user.id and current_user.role not in ("admin", "worker")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    delivery_result = await db.execute(
+        select(Delivery)
+        .where(Delivery.order_id == order.id)
+        .options(
+            selectinload(Delivery.stops),
+            selectinload(Delivery.driver).selectinload(User.driver_profile),
+            selectinload(Delivery.proofs),
+        )
+        .order_by(Delivery.created_at.desc())
+        .limit(1)
+    )
+    delivery = delivery_result.scalar_one_or_none()
+
+    if delivery:
+        snapshot = await TrackingService(db).get_tracking(delivery.id)
+        history = [
+            {
+                "status": "pending",
+                "timestamp": order.created_at.isoformat(),
+                "description": "Order placed",
+                "location": None,
+            }
+        ]
+        history.extend(snapshot["history"])
+        return success_response(
+            {
+                "order_id": str(order.id),
+                "order_number": order.order_number if hasattr(order, "order_number") else str(order.id),
+                "status": order.status,
+                "delivery": snapshot,
+                "live_tracking": True,
+                "driver_name": snapshot["driver_name"],
+                "tracking_number": order.tracking_number if hasattr(order, "tracking_number") else None,
+                "estimated_delivery": snapshot["estimated_delivery"],
+                "stop_progress": {
+                    "current_stop_index": snapshot["current_stop_index"],
+                    "total_stops": snapshot["total_stops"],
+                    "stops": snapshot["stops"],
+                },
+                "proof_ready_events": [],
+                "history": history,
+            }
+        )
+
+    if False:
+        tracking_service = DeliveryService(db)
+        reloaded_delivery = await tracking_service.get_delivery(delivery.id)
+        if reloaded_delivery:
+            delivery = reloaded_delivery
+        sorted_stops = sorted(delivery.stops or [], key=lambda stop_item: stop_item.stop_sequence)
+        current_stop_index = next(
+            (index for index, stop_item in enumerate(sorted_stops) if stop_item.status != "completed"),
+            max(0, len(sorted_stops) - 1),
+        )
+        assigned_driver = delivery.driver
+        driver = None
+        vehicle_plate = None
+        driver_location = None
+        if assigned_driver:
+            profile = assigned_driver.driver_profile
+            driver = f"{assigned_driver.first_name or ''} {assigned_driver.last_name or ''}".strip() or None
+            vehicle_plate = profile.vehicle_plate if profile else None
+            if profile and profile.current_latitude is not None and profile.current_longitude is not None:
+                driver_location = (profile.current_latitude, profile.current_longitude)
+
+        tracking = {
+            "delivery_id": str(delivery.id),
+            "status": delivery.status.value,
+            "current_stop_index": current_stop_index,
+            "total_stops": len(sorted_stops),
+            "driver_location": driver_location,
+            "driver_name": driver,
+            "vehicle_plate": vehicle_plate,
+            "eta_minutes": delivery.estimated_duration_minutes,
+            "distance_km": delivery.calculated_distance_km,
+            "estimated_delivery": delivery.estimated_delivery,
+            "stops": [
+                {
+                    "stop_sequence": stop_item.stop_sequence,
+                    "stop_type": stop_item.stop_type,
+                    "latitude": stop_item.latitude,
+                    "longitude": stop_item.longitude,
+                    "address": stop_item.address,
+                    "vendor_name": stop_item.vendor_name,
+                    "status": stop_item.status,
+                }
+                for stop_item in sorted_stops
+            ],
+        }
+    else:
+        current_stop_index = 0
+        stops = []
+        driver = None
 
     # Build tracking history (simplified - should be from a tracking_history table)
     history = [
@@ -150,14 +249,22 @@ async def track_order(
             "location": None,
         }
     ]
-
-    if hasattr(order, "updated_at") and order.status != "pending":
+    for event in sorted(order.timeline_events or [], key=lambda item: item.created_at):
         history.append(
             {
-                "status": order.status,
-                "timestamp": order.updated_at.isoformat(),
-                "description": f"Order {order.status}",
+                "status": str(event.status),
+                "timestamp": event.created_at.isoformat(),
+                "description": event.message,
                 "location": None,
+            }
+        )
+    if delivery and delivery.actual_delivery:
+        history.append(
+            {
+                "status": "delivered",
+                "timestamp": delivery.actual_delivery.isoformat(),
+                "description": "Delivery completed",
+                "location": delivery.delivery_address.get("address") if delivery.delivery_address else None,
             }
         )
 
@@ -166,11 +273,29 @@ async def track_order(
             "order_id": str(order.id),
             "order_number": order.order_number if hasattr(order, "order_number") else str(order.id),
             "status": order.status,
+            "delivery": tracking if delivery else None,
+            "live_tracking": bool(delivery),
+            "driver_name": driver,
             "tracking_number": order.tracking_number if hasattr(order, "tracking_number") else None,
             "tracking_url": f"https://example.com/track/{order.tracking_number}"
             if hasattr(order, "tracking_number") and order.tracking_number
             else None,
-            "estimated_delivery": order.estimated_delivery if hasattr(order, "estimated_delivery") else None,
+            "estimated_delivery": delivery.estimated_delivery
+            if delivery
+            else getattr(order, "estimated_delivery", None),
+            "stop_progress": {
+                "current_stop_index": current_stop_index,
+                "total_stops": len(stops),
+                "stops": tracking["stops"] if delivery else [],
+            },
+            "proof_ready_events": [
+                {
+                    "proof_type": proof.proof_type.value,
+                    "captured_at": proof.captured_at.isoformat(),
+                    "proof_data": proof.proof_data,
+                }
+                for proof in ((delivery.proofs or []) if delivery else [])
+            ],
             "history": history,
         }
     )
@@ -190,36 +315,49 @@ async def cancel_order(
     if not order or (order.user_id != current_user.id and current_user.role not in ("admin", "worker")):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
-    # Check if order can be cancelled
-    if order.status not in ["pending", "processing"]:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail=f"Cannot cancel order with status '{order.status}'"
-        )
-
-    # Update order status
-    order.status = OrderStatus.CANCELLED
-    if hasattr(order, "cancellation_reason"):
-        order.cancellation_reason = reason
-
-    # Restore stock for cancelled order items (prevents inventory loss on cancellation)
+    # Atomically update order status to CANCELLED only if currently in cancellable status
     from sqlalchemy import select, update
 
+    from app.core.database import result_rowcount
     from app.domains.catalog.models.product import Product
+    from app.domains.catalog.models.product_variant import ProductVariant
     from app.domains.shopping.models.order import OrderItem
 
+    status_update_stmt = (
+        update(Order)
+        .where(
+            Order.id == order.id,
+            Order.status.in_([OrderStatus.PENDING, OrderStatus.PROCESSING]),
+        )
+        .values(status=OrderStatus.CANCELLED)
+    )
+    update_res = await db.execute(status_update_stmt)
+    if result_rowcount(update_res) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Order cannot be cancelled because its current status is '{order.status}'",
+        )
+
+    # Restore stock for cancelled order items (prevents inventory loss or duplicate restoration)
     items_stmt = select(OrderItem).where(OrderItem.order_id == order.id)
     items_result = await db.execute(items_stmt)
     for item in items_result.scalars().all():
+        if item.product_variant_id:
+            await db.execute(
+                update(ProductVariant)
+                .where(ProductVariant.id == item.product_variant_id)
+                .values(stock_quantity=ProductVariant.stock_quantity + int(item.quantity))
+            )
         await db.execute(
             update(Product)
             .where(Product.id == item.product_id)
-            .values(stock_quantity=Product.stock_quantity + item.quantity)
+            .values(stock_quantity=Product.stock_quantity + int(item.quantity))
         )
 
     await db.commit()
-    await db.refresh(order)
+    reloaded_order = await service.get_order(str(order.id))
 
-    return success_response(order)
+    return success_response(reloaded_order)
 
 
 @router.post("/{order_id_or_number}/refund", response_model=ApiSuccessResponse[dict])

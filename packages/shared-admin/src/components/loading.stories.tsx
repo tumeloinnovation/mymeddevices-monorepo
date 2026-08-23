@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react"
-import { FullPageLoading, LoadingSpinner, InlineLoading, TableLoading, CardLoading, Skeleton } from "./page-loading"
+import { FullPageLoading, LoadingSpinner, TableLoading, CardLoading, Skeleton } from "./page-loading"
 
 const meta = {
   title: "Components/Loading",
@@ -21,7 +21,7 @@ export const FullPage: Story = {
 }
 
 export const Inline: Story = {
-  render: () => <InlineLoading message="Loading..." />,
+  render: () => <LoadingSpinner size="sm" />,
 }
 
 export const Table: Story = {

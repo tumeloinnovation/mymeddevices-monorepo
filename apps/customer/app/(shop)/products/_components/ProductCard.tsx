@@ -102,8 +102,13 @@ interface ProductCardProps {
   };
 
   const handleAddToCart = () => {
-    // Bundles require configuration on the detail page
-    if (product?.type === 'bundle') {
+    // Bundles and variable products require configuration/selection on the detail page
+    if (
+      product?.type === 'bundle' ||
+      product?.product_type === 'bundle' ||
+      product?.product_type === 'variable' ||
+      ((product as any)?.variants && (product as any)?.variants.length > 0)
+    ) {
       router.push(`/products/${slug}`);
       return;
     }
@@ -166,22 +171,16 @@ interface ProductCardProps {
           />
 
           {/* Status Badges */}
-          <div className="absolute left-2 top-2 flex flex-col gap-1 z-10">
-            {product?.type === 'variable' && (
-              <div className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wider">
-                {product.variants?.length ? `${product.variants.length} Options` : 'Variable'}
+          <div className="absolute left-2 top-2 z-10">
+            {hasDiscount && originalPrice ? (
+              <div className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm tracking-wider">
+                -{Math.round(((originalPrice - price) / originalPrice) * 100)}%
               </div>
-            )}
-            {hasDiscount && (
-              <div className="bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wider">
-                Sale
-              </div>
-            )}
-            {isNew && (
+            ) : isNew ? (
               <div className="bg-primary text-primary-foreground text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wider">
                 New
               </div>
-            )}
+            ) : null}
           </div>
 
           {/* Rating - Using popularity_score as proxy; will be replaced when review system is implemented */}
@@ -335,7 +334,7 @@ interface ProductCardProps {
                       >
                         Out of stock
                       </Button>
-                    ) : product?.type === 'bundle' ? (
+                    ) : (product?.type === 'bundle' || product?.product_type === 'bundle') ? (
                       <Button
                         onClick={() => router.push(`/products/${slug}`)}
                         className="w-full h-full rounded-md shadow-sm text-xs font-medium bg-amber-600 hover:bg-amber-500 text-white flex items-center justify-center gap-1.5"
@@ -343,6 +342,15 @@ interface ProductCardProps {
                       >
                         <ShoppingCart className="h-4 w-4" />
                         Configure Bundle
+                      </Button>
+                    ) : (product?.product_type === 'variable' || ((product as any)?.variants && (product as any)?.variants.length > 0)) ? (
+                      <Button
+                        onClick={() => router.push(`/products/${slug}`)}
+                        className="w-full h-full rounded-md shadow-sm text-xs font-medium bg-primary/90 hover:bg-primary text-white flex items-center justify-center gap-1.5"
+                        aria-label="Select options"
+                      >
+                        <ShoppingCart className="h-4 w-4" />
+                        Select Options
                       </Button>
                     ) : (
                       <Button
@@ -362,14 +370,16 @@ interface ProductCardProps {
                     animate={{ opacity: 1, scale: 1 }}
                     exit={{ opacity: 0, scale: 0.95 }}
                     transition={{ duration: 0.2, ease: [0.23, 1, 0.32, 1] }}
+                    onClick={(e) => e.stopPropagation()}
                     className="flex items-center justify-between h-full bg-muted/60 dark:bg-muted/30 backdrop-blur-md shadow-sm px-1 py-1 rounded-lg border border-border"
                   >
                     {/* Quantity controls */}
-                    <div className="flex items-center gap-0.5">
+                    <div className="flex items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => {
+                        onClick={(e) => {
+                          e.stopPropagation();
                           const newQuantity = quantity - 1;
                           if (newQuantity <= 0) {
                             removeFromCart(product.id);
@@ -396,7 +406,10 @@ interface ProductCardProps {
                       <Button
                         variant="ghost"
                         size="icon"
-                        onClick={() => updateCartQuantity(product.id, quantity + 1)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateCartQuantity(product.id, quantity + 1);
+                        }}
                         aria-label="Increase"
                         className="h-8 w-8 active:scale-[0.9] transition-transform duration-150 ease-out"
                       >
@@ -405,9 +418,12 @@ interface ProductCardProps {
                     </div>
 
                     {/* Added indicator + clear */}
-                    <div className="flex items-center">
+                    <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
                       <button
-                        onClick={() => removeFromCart(product.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFromCart(product.id);
+                        }}
                         aria-label="Remove item"
                         className="inline-flex items-center justify-center w-8 h-8 rounded-md border border-border text-muted-foreground hover:bg-accent active:scale-[0.9] transition-all duration-150 ease-out"
                       >

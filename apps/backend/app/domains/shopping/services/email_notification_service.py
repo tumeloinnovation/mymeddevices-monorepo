@@ -121,15 +121,49 @@ class EmailNotificationService:
         await send_email(vendor_email, subject, body, html_content)
         logger.info(f"Vendor order with items email sent to {vendor_email}")
 
-    async def send_account_welcome(self, user_email: str, user_name: str, account_id: str):
+    async def send_account_welcome(
+        self,
+        user_email: str,
+        user_name: str,
+        account_id: str | None = None,
+        role: str | None = None,
+        temp_password: str | None = None,
+        verify_url: str | None = None,
+    ):
         html_content = email_templates.account_welcome_html(
-            user_name=user_name, account_id=account_id, verify_url=f"{self.site_url}/verify"
+            user_name=user_name,
+            user_email=user_email,
+            role=role,
+            account_id=account_id,
+            temp_password=temp_password,
+            verify_url=verify_url or f"{self.site_url}/verify",
         )
         subject = "Welcome to MyMedDevices!"
-        body = f"Hi {user_name}, welcome to MyMedDevices!"
+        body = f"Hi {user_name}, welcome to MyMedDevices! Your account has been created."
 
         await send_email(user_email, subject, body, html_content)
         logger.info(f"Account welcome email sent to {user_email}")
+
+    async def send_staff_invitation(
+        self,
+        user_email: str,
+        first_name: str,
+        role: str,
+        temp_password: str | None = None,
+        login_url: str | None = None,
+    ):
+        html_content = email_templates.staff_invite_html(
+            first_name=first_name,
+            email=user_email,
+            role=role,
+            temp_password=temp_password,
+            login_url=login_url or f"{self.site_url}/auth/login",
+        )
+        subject = f"Invitation to Join MyMedDevices — {role.title()}"
+        body = f"Hi {first_name}, you have been invited to join MyMedDevices as a {role}."
+
+        await send_email(user_email, subject, body, html_content)
+        logger.info(f"Staff invitation email sent to {user_email}")
 
     async def send_otp(self, user_email: str, otp_code: str, purpose: str = "verification"):
         title = "Email Verification"
@@ -163,3 +197,21 @@ class EmailNotificationService:
 
         await send_email(user_email, subject, body, html_content)
         logger.info(f"OTP email sent to {user_email}")
+
+    async def send_password_reset_notification(
+        self,
+        user_email: str,
+        user_name: str,
+        force_change: bool = True,
+    ):
+        """Send notification when admin resets a user's password"""
+        html_content = email_templates.admin_password_reset_html(
+            user_name=user_name,
+            force_change=force_change,
+            login_url=f"{self.site_url}/auth/login",
+        )
+        subject = "Your Password Has Been Reset"
+        body = f"Hi {user_name}, your account password has been reset by an administrator."
+
+        await send_email(user_email, subject, body, html_content)
+        logger.info(f"Password reset notification sent to {user_email}")

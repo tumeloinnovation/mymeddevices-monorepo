@@ -62,8 +62,10 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = ", ".join(permissions_policy)
 
         # Cross-Origin policies for better isolation
+        # Note: Cross-Origin-Resource-Policy is set to 'same-site' instead of 'same-origin'
+        # to allow CORS requests from mobile devices and other origins while maintaining security
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
-        response.headers["Cross-Origin-Resource-Policy"] = "same-origin"
+        response.headers["Cross-Origin-Resource-Policy"] = "same-site"
 
         # Content-Security-Policy
         path = request.url.path

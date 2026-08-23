@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider as QCProvider } from '@tanstack/react-
 import { ReactNode, useState } from 'react';
 import { ThemeProvider } from '@mymeddevices/ui/components/theme-provider';
 import { SessionExpiredWatcher } from '@/components/auth/SessionExpiredWatcher';
+import { useSessionValidation } from '@mymeddevices/shared-core';
 import { ShopFiltersProvider } from '@/lib/context/ShopFiltersContext';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { CartInitializer } from '@/components/cart/CartInitializer';
@@ -54,6 +55,9 @@ function getQueryClient() {
 export default function Providers({ children }: ProvidersProps) {
   // Initialize QueryClient on first render
   const [queryClient] = useState(() => getQueryClient());
+
+  // Proactively refresh the access token before it expires (silent session renewal)
+  useSessionValidation(5 * 60 * 1000);
 
   return (
     <QCProvider client={queryClient}>

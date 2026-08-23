@@ -1,10 +1,11 @@
 "use client";
 
-import { forwardRef } from "react";
-import { useNavigationTransition } from "@/lib/hooks/useNavigationTransition";
+import { forwardRef, useTransition } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { cn } from "../../lib/utils";
 
-interface NavigationLinkProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchorElement>, 'href'> {
+interface NavigationLinkProps extends React.AnchorHTMLAttributes<HTMLAnchorElement> {
   href: string;
   replace?: boolean;
   children: React.ReactNode;
@@ -14,16 +15,25 @@ interface NavigationLinkProps extends Omit<React.AnchorHTMLAttributes<HTMLAnchor
 
 export const NavigationLink = forwardRef<HTMLAnchorElement, NavigationLinkProps>(
   ({ href, replace, children, className, pendingClassName, onClick, ...props }, ref) => {
-    const { isPending, navigate } = useNavigationTransition();
+    const router = useRouter();
+    const [isPending, startTransition] = useTransition();
 
     const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
-      e.preventDefault();
-      navigate(href, { replace });
       onClick?.(e);
+      if (!e.defaultPrevented) {
+        e.preventDefault();
+        startTransition(() => {
+          if (replace) {
+            router.replace(href);
+          } else {
+            router.push(href);
+          }
+        });
+      }
     };
 
     return (
-      <a
+      <Link
         ref={ref}
         href={href}
         onClick={handleClick}
@@ -34,7 +44,7 @@ export const NavigationLink = forwardRef<HTMLAnchorElement, NavigationLinkProps>
         {...props}
       >
         {children}
-      </a>
+      </Link>
     );
   }
 );

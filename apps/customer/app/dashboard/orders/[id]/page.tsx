@@ -302,6 +302,29 @@ export default function OrderDetailPage() {
                                     )}
                                 </span>
                             </div>
+                            <div className="flex justify-between text-sm">
+                                <span className="text-muted-foreground">VAT (16%)</span>
+                                <span>
+                                    Ksh{' '}
+                                    {formatCurrency(
+                                        Number(
+                                            (order as any).tax_amount ??
+                                            (order as any).shipping_address?.tax_amount ??
+                                            Math.round(
+                                                Math.max(
+                                                    0,
+                                                    ((order as any).subtotal ||
+                                                        order.items.reduce(
+                                                            (sum, item) => sum + parseFloat(item.total_price || String((item as any).subtotal || 0)),
+                                                            0
+                                                        )) -
+                                                    Number((order as any).discount_amount || (order as any).shipping_address?.discount_amount || 0)
+                                                ) * 0.16
+                                            )
+                                        )
+                                    )}
+                                </span>
+                            </div>
                             {Number((order as any).discount_amount || (order as any).shipping_address?.discount_amount || 0) > 0 && (
                                 <div className="flex justify-between text-sm text-green-600 font-medium">
                                     <span>Discount</span>

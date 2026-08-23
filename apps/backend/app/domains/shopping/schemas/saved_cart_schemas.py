@@ -8,7 +8,7 @@ class SavedCartItemCreate(BaseModel):
     """Schema for adding an item to a saved cart."""
 
     product_id: uuid.UUID
-    quantity: int = Field(gt=0, le=99)
+    quantity: int = Field(gt=0, le=9999)
     notes: str | None = Field(None, max_length=500)
 
 

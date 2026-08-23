@@ -49,6 +49,7 @@ export function useCheckoutLogic() {
         mpesaPhone: '',
     });
     const [shipping, setShipping] = useState(0);
+    const [tax, setTax] = useState(0);
     const [shippingMethod, setShippingMethod] = useState<{
         methodId?: string;
         methodName?: string;
@@ -64,6 +65,8 @@ export function useCheckoutLogic() {
     const [isPending, setIsPending] = useState(false);
     const [orderNotes, setOrderNotes] = useState('');
     const [pointsToRedeem, setPointsToRedeem] = useState<number>(0);
+    const [successfulOrder, setSuccessfulOrder] = useState<{ id: string; orderNumber?: string | number } | null>(null);
+    const [isRedirecting, setIsRedirecting] = useState(false);
 
     // Coupon state
     const [couponCode, setCouponCode] = useState('');
@@ -191,14 +194,16 @@ export function useCheckoutLogic() {
 
             if (response && response.data) {
                 const shippingAmount = response.data.shipping_amount || 0;
+                const taxAmount = response.data.tax_amount || 0;
                 setShipping(shippingAmount);
+                setTax(taxAmount);
                 setShippingMethod({
                     methodId: 'calculated',
                     methodName: 'Calculated Shipping',
                     zoneId: 1,
                     zoneName: region || 'Default Zone',
                 });
-                console.log('[Checkout] Shipping calculated:', shippingAmount);
+                console.log('[Checkout] Shipping calculated:', shippingAmount, 'Tax:', taxAmount);
             } else {
                 throw new Error('Invalid response from shipping API');
             }
@@ -235,6 +240,9 @@ export function useCheckoutLogic() {
             if (data && data.is_valid) {
                 setAppliedCoupon(data);
                 toast.success(data.message || 'Coupon applied successfully!');
+                if (delivery && delivery.region) {
+                    fetchShippingRates(delivery.region, subtotal);
+                }
             } else {
                 toast.error(data?.message || 'Invalid coupon code');
             }
@@ -253,6 +261,9 @@ export function useCheckoutLogic() {
             setAppliedCoupon(null);
             setCouponCode('');
             toast.success('Coupon removed');
+            if (delivery && delivery.region) {
+                fetchShippingRates(delivery.region, subtotal);
+            }
         } catch (error) {
             toast.error('Failed to remove coupon');
         }
@@ -293,28 +304,46 @@ export function useCheckoutLogic() {
     };
 
     const handleCheckout = async () => {
-        const total = subtotal + shipping + PACKAGING_FEE + SERVICES_FEE;
-        const customerData = getCustomerData();
-        const formattedPhone = formatPhoneNumber(customerData.phone);
-
-        if (!customerData.name || !customerData.phone || !customerData.email || !delivery) {
-            if (!delivery) setActiveStep(0);
-            else if (!isAuthenticated) setActiveStep(1);
-            toast.error('Please complete all required fields');
-            return;
-        }
-
-        if (items.length === 0) {
-            toast.error('Your cart is empty.');
-            return;
-        }
-
-        setIsPending(true);
-
+        console.log('[Checkout] handleCheckout called');
         try {
-            // First, sync any local items to backend cart
-            console.log('[Checkout] Starting checkout, local items:', items.length);
-            toast.loading('Syncing cart...', { id: 'cart-sync' });
+            const total = subtotal + shipping + PACKAGING_FEE + SERVICES_FEE;
+            const customerData = getCustomerData();
+            const formattedPhone = formatPhoneNumber(customerData.phone);
+
+            console.log('[Checkout] Validation check:', {
+                customerData,
+                delivery,
+                items: items.length,
+            });
+
+            if (!customerData.name || !customerData.phone || !customerData.email || !delivery) {
+                console.log('[Checkout] Validation failed:', {
+                    hasName: !!customerData.name,
+                    hasPhone: !!customerData.phone,
+                    hasEmail: !!customerData.email,
+                    hasDelivery: !!delivery,
+                });
+                if (!delivery) setActiveStep(0);
+                else if (!customerData.name || !customerData.phone || !customerData.email) setActiveStep(1);
+                toast.error('Please complete all required fields');
+                return;
+            }
+
+            if (items.length === 0) {
+                console.log('[Checkout] Cart is empty');
+                toast.error('Your cart is empty.');
+                return;
+            }
+
+            console.log('[Checkout] All validations passed, starting checkout process');
+            setIsPending(true);
+
+            try {
+                // First, sync any local items to backend cart
+                console.log('[Checkout] Starting checkout, local items:', items.length);
+                console.log('[Checkout] Customer data:', customerData);
+                console.log('[Checkout] Delivery:', delivery);
+                toast.loading('Preparing your order...', { id: 'checkout-prepare' });
 
             // Only attempt merge if authenticated user has a guest token to merge
             const activeCartToken = useCartStore.getState().cartToken;
@@ -366,7 +395,7 @@ export function useCheckoutLogic() {
                 cart = syncedCart;
             }
             console.log('[Checkout] Cart after sync:', cart ? `${cart.id} (active: ${cart.is_active}, items: ${cart.items?.length || 0})` : 'null');
-            toast.success('Cart synced', { id: 'cart-sync' });
+            toast.success('Cart ready', { id: 'checkout-prepare' });
 
             if (!cart.items || cart.items.length === 0) {
                 throw new Error('Your cart is empty. Please add items before checkout.');
@@ -376,6 +405,8 @@ export function useCheckoutLogic() {
             const shippingAddress = {
                 first_name: guestCustomer.firstName || customerData.name.split(' ')[0] || 'Guest',
                 last_name: guestCustomer.lastName || customerData.name.split(' ').slice(1).join(' ') || '',
+                full_name: customerData.name,
+                street: delivery.address, // For compatibility with backend schema
                 address_line1: delivery.address,
                 address_line2: delivery.address_2 || '',
                 city: delivery.city || 'Nairobi',
@@ -425,25 +456,80 @@ export function useCheckoutLogic() {
 
             toast.success(`Order #${orderNumber} placed successfully!`);
 
-            // Clear cart locally and redirect (include guest_token param for guest orders)
+            // Store successful order info for fallback UI
+            setSuccessfulOrder({ id: orderId, orderNumber });
+
+            // Clear cart locally
             clearLocalOnly();
+
             const guestParam = orderGuestToken ? `?guest_token=${encodeURIComponent(orderGuestToken)}` : '';
-            router.push(`/orders/${orderId}${guestParam}`);
+            const redirectUrl = `/orders/${orderId}${guestParam}`;
+
+            // Set redirecting state to prevent UI interference
+            setIsRedirecting(true);
+
+            // Redirect using Next.js router
+            await router.push(redirectUrl);
         } catch (error: any) {
             console.error('Checkout error:', error);
             let errorMessage = error?.message || 'Failed to place order. Please try again.';
+            console.error('Checkout error details:', {
+                message: error?.message,
+                response: error?.response?.data,
+                status: error?.response?.status,
+                name: error?.name,
+                stack: error?.stack,
+            });
+
+            // Log the full error for debugging
+            console.error('Full error object:', error);
 
             // Handle duplicate checkout attempts more gracefully
             if (errorMessage.includes('no longer active') || errorMessage.includes('already been checked out')) {
-                errorMessage = 'This order has already been processed. Redirecting to your orders...';
-                // Redirect to orders page after a short delay
-                setTimeout(() => {
-                    router.push('/dashboard/orders');
-                }, 2000);
+                toast.info('This order has already been processed. Redirecting to your orders...');
+                // Redirect to orders page
+                await router.push('/dashboard/orders');
+                return; // Return early to avoid showing error toast
             }
 
-            toast.error(errorMessage);
+            // Handle network errors
+            if (error?.code === 'ECONNREFUSED' || error?.code === 'ERR_NETWORK') {
+                errorMessage = 'Network error. Please check your connection and try again.';
+            }
+
+            // Handle validation errors
+            if (error?.response?.status === 400 || error?.status === 400) {
+                const detail = error?.response?.data?.detail || error?.detail;
+                if (detail) {
+                    errorMessage = Array.isArray(detail) ? detail.join(', ') : detail;
+                }
+            }
+
+            // Handle 401/403 errors
+            if (error?.response?.status === 401 || error?.status === 401) {
+                errorMessage = 'Your session has expired. Please login again.';
+            }
+
+            if (error?.response?.status === 403 || error?.status === 403) {
+                errorMessage = 'You do not have permission to complete this action.';
+            }
+
+            // Handle 500 errors
+            if (error?.response?.status === 500 || error?.status === 500) {
+                errorMessage = 'Server error. Please try again later.';
+            }
+
+            toast.error(errorMessage, { duration: 5000 });
         } finally {
+            // Don't clear pending state if redirecting to avoid UI interference
+            if (!isRedirecting) {
+                setIsPending(false);
+            }
+            setIsProcessingMpesa(false);
+        }
+        } catch (unexpectedError: any) {
+            console.error('Unexpected error in handleCheckout:', unexpectedError);
+            toast.error('An unexpected error occurred. Please try again.');
             setIsPending(false);
             setIsProcessingMpesa(false);
         }
@@ -462,6 +548,7 @@ export function useCheckoutLogic() {
         customer: guestCustomer,
         setCustomer: setGuestCustomer,
         shipping,
+        tax,
         shippingMethod,
         shippingLoading,
         calculateRequested,
@@ -490,5 +577,7 @@ export function useCheckoutLogic() {
         setOrderNotes,
         pointsToRedeem,
         setPointsToRedeem,
+        successfulOrder,
+        isRedirecting,
     };
 }

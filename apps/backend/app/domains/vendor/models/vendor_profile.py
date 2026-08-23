@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from app.domains.auth.models.user import User
@@ -95,8 +95,15 @@ class VendorProfile(Base, IDMixin, AuditMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    # Relationship to User
-    user: Mapped["User"] = relationship("User", back_populates="vendor_profile", foreign_keys=[user_id])
+    # Relationships to User
+    # Primary user relationship (the vendor's own account)
+    user: Mapped["User"] = relationship(
+        "User", back_populates="vendor_profile", foreign_keys=[user_id]
+    )
+    # Admin who approved this vendor profile
+    approved_by_user: Mapped[Optional["User"]] = relationship(
+        "User", foreign_keys=[approved_by]
+    )
 
     # Note: Access ledger transactions through vendor_ledger.transactions relationship
     # This avoids circular import issues with LedgerTransaction model

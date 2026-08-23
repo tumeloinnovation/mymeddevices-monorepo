@@ -1,6 +1,10 @@
+"""Shipping service - compatibility wrapper for legacy shipment operations.
+
+@deprecated Use DeliveryService from logistics domain instead.
+"""
+
 import uuid
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,8 +16,23 @@ from app.domains.shopping.schemas.shipment_schemas import MockShipmentProcess
 
 
 class ShippingService:
+    """Compatibility wrapper for legacy shipment operations.
+
+    This service provides backwards compatibility for the old Shipment model
+    while delegating to the new logistics domain's DeliveryService.
+    """
+
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._delivery_service = None
+
+    @property
+    def delivery_service(self) -> "DeliveryService":
+        """Lazy load the DeliveryService to avoid circular imports."""
+        if self._delivery_service is None:
+            from app.domains.logistics.services.delivery_service import DeliveryService
+            self._delivery_service = DeliveryService(self.db)
+        return self._delivery_service
 
     @asynccontextmanager
     async def _transaction(self):
@@ -26,6 +45,10 @@ class ShippingService:
                 yield
 
     async def process_mock_shipment(self, data: MockShipmentProcess) -> Shipment:
+        """Legacy method - delegates to DeliveryService.
+
+        @deprecated Use DeliveryService.create_delivery_from_order() instead.
+        """
         # 1. Fetch order
         stmt = select(Order).where(Order.id == data.order_id)
         result = await self.db.execute(stmt)
@@ -37,22 +60,27 @@ class ShippingService:
         if order.status not in (OrderStatus.PROCESSING, OrderStatus.PENDING):
             raise BusinessRuleError(f"Cannot ship order in status: {order.status}. Must be 'processing'.")
 
-        # 2. Simulate shipping process
-        tracking_number = f"TRK-{uuid.uuid4().hex[:12].upper()}"
-        estimated_delivery = datetime.now(UTC) + timedelta(days=3)
+        # 2. Create delivery using logistics domain
+        delivery = await self.delivery_service.create_delivery_from_order(data.order_id)
 
+        # 3. Create legacy Shipment for backwards compatibility
         shipment = Shipment(
-            id=uuid.uuid4(),
-            order_id=order.id,
-            tracking_number=tracking_number,
-            carrier=data.carrier,
-            status=ShipmentStatus.IN_TRANSIT,
-            estimated_delivery=estimated_delivery,
-            shipping_details={"mock": True, "origin": "Main Warehouse", "destination": order.shipping_address},
+            id=delivery.id,  # Use same ID for easy mapping
+            order_id=delivery.order_id,
+            tracking_number=delivery.tracking_number,
+            carrier=delivery.carrier,
+            status=ShipmentStatus.IN_TRANSIT,  # Map delivery status to shipment status
+            estimated_delivery=delivery.estimated_delivery,
+            shipping_details={
+                "logistics_type": delivery.logistics_type.value,
+                "route_coordinates": delivery.route_coordinates,
+                "distance_km": delivery.calculated_distance_km,
+            },
         )
+
         self.db.add(shipment)
 
-        # 3. Update order status
+        # 4. Update order status
         order.status = OrderStatus.SHIPPED
 
         # Use transaction for atomic shipment creation
@@ -63,6 +91,10 @@ class ShippingService:
         return shipment
 
     async def get_shipment_by_order(self, order_id: uuid.UUID) -> Shipment | None:
+        """Get shipment by order ID.
+
+        @deprecated Use DeliveryService.get_delivery() instead.
+        """
         stmt = select(Shipment).where(Shipment.order_id == order_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()

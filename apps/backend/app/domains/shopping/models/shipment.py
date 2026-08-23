@@ -28,7 +28,11 @@ class Shipment(Base, IDMixin, AuditMixin):
     tracking_number: Mapped[str | None] = mapped_column(String(100), unique=True, nullable=True)
     carrier: Mapped[str | None] = mapped_column(String(50), nullable=True)
     status: Mapped[ShipmentStatus] = mapped_column(
-        SQLEnum(ShipmentStatus), default=ShipmentStatus.CREATED, nullable=False, index=True
+        SQLEnum(ShipmentStatus, name="shipmentstatus", values_callable=lambda obj: [e.value for e in obj]),
+        server_default="created",
+        default=ShipmentStatus.CREATED,
+        nullable=False,
+        index=True,
     )
     estimated_delivery: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     shipping_details: Mapped[dict | None] = mapped_column(JSON, nullable=True)

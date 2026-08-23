@@ -44,7 +44,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = ""  # Default empty, validated at runtime
     JWT_PRIVATE_KEY: str | None = None
     JWT_PUBLIC_KEY: str | None = None
-    ALGORITHM: str = "RS256"
+    ALGORITHM: str = "HS256"  # Using HS256 for development (simpler than RSA)
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
@@ -58,13 +58,40 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3002",
     ]
     ADDITIONAL_ALLOWED_ORIGINS: list[str] = []
+    # Allow local network origins for mobile testing in development
+    # Enables wildcard patterns like http://192.168.*:* for same-network mobile access
+    ALLOW_LOCAL_NETWORK: bool = True
 
     @property
     def cors_origins(self) -> list[str]:
+        """Get list of allowed CORS origins with optional wildcard support."""
         origins = list(self.ALLOWED_ORIGINS)
+
+        # Add any additional explicitly configured origins
         for extra in self.ADDITIONAL_ALLOWED_ORIGINS:
             if extra and extra not in origins:
                 origins.append(extra)
+
+        # In development, add wildcard patterns for local network access
+        # This enables mobile testing from devices on the same network
+        if self.ALLOW_LOCAL_NETWORK and self.ENVIRONMENT.lower() in ("development", "dev", "local"):
+            # localhost with any port
+            origins.extend(["http://localhost:*", "http://127.0.0.1:*"])
+
+            # Private network ranges (RFC 1918) for local mobile testing
+            # 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+            origins.extend([
+                "http://10.*:*",
+                "http://172.16.*:*",
+                "http://172.17.*:*",
+                "http://172.18.*:*",
+                "http://172.19.*:*",
+                "http://172.2*.*:*",
+                "http://172.30.*:*",
+                "http://172.31.*:*",
+                "http://192.168.*:*",
+            ])
+
         return origins
 
     # HostPinnacle SMS Settings
@@ -106,6 +133,7 @@ class Settings(BaseSettings):
     GEMINI_MODEL: str = "gemini-2.5-flash"
     UPLOAD_DIR: str = "static/uploads/products"
     AVATAR_UPLOAD_DIR: str = "static/uploads/avatars"
+    DELIVERY_PROOF_UPLOAD_DIR: str = "static/uploads/delivery-proofs"
 
     # Typesense Settings
     TYPESENSE_HOST: str = "localhost"
@@ -115,6 +143,10 @@ class Settings(BaseSettings):
 
     # Google Maps API Settings
     GOOGLE_MAPS_API_KEY: str | None = None
+
+    # OpenStreetMap routing
+    OSRM_BASE_URL: str | None = None
+    OSRM_TIMEOUT_SECONDS: float = 3.0
 
     # Redis (Rate Limiting)
     REDIS_URL: str | None = "redis://localhost:6379/0"

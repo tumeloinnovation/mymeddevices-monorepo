@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useFormContext } from "react-hook-form";
-import { Package, Sparkles } from "lucide-react";
+import { Package, Sparkles, CheckCircle2, XCircle, Clock, Layers } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../ui/card";
 import { Input } from "../../../ui/input";
 import { Label } from "../../../ui/label";
@@ -11,8 +11,41 @@ import { Switch } from "../../../ui/switch";
 import { Separator } from "../../../ui/separator";
 import { ProductWizardFormData } from "../product-wizard-schema";
 import { useProductWizardStore } from "../use-product-wizard-store";
-import { StepVariants } from "./StepVariants";
-import { StepBundle } from "./StepBundle";
+
+const STOCK_STATUS_OPTIONS = [
+  {
+    value: "instock",
+    label: "In Stock",
+    icon: CheckCircle2,
+    desc: "Available for immediate order",
+    selectedClass: "bg-emerald-50/80 border-emerald-500 text-emerald-900 dark:bg-emerald-950/40 dark:border-emerald-500 dark:text-emerald-200 shadow-sm",
+    iconColor: "text-emerald-600 dark:text-emerald-400",
+  },
+  {
+    value: "outofstock",
+    label: "Out of Stock",
+    icon: XCircle,
+    desc: "Temporarily unavailable",
+    selectedClass: "bg-rose-50/80 border-rose-500 text-rose-900 dark:bg-rose-950/40 dark:border-rose-500 dark:text-rose-200 shadow-sm",
+    iconColor: "text-rose-600 dark:text-rose-400",
+  },
+  {
+    value: "backorder",
+    label: "Backorder",
+    icon: Clock,
+    desc: "Orders accepted, delayed delivery",
+    selectedClass: "bg-amber-50/80 border-amber-500 text-amber-900 dark:bg-amber-950/40 dark:border-amber-500 dark:text-amber-200 shadow-sm",
+    iconColor: "text-amber-600 dark:text-amber-400",
+  },
+  {
+    value: "ondemand",
+    label: "On Demand",
+    icon: Layers,
+    desc: "Special manufacturing order",
+    selectedClass: "bg-blue-50/80 border-blue-500 text-blue-900 dark:bg-blue-950/40 dark:border-blue-500 dark:text-blue-200 shadow-sm",
+    iconColor: "text-blue-600 dark:text-blue-400",
+  },
+];
 
 export function StepInventory() {
   const { register, watch, setValue, formState: { errors } } = useFormContext<ProductWizardFormData>();
@@ -48,29 +81,26 @@ export function StepInventory() {
             <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">
               Stock Availability Status
             </Label>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-              {[
-                { value: "instock", label: "In Stock", icon: "✓", desc: "Available for immediate order" },
-                { value: "outofstock", label: "Out of Stock", icon: "✕", desc: "Temporarily unavailable" },
-                { value: "backorder", label: "Backorder", icon: "⏳", desc: "Orders accepted, delayed delivery" },
-                { value: "ondemand", label: "On Demand", icon: "◉", desc: "Special manufacturing order" },
-              ].map((st) => {
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
+              {STOCK_STATUS_OPTIONS.map((st) => {
                 const isSelected = stockStatusVal === st.value;
+                const IconComponent = st.icon;
                 return (
                   <button
                     key={st.value}
                     type="button"
                     onClick={() => setValue("stock_status", st.value, { shouldValidate: true })}
-                    className={`flex flex-col items-center gap-1 p-2.5 border rounded-lg transition-all text-center ${
+                    className={`flex flex-col items-center gap-1.5 p-3 border-2 rounded-lg transition-all text-center ${
                       isSelected
-                        ? "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/30"
-                        : "bg-white border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
+                        ? st.selectedClass
+                        : "bg-white dark:bg-zinc-900/50 border-zinc-200 dark:border-zinc-800 hover:border-zinc-400 text-zinc-600 dark:text-zinc-400"
                     }`}
                   >
-                    <span className={`text-sm font-bold ${isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-zinc-500"}`}>
-                      {st.icon} {st.label}
-                    </span>
-                    <span className={`text-[8px] leading-tight ${isSelected ? "text-zinc-600 dark:text-zinc-400" : "text-zinc-400"}`}>
+                    <div className="flex items-center gap-1.5 font-semibold text-xs">
+                      <IconComponent className={`h-4 w-4 ${isSelected ? st.iconColor : "text-zinc-400"}`} />
+                      <span>{st.label}</span>
+                    </div>
+                    <span className="text-[10px] leading-tight opacity-75">
                       {st.desc}
                     </span>
                   </button>
@@ -200,14 +230,6 @@ export function StepInventory() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Conditionally render Variant Matrix Generator or Bundle Component Builder */}
-      {watch("product_type") === "variable" && (
-        <StepVariants productId={draftProductId || undefined} />
-      )}
-      {watch("product_type") === "bundle" && (
-        <StepBundle productId={draftProductId || undefined} />
-      )}
     </div>
   );
 }

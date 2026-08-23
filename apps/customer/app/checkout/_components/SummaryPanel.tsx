@@ -4,21 +4,24 @@ import React from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Tag, X, Coins } from "lucide-react";
 import { formatCurrency } from "@/lib/utils/utils";
 import { customerLoyaltyApi, LoyaltySummary } from "@/lib/api/endpoints/loyalty";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
 
-export default function SummaryPanel({ 
-  subtotal, 
-  shipping, 
-  packagingFee, 
-  servicesFee, 
-  total, 
-  onCheckout, 
-  isPending, 
-  disabled, 
-  isShippingCalculating = false, 
+export default function SummaryPanel({
+  subtotal,
+  shipping,
+  packagingFee,
+  servicesFee,
+  tax = 0,
+  total,
+  onCheckout,
+  isPending,
+  disabled,
+  isShippingCalculating = false,
   shippingCalculated = true,
   couponCode,
   setCouponCode,
@@ -28,7 +31,10 @@ export default function SummaryPanel({
   appliedCoupon,
   pointsToRedeem = 0,
   setPointsToRedeem,
-  isAuthenticated
+  isAuthenticated,
+  orderNotes = '',
+  setOrderNotes,
+  isAddingNotes = false,
 }: any) {
   const [loyaltySummary, setLoyaltySummary] = React.useState<LoyaltySummary | null>(null);
   const [loadingLoyalty, setLoadingLoyalty] = React.useState(false);
@@ -65,7 +71,8 @@ export default function SummaryPanel({
 
   const discountAmount = appliedCoupon?.discount_amount || 0;
   const pointsDiscountAmount = Math.floor(pointsToRedeem / 2);
-  const finalTotal = total - discountAmount - pointsDiscountAmount;
+  const discountedSubtotal = Math.max(0, subtotal - discountAmount - pointsDiscountAmount);
+  const finalTotal = total !== undefined ? total : Math.max(0, discountedSubtotal + shipping + packagingFee + servicesFee + tax);
 
   return (
     <Card>
@@ -90,7 +97,10 @@ export default function SummaryPanel({
             <span>Services Fee</span>
             <span className="font-medium">Ksh. {formatCurrency(servicesFee)}</span>
           </div>
-          
+          <div className="flex justify-between">
+            <span>VAT (16%)</span>
+            <span className="font-medium">Ksh. {formatCurrency(tax)}</span>
+          </div>
           {appliedCoupon && (
             <div className="flex justify-between text-emerald-600 font-medium">
               <span className="flex items-center gap-1">
@@ -199,18 +209,42 @@ export default function SummaryPanel({
           <span>Ksh. {formatCurrency(finalTotal)}</span>
         </div>
 
+        {/* Order Notes Section */}
+        <div className="pt-3 border-t space-y-2">
+          <Label htmlFor="order-notes" className="text-sm font-medium">
+            Order Notes (optional)
+          </Label>
+          <Textarea
+            id="order-notes"
+            placeholder="Add any special instructions for your order..."
+            value={orderNotes}
+            onChange={(e) => setOrderNotes?.(e.target.value)}
+            disabled={isPending}
+            rows={3}
+            className="resize-none text-sm"
+          />
+          <p className="text-xs text-muted-foreground">
+            Any special requests or delivery instructions
+          </p>
+        </div>
+
         <div className="space-y-2">
           {isShippingCalculating ? (
             <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>Calculating shipping fees...</span>
             </div>
-          ) : !shippingCalculated ? (
-            <div className="flex items-center justify-center py-2 text-sm text-muted-foreground">
-              <span>Please select a delivery address to calculate shipping.</span>
+          ) : disabled ? (
+            <div className="flex flex-col gap-2">
+              <Button className="w-full" onClick={onCheckout} disabled={true}>
+                {isPending ? "Placing..." : "Place Order"}
+              </Button>
+              <p className="text-xs text-center text-muted-foreground">
+                Please complete all required fields above
+              </p>
             </div>
           ) : (
-            <Button className="w-full" onClick={onCheckout} disabled={disabled || isPending}>
+            <Button className="w-full" onClick={onCheckout} disabled={isPending}>
               {isPending ? "Placing..." : "Place Order"}
             </Button>
           )}

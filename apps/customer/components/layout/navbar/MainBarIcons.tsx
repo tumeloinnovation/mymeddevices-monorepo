@@ -28,9 +28,7 @@ import {
   Star,
   MapPin,
   Ticket,
-  Award,
   ShieldCheck,
-  ChevronRight,
 } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -83,9 +81,6 @@ export const MainBarIcons = () => {
   const dashboardRoute = getDashboardRoute();
   const safeDashboardRoute = dashboardRoute === '/' ? '/dashboard' : dashboardRoute;
 
-  const loyaltyPoints = user?.loyaltyPoints ?? (user as any)?.loyalty_points ?? 0;
-  const loyaltyTier = user?.loyaltyTier || 'Bronze';
-
   const menuSections = [
     {
       title: 'Account & Profile',
@@ -94,12 +89,6 @@ export const MainBarIcons = () => {
           icon: <User className="h-4 w-4 text-primary" />,
           label: 'My Profile',
           href: `${safeDashboardRoute}/profile`,
-        },
-        {
-          icon: <Award className="h-4 w-4 text-amber-500" />,
-          label: 'Loyalty Rewards',
-          href: `${safeDashboardRoute}/loyalty`,
-          badge: `${loyaltyPoints} pts`,
         },
       ],
     },
@@ -344,26 +333,6 @@ export const MainBarIcons = () => {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-
-                {/* Loyalty Points Banner */}
-                <Link
-                  href={`${safeDashboardRoute}/loyalty`}
-                  className="flex items-center justify-between p-2 mt-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 hover:bg-amber-500/20 transition-all group"
-                >
-                  <div className="flex items-center gap-2">
-                    <Award className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
-                    <div className="flex flex-col">
-                      <span className="text-[11px] font-semibold leading-tight">Loyalty Rewards</span>
-                      <span className="text-[9px] text-muted-foreground capitalize">{loyaltyTier} Tier</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-300">
-                      {loyaltyPoints} pts
-                    </span>
-                    <ChevronRight className="w-3 h-3 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />
-                  </div>
-                </Link>
               </div>
             </DropdownMenuLabel>
 

@@ -173,6 +173,7 @@ const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
       label: "Users",
       icon: UsersIcon,
       items: [
+        { label: "User Management", href: "/dashboard/users", icon: ShieldCheckIcon },
         { label: "Customers", href: "/dashboard/users/customers", icon: UsersIcon },
         { label: "Vendors", href: "/dashboard/vendors", icon: StoreIcon },
         { label: "Staff & Admins", href: "/dashboard/users/staff", icon: UserCogIcon },
@@ -257,6 +258,7 @@ const DEFAULT_NAV_CONFIG: Record<DashboardTheme, NavConfig> = {
       items: [
         { label: "General", href: "/settings/general", icon: SettingsIcon },
         { label: "Account & Security", href: "/settings", icon: ShieldIcon },
+        { label: "Roles & Permissions", href: "/dashboard/settings/permissions", icon: ShieldCheckIcon },
         { label: "Notifications", href: "/settings/notifications", icon: BellIcon },
         { label: "Shipping Logistics", href: "/settings/shipping", icon: TruckIcon },
         { label: "Payment Gateway", href: "/settings/payments", icon: CreditCardIcon },

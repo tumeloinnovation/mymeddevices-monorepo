@@ -171,11 +171,19 @@ export default function ProductsPage() {
     {
       accessorKey: 'category_name',
       header: 'Category',
-      cell: ({ row }) => (
-        <span className="text-xs text-slate-500">
-          {row.original.category_name || 'Uncategorized'}
-        </span>
-      ),
+      cell: ({ row }) => {
+        const catName = row.original.category_name;
+        const catObj = (row.original as any).category;
+        const isUuid = (val?: string) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+        const resolved = (typeof catObj === 'object' && catObj?.name)
+          ? catObj.name
+          : (catName && !isUuid(catName) ? catName : 'General Equipment');
+        return (
+          <span className="text-xs text-slate-600 dark:text-slate-400 font-medium">
+            {resolved}
+          </span>
+        );
+      },
     },
     {
       accessorKey: 'base_price',

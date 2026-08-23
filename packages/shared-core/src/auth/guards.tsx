@@ -6,7 +6,7 @@ import { useAuthStore } from "./store"
 import type { UserRole } from "./types"
 
 export function useAuthGuard(allowedRoles?: UserRole[]) {
-  const { isAuthenticated, hydrated, user, isAdmin, isVendor, isCustomer } = useAuthStore()
+  const { isAuthenticated, hydrated, user, isAdmin, isVendor, isCustomer, isSessionExpired } = useAuthStore()
   const router = useRouter()
   const [checking, setChecking] = useState(true)
 
@@ -14,6 +14,11 @@ export function useAuthGuard(allowedRoles?: UserRole[]) {
     if (!hydrated) return
 
     if (!isAuthenticated) {
+      // If session is disconnected/expired (modal will handle re-authentication), do not redirect to /login
+      if (isSessionExpired || user) {
+        setChecking(false)
+        return
+      }
       router.replace("/login")
       return
     }
@@ -33,11 +38,11 @@ export function useAuthGuard(allowedRoles?: UserRole[]) {
     }
 
     setChecking(false)
-  }, [hydrated, isAuthenticated, user, router, allowedRoles, isAdmin, isVendor, isCustomer])
+  }, [hydrated, isAuthenticated, user, router, allowedRoles, isAdmin, isVendor, isCustomer, isSessionExpired])
 
   return {
     checking: !hydrated || checking,
-    isAuthorized: hydrated && isAuthenticated,
+    isAuthorized: hydrated && (isAuthenticated || isSessionExpired || !!user),
   }
 }
 

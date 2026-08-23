@@ -24,7 +24,11 @@ class OutboxEvent(Base, IDMixin):
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
     payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     status: Mapped[OutboxStatus] = mapped_column(
-        SQLEnum(OutboxStatus), default=OutboxStatus.PENDING, nullable=False, index=True
+        SQLEnum(OutboxStatus, name="outboxstatus", values_callable=lambda obj: [e.value for e in obj]),
+        server_default="pending",
+        default=OutboxStatus.PENDING,
+        nullable=False,
+        index=True,
     )
     retry_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     max_retries: Mapped[int] = mapped_column(Integer, default=5, nullable=False)

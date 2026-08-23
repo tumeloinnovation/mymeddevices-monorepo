@@ -128,10 +128,22 @@ export default function PublicOrderDetailPage() {
         0
     ) || 0;
 
+    const discountAmount = Number(
+        (order as any).discount_amount ??
+        (order.shipping_address as any)?.discount_amount ??
+        0
+    );
+
+    const taxAmount = Number(
+        (order as any).tax_amount ??
+        (order.shipping_address as any)?.tax_amount ??
+        Math.round(Math.max(0, subtotal - discountAmount) * 0.16)
+    );
+
     const shippingFee = Number(
         (order as any).shipping_amount ??
         (order.shipping_address as any)?.shipping_amount ??
-        Math.max(0, order.total_amount - subtotal - PACKAGING_FEE - SERVICES_FEE)
+        Math.max(0, order.total_amount - subtotal + discountAmount - taxAmount - PACKAGING_FEE - SERVICES_FEE)
     );
 
     return (
@@ -332,6 +344,16 @@ export default function PublicOrderDetailPage() {
                                 label="Services Fee"
                                 value={SERVICES_FEE}
                             />
+                            <SummaryRow
+                                label="VAT (16%)"
+                                value={taxAmount}
+                            />
+                            {discountAmount > 0 && (
+                                <div className="flex justify-between items-center text-sm text-green-600 font-medium">
+                                    <span>Discount</span>
+                                    <span>-Ksh {formatCurrency(discountAmount)}</span>
+                                </div>
+                            )}
                             <Separator />
                             <SummaryRow
                                 label="Total"
