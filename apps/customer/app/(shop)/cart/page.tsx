@@ -17,6 +17,7 @@ import { customerService } from '@/lib/services/customer-service'
 import { customerCouponsApi } from '@/lib/api/endpoints/coupons'
 import { useAuthStore } from '@/lib/store/useAuthStore'
 import { useLoyaltyPoints } from '@/lib/hooks/useLoyalty'
+import { getValidImageUrl } from '@/lib/utils/image'
 
 export default function CartPage() {
   const { items, hydrated, getTotal, updateQuantity, removeItem, clear, cart } = useCartStore()
@@ -136,7 +137,10 @@ export default function CartPage() {
                 {items.map((item) => {
                   const itemTotal = Number(item.price) * item.quantity
                   const itemId = item.id as string
-                  const imageSrc = item?.images?.[0]?.url || (item?.images?.[0] as any)?.src || (item as any).image_url || '/logos/logo-portrait.png'
+                  const imageSrc = getValidImageUrl(
+                    item?.images?.[0]?.url || (item?.images?.[0] as any)?.src || (item as any).image_url,
+                    '/logos/logo-portrait.png'
+                  )
                   return (
                     <div key={itemId} className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
                       <div className="relative h-20 w-20 rounded-lg overflow-hidden bg-muted shrink-0">

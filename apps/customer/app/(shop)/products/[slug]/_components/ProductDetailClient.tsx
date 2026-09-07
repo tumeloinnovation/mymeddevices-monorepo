@@ -59,44 +59,50 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
   const isBundleProduct = product.product_type === 'bundle' || (product.bundle_items?.length ?? 0) > 0
 
   const tabsContent = (
-    <div className="bg-white dark:bg-card border dark:border-border rounded-lg shadow-sm transition-colors duration-300">
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="px-4 py-3 border-b dark:border-border bg-gray-50 dark:bg-muted/30 rounded-t-lg flex gap-2">
-          <TabsTrigger value="overview" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-            <FileText className="h-4 w-4" /> Description
-          </TabsTrigger>
-          <TabsTrigger value="specs" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-            <Sliders className="h-4 w-4" /> Specifications
-          </TabsTrigger>
-          <TabsTrigger value="reviews" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-            <MessageSquare className="h-4 w-4" /> Reviews
-          </TabsTrigger>
-        </TabsList>
-
-        <div className="p-4">
-          <TabsContent value="overview">
-            <DescriptionTab description={product.description} />
-          </TabsContent>
-          <TabsContent value="specs">
-            <SpecsTab
-              sku={product.sku}
-              brand={product.brands?.[0]?.name || (product as any).brand}
-              category={product.categories?.map((c) => c.name)}
-              availability={product.stock_status}
-              modelNumber={product.model_number}
-              weight={product.weight || (product as any).weight_kg}
-              dimensions={(product as any).dimensions}
-              warrantyInfo={(product as any).warranty_info}
-              specifications={product.specifications}
-              tags={product.tags?.map((t) => t.name)}
-            />
-          </TabsContent>
-          <TabsContent value="reviews">
-            <ReviewsTab productId={String(product.id)} productSlug={product.slug} productName={product.name} />
-          </TabsContent>
-        </div>
-      </Tabs>
-    </div>
+    <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="gap-0">
+      <TabsList className="relative h-auto w-full gap-1 bg-transparent p-0 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border justify-start">
+        <TabsTrigger
+          className="data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-background! text-muted-foreground hover:text-foreground overflow-hidden rounded-t-lg rounded-b-none border border-transparent py-2.5 px-5 data-[state=active]:z-10 data-[state=active]:shadow-none! flex items-center gap-2 cursor-pointer font-medium text-sm transition-all"
+          value="overview"
+        >
+          <FileText className="h-4 w-4" /> Overview
+        </TabsTrigger>
+        <TabsTrigger
+          className="data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-background! text-muted-foreground hover:text-foreground overflow-hidden rounded-t-lg rounded-b-none border border-transparent py-2.5 px-5 data-[state=active]:z-10 data-[state=active]:shadow-none! flex items-center gap-2 cursor-pointer font-medium text-sm transition-all"
+          value="specs"
+        >
+          <Sliders className="h-4 w-4" /> Specifications
+        </TabsTrigger>
+        <TabsTrigger
+          className="data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-background! text-muted-foreground hover:text-foreground overflow-hidden rounded-t-lg rounded-b-none border border-transparent py-2.5 px-5 data-[state=active]:z-10 data-[state=active]:shadow-none! flex items-center gap-2 cursor-pointer font-medium text-sm transition-all"
+          value="reviews"
+        >
+          <MessageSquare className="h-4 w-4" /> Reviews ({reviews?.length || 0})
+        </TabsTrigger>
+      </TabsList>
+      <div className="pt-6 sm:pt-8 px-4 sm:px-6 md:px-8">
+        <TabsContent value="overview" className="mt-0 outline-none">
+          <DescriptionTab description={product.description} />
+        </TabsContent>
+        <TabsContent value="specs" className="mt-0 outline-none">
+          <SpecsTab
+            sku={product.sku}
+            brand={product.brands?.[0]?.name || (product as any).brand}
+            category={product.categories?.map((c) => c.name)}
+            availability={product.stock_status}
+            modelNumber={product.model_number}
+            weight={product.weight || (product as any).weight_kg}
+            dimensions={(product as any).dimensions}
+            warrantyInfo={(product as any).warranty_info}
+            specifications={product.specifications}
+            tags={product.tags?.map((t) => t.name)}
+          />
+        </TabsContent>
+        <TabsContent value="reviews" className="mt-0 outline-none">
+          <ReviewsTab productId={String(product.id)} productSlug={product.slug} productName={product.name} />
+        </TabsContent>
+      </div>
+    </Tabs>
   )
 
   const renderProductInfo = (hidePurchase: boolean = false) => (

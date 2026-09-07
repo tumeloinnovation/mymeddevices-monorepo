@@ -45,6 +45,9 @@ class DeliveryService:
         return select(Delivery).options(
             selectinload(Delivery.stops),
             selectinload(Delivery.driver).selectinload(User.driver_profile),
+            selectinload(Delivery.proofs),
+            selectinload(Delivery.order).selectinload(Order.items).selectinload(OrderItem.product),
+            selectinload(Delivery.order).selectinload(Order.user),
         )
 
     async def create_delivery_from_order(
@@ -256,6 +259,23 @@ class DeliveryService:
             delivery.actual_delivery = datetime.now(UTC)
 
         self._add_status_event(delivery, "DeliveryStatusChanged")
+        self.db.add(
+            OutboxEvent(
+                id=uuid.uuid4(),
+                aggregate_type="Order",
+                aggregate_id=str(delivery.order_id),
+                event_type="OrderShipped",
+                payload={
+                    "delivery_id": str(delivery.id),
+                    "tracking_number": delivery.tracking_number,
+                    "carrier": delivery.carrier,
+                    "estimated_delivery": delivery.estimated_delivery.isoformat()
+                    if delivery.estimated_delivery
+                    else None,
+                },
+                status=OutboxStatus.PENDING,
+            )
+        )
         await self.db.commit()
         await self.db.refresh(delivery)
 

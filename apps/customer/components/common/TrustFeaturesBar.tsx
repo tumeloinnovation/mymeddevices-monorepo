@@ -10,23 +10,23 @@ interface FeatureItem {
 const features: FeatureItem[] = [
   {
     icon: Truck,
-    title: "Free Shipping",
-    description: "On orders above KSh 5,000 across Kenya",
+    title: "Countrywide Delivery",
+    description: "Doorstep delivery across Nairobi and all 47 counties",
   },
   {
     icon: RotateCcw,
-    title: "Easy Returns",
-    description: "Hassle-free 7-day return policy",
+    title: "Easy 7-Day Returns",
+    description: "Simple, hassle-free replacement or refund policy",
   },
   {
     icon: ShieldCheck,
-    title: "Secure Payments",
-    description: "M-Pesa, card & encrypted checkout",
+    title: "Lipa na M-Pesa",
+    description: "Pay safely & instantly via M-Pesa or card",
   },
   {
     icon: Award,
-    title: "Premium Quality",
-    description: "100% certified genuine medical equipment",
+    title: "100% Genuine Devices",
+    description: "Certified medical equipment with manufacturer warranty",
   },
 ];
 

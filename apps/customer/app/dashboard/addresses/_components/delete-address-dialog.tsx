@@ -2,7 +2,6 @@
 
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -13,7 +12,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Loader2, Trash2, AlertTriangle, MapPin } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { Address } from '@/lib/store/useAddressStore';
+import type { Address } from '@mymeddevices/shared-core';
 
 interface DeleteAddressDialogProps {
   open: boolean;
@@ -25,9 +24,6 @@ interface DeleteAddressDialogProps {
   isDefaultBilling?: boolean;
 }
 
-/**
- * Confirmation dialog for deleting addresses
- */
 export function DeleteAddressDialog({
   open,
   onOpenChange,
@@ -35,77 +31,77 @@ export function DeleteAddressDialog({
   address,
   isLoading = false,
   isDefaultShipping = false,
-  isDefaultBilling = false,
 }: DeleteAddressDialogProps) {
   if (!address) return null;
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="rounded-2xl max-w-md border border-border bg-card">
         <AlertDialogHeader>
-          <div className="flex items-center gap-3 mb-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10">
-              <AlertTriangle className="h-5 w-5 text-destructive" />
+          <div className="flex items-center gap-3 mb-1">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-destructive/15 text-destructive border border-destructive/20 shrink-0">
+              <Trash2 className="h-5 w-5" />
             </div>
-            <AlertDialogTitle>Delete Address</AlertDialogTitle>
+            <div>
+              <AlertDialogTitle className="text-base font-bold text-foreground">
+                Delete Address
+              </AlertDialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                This will remove the delivery location from your account.
+              </p>
+            </div>
           </div>
-          <AlertDialogDescription className="text-base">
-            Are you sure you want to delete this address?
-          </AlertDialogDescription>
         </AlertDialogHeader>
 
         {/* Address Preview */}
-        <div className="flex items-start gap-3 p-3 bg-muted/50 rounded-lg my-4">
-          <MapPin className="h-4 w-4 text-muted-foreground mt-0.5 shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-medium">{address.address}</p>
-            {address.region && (
-              <p className="text-xs text-muted-foreground mt-1">{address.region}</p>
-            )}
+        <div className="flex items-start gap-3 p-3.5 bg-muted/40 border border-border/70 rounded-xl my-2">
+          <MapPin className="h-4 w-4 text-primary mt-0.5 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-bold text-foreground truncate">{address.address}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">
+              {[address.address_2, address.city, address.region, address.country || 'Kenya']
+                .filter(Boolean)
+                .join(', ')}
+            </p>
           </div>
         </div>
 
         {/* Warning if default address */}
-        {(isDefaultShipping || isDefaultBilling) && (
+        {isDefaultShipping && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
+            initial={{ opacity: 0, y: -6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex items-start gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg mb-4"
+            className="flex items-start gap-2.5 p-3 bg-amber-500/10 border border-amber-500/25 rounded-xl text-amber-900 dark:text-amber-200"
           >
-            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-500 mt-0.5 flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                This is your default address
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                {isDefaultShipping && isDefaultBilling
-                  ? 'It is set as both your default shipping and billing address.'
-                  : isDefaultShipping
-                  ? 'It is set as your default shipping address.'
-                  : 'It is set as your default billing address.'}
-                {' '}You'll need to set another address as default before deleting this one.
+            <AlertTriangle className="h-4 w-4 text-amber-500 mt-0.5 shrink-0" />
+            <div className="flex-1 text-xs">
+              <p className="font-bold">Cannot delete default address</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Please designate another address as your default shipping address before deleting this location.
               </p>
             </div>
           </motion.div>
         )}
 
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
+        <AlertDialogFooter className="gap-2 sm:gap-0 pt-2">
+          <AlertDialogCancel disabled={isLoading} className="rounded-xl text-xs font-semibold">
+            Cancel
+          </AlertDialogCancel>
           <Button
             variant="destructive"
             onClick={onConfirm}
-            disabled={isLoading || (isDefaultShipping && isDefaultBilling)}
-            className="gap-2"
+            disabled={isLoading || isDefaultShipping}
+            className="rounded-xl text-xs font-semibold gap-2 shadow-xs"
           >
             {isLoading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Deleting...
+                <span>Deleting...</span>
               </>
             ) : (
               <>
                 <Trash2 className="h-4 w-4" />
-                Delete Address
+                <span>Delete Address</span>
               </>
             )}
           </Button>

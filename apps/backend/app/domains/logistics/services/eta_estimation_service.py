@@ -3,14 +3,13 @@
 import datetime as dt
 import logging
 import uuid
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.exceptions import NotFoundError
-from app.domains.logistics.models.delivery import Delivery, DeliveryStatus
+from app.domains.logistics.models.delivery import Delivery
 from app.domains.logistics.models.driver_profile import DriverProfile
 from app.domains.logistics.utils.geometry import calculate_haversine_distance
 from app.domains.logistics.utils.matching import (

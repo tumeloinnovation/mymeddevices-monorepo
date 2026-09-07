@@ -33,7 +33,7 @@ class Bundle(Base, IDMixin, AuditMixin):
     slug: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     discount_type: Mapped[BundleDiscountType] = mapped_column(
-        Enum(BundleDiscountType), default=BundleDiscountType.FIXED_AMOUNT, nullable=False
+        Enum(BundleDiscountType, native_enum=False), default=BundleDiscountType.FIXED_AMOUNT, nullable=False
     )
     discount_value: Mapped[float] = mapped_column(Numeric(12, 2), default=0.00, nullable=False)
     funding_source: Mapped[str] = mapped_column(String(20), default="PLATFORM", nullable=False)  # PLATFORM, VENDOR, MIXED

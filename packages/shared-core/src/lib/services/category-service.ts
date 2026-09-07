@@ -46,13 +46,29 @@ export const categoryService = {
       try {
         const response = await apiClient.get<any>('/catalog/categories');
         const categoriesList = response?.data || response;
+        const isValidImageUrl = (url?: string | null) => {
+          if (!url || typeof url !== 'string') return false;
+          const trimmed = url.trim();
+          return (
+            trimmed.startsWith('/') ||
+            trimmed.startsWith('http://') ||
+            trimmed.startsWith('https://') ||
+            trimmed.startsWith('data:image/')
+          );
+        };
+
         if (categoriesList && Array.isArray(categoriesList)) {
-          return categoriesList.map((c: any) => ({
-            ...c,
-            product_count: c.product_count ?? c.count ?? 0,
-            count: c.product_count ?? c.count ?? 0,
-            image_url: c.icon_url || c.image_url || null,
-          }));
+          return categoriesList.map((c: any) => {
+            const rawImg = c.image_url || (isValidImageUrl(c.icon_url) ? c.icon_url : null);
+            const validImg = isValidImageUrl(rawImg) ? rawImg : null;
+            return {
+              ...c,
+              product_count: c.product_count ?? c.count ?? 0,
+              count: c.product_count ?? c.count ?? 0,
+              image_url: validImg,
+              image: validImg ? { src: validImg } : null,
+            };
+          });
         }
       } catch {
         // Endpoint doesn't exist, fall back to extracting from products

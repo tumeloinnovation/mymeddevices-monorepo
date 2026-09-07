@@ -195,7 +195,7 @@ async def test_returns_and_refunds_lifecycle(client: AsyncClient, admin_ticket_s
     """RET-001: Return request creation, tracking, cancellation, and admin review."""
     d = admin_ticket_setup
     cust_headers = {"Authorization": f"Bearer {d['tokens_customer'].access_token}"}
-    admin_headers = {"Authorization": f"Bearer {d['tokens_admin'].access_token}"}
+    {"Authorization": f"Bearer {d['tokens_admin'].access_token}"}
     o_id = str(d["order"].id)
     item_id = str(d["order_item"].id)
     p_id = str(d["product"].id)

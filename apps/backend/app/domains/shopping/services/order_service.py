@@ -1,7 +1,6 @@
 import random
 import uuid
 from contextlib import asynccontextmanager
-from datetime import UTC
 from decimal import Decimal
 from typing import Any
 
@@ -24,14 +23,21 @@ from app.domains.shopping.models.order import (
     OrderTimelineEvent,
 )
 from app.domains.shopping.models.sub_order import SubOrder, SubOrderStatus
-from app.domains.shopping.services.cart_calculation_service import CartCalculationService, OFFICE_LAT, OFFICE_LON
+from app.domains.shopping.services.cart_calculation_service import (
+    OFFICE_LAT,
+    OFFICE_LON,
+    CartCalculationService,
+    _resolve_unit_price,
+    quantize_money,
+)
 from app.domains.shopping.services.order_state_machine import InvalidStateTransitionError, OrderStateMachine
 
 
 class CheckoutService:
-    def __init__(self, db: AsyncSession, driver_assignment_service: "DriverAssignmentServiceDep | None" = None):
+    def __init__(self, db: AsyncSession, driver_assignment_service: Any | None = None):
         self.db = db
         self.driver_assignment_service = driver_assignment_service
+
 
     async def _generate_order_number(self) -> int:
         """Generate a unique order number.
@@ -134,28 +140,24 @@ class CheckoutService:
                 if not is_owner:
                     raise AuthorizationError("You do not have permission to check out this cart")
 
-                # 2. Calculate final totals (snapshot)
+                # 2. Calculate final totals (snapshot) using the exact Decimal core
                 calc_service = CartCalculationService(self.db)
-                totals = await calc_service.calculate_totals(cart_id, shipping_address)
+                totals = await calc_service._compute_totals(cart, shipping_address)
 
                 # Order number is generated via the database sequence (order_number_seq)
                 # on PostgreSQL (atomic and thread-safe), with a large random fallback elsewhere.
 
-                # Handle loyalty points redemption
-                loyalty_discount = Decimal(0)
+                # Handle loyalty points redemption.
+                # redeem_points re-checks the balance under a row lock, so a losing
+                # concurrent checkout fails cleanly instead of overdrawing points.
+                loyalty_discount = Decimal("0.00")
                 loyalty_points_used = 0
                 if points_to_redeem and points_to_redeem > 0 and user_id:
                     from app.domains.customers.services.loyalty_service import LoyaltyService
 
                     loyalty = LoyaltyService(self.db)
-                    profile = await loyalty._get_or_create_profile(user_id)
-                    if profile.loyalty_points < points_to_redeem:
-                        raise BusinessRuleError("Insufficient loyalty points")
-                    # Conversion: 2 points = 1 KES
-                    loyalty_discount = min(
-                        Decimal(points_to_redeem) / 2,
-                        Decimal(totals.get("subtotal", 0.0)),  # Never exceed order subtotal
-                    )
+                    # Conversion: 2 points = 1 KES, never exceeding the order subtotal
+                    loyalty_discount = min(Decimal(points_to_redeem) / Decimal("2"), totals["subtotal"])
                     loyalty_points_used = points_to_redeem
                     await loyalty.redeem_points(
                         customer_id=user_id,
@@ -181,17 +183,19 @@ class CheckoutService:
                         if drivers:
                             assigned_driver_id = drivers[0].id
 
-                # Update shipping address with calculated logistics metadata & fees breakdown
+                # Update shipping address with calculated logistics metadata & fees breakdown.
+                # Floats here on purpose: this dict is persisted in a JSON column as
+                # display metadata; authoritative money lives in the Numeric columns.
                 updated_shipping_address = dict(shipping_address) if shipping_address else {}
                 updated_shipping_address["logistics_type"] = totals.get("logistics_type", "courier")
                 updated_shipping_address["calculated_distance_km"] = totals.get("calculated_distance_km", 0.0)
                 updated_shipping_address["route_coordinates"] = totals.get("route_coordinates", [])
-                updated_shipping_address["shipping_amount"] = totals.get("shipping_amount", 0.0)
-                updated_shipping_address["packaging_fee"] = totals.get("packaging_fee", 100.0)
-                updated_shipping_address["services_fee"] = totals.get("services_fee", 50.0)
-                updated_shipping_address["tax_amount"] = totals.get("tax_amount", 0.0)
-                updated_shipping_address["discount_amount"] = totals.get("discount_amount", 0.0)
-                updated_shipping_address["subtotal"] = totals.get("subtotal", 0.0)
+                updated_shipping_address["shipping_amount"] = float(totals.get("shipping_amount", 0))
+                updated_shipping_address["packaging_fee"] = float(totals.get("packaging_fee", 0))
+                updated_shipping_address["services_fee"] = float(totals.get("services_fee", 0))
+                updated_shipping_address["tax_amount"] = float(totals.get("tax_amount", 0))
+                updated_shipping_address["discount_amount"] = float(totals.get("discount_amount", 0))
+                updated_shipping_address["subtotal"] = float(totals.get("subtotal", 0))
 
                 # Payment method metadata
                 pm = updated_shipping_address.get("payment_method", "cod")
@@ -203,11 +207,10 @@ class CheckoutService:
                 if assigned_driver_id:
                     updated_shipping_address["assigned_driver_id"] = str(assigned_driver_id)
 
-                # 3. Create Order record (Fix 3.2: Precision handling for total amount)
-                total_amt = round(float(totals["total"]), 2)
-                total_amt = round(total_amt - float(loyalty_discount), 2)
+                # 3. Create Order record (exact Decimal totals; never float arithmetic)
+                total_amt = (totals["total"] - loyalty_discount).quantize(Decimal("0.01"))
                 if total_amt < 0:
-                    total_amt = 0.0
+                    total_amt = Decimal("0.00")
 
                 order = Order(
                     id=uuid.uuid4(),
@@ -225,9 +228,13 @@ class CheckoutService:
                 )
                 self.db.add(order)
 
-                # Record coupon usage for applied discounts so per-user/global limits are enforced under lock.
+                # Record coupon usage for applied discounts so per-user/global limits
+                # are enforced under lock. Coupons are re-validated at checkout time
+                # (active, unexpired, within limits, scope still matches) — a coupon
+                # that became invalid after being applied to the cart aborts checkout.
+                # Guest checkouts record usage too, so global usage limits hold.
                 applied_discounts = totals.get("applied_discounts") or []
-                if applied_discounts and user_id:
+                if applied_discounts:
                     from app.domains.shopping.services.coupon_service import CouponService
 
                     coupon_service = CouponService(self.db)
@@ -235,9 +242,18 @@ class CheckoutService:
                         coupon_code = discount_info.get("coupon_code")
                         if not coupon_code:
                             continue
-                        coupon = await coupon_service.get_by_code(coupon_code)
-                        if not coupon:
-                            raise BusinessRuleError(f"Applied coupon '{coupon_code}' is invalid")
+
+                        is_valid, coupon, validation_error = await coupon_service.validate_coupon(
+                            code=coupon_code,
+                            order_subtotal=totals["subtotal"],
+                            user_id=user_id,
+                            cart_id=cart_id,
+                            for_checkout=True,
+                        )
+                        if not is_valid or not coupon:
+                            raise BusinessRuleError(
+                                f"Coupon '{coupon_code}' is no longer valid: {validation_error or 'invalid coupon'}"
+                            )
 
                         await coupon_service.record_coupon_usage(
                             coupon_id=coupon.id,
@@ -261,18 +277,11 @@ class CheckoutService:
                 # 5. Create SubOrders and OrderItem records
                 sub_order_map = {}  # Maps vendor_id to SubOrder
                 for vendor_id, items in vendor_items_map.items():
-                    # Calculate vendor subtotal with precise rounding
-                    vendor_subtotal = 0.0
+                    # Calculate vendor subtotal with exact Decimal arithmetic
+                    vendor_subtotal = Decimal("0")
                     for item in items:
-                        if item.unit_price is not None:
-                            unit_p = round(float(item.unit_price), 2)
-                        elif item.product_variant and item.product_variant.calculated_price is not None:
-                            unit_p = round(float(item.product_variant.calculated_price), 2)
-                        elif item.product and item.product.price is not None:
-                            unit_p = round(float(item.product.price), 2)
-                        else:
-                            unit_p = 0.0
-                        vendor_subtotal += unit_p * item.quantity
+                        vendor_subtotal += _resolve_unit_price(item) * Decimal(str(item.quantity))
+                    vendor_subtotal = vendor_subtotal.quantize(Decimal("0.01"))
 
                     # Create SubOrder
                     sub_order = SubOrder(
@@ -287,15 +296,8 @@ class CheckoutService:
 
                     # Create OrderItems for this vendor (Fix 1.1: Atomic stock deduction)
                     for item in items:
-                        if item.unit_price is not None:
-                            unit_p = round(float(item.unit_price), 2)
-                        elif item.product_variant and item.product_variant.calculated_price is not None:
-                            unit_p = round(float(item.product_variant.calculated_price), 2)
-                        elif item.product and item.product.price is not None:
-                            unit_p = round(float(item.product.price), 2)
-                        else:
-                            unit_p = 0.0
-                        item_subtotal = round(unit_p * item.quantity, 2)
+                        unit_p = quantize_money(_resolve_unit_price(item))
+                        item_subtotal = quantize_money(unit_p * Decimal(str(item.quantity)))
 
                         if item.product_variant_id:
                             from app.domains.catalog.models.product_variant import ProductVariant
@@ -416,9 +418,7 @@ class CheckoutService:
                                 product_id=item.product_id,
                                 vendor_id=item.product.vendor_id,
                                 quantity=int(item.quantity),
-                                unit_price=Decimal(
-                                    str(round(float(item.product.price) if item.product.price is not None else 0.0, 2))
-                                ),
+                                unit_price=quantize_money(_resolve_unit_price(item)),
                             )
                             for item in cart_vendor_items
                         ]
@@ -569,6 +569,38 @@ class OrderService:
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_orders_by_phone(self, phone: str, limit: int = 20) -> list[Order]:
+        """Look up orders placed with a given phone number (shipping address or user phone)."""
+        clean_phone = phone.strip().replace(" ", "").replace("-", "")
+        # Match common variants e.g. 0712345678, +254712345678, 254712345678
+        digits_only = "".join(filter(str.isdigit, clean_phone))
+        last_9_digits = digits_only[-9:] if len(digits_only) >= 9 else digits_only
+
+        search_pattern = f"%{last_9_digits}%"
+
+        stmt = (
+            select(Order)
+            .options(
+                selectinload(Order.items).selectinload(OrderItem.product).selectinload(Product.images),
+                selectinload(Order.items).selectinload(OrderItem.vendor),
+                selectinload(Order.user),
+                selectinload(Order.timeline_events),
+                selectinload(Order.mobile_money_payments),
+            )
+            .outerjoin(User, Order.user_id == User.id)
+            .where(
+                or_(
+                    func.cast(Order.shipping_address, String).ilike(search_pattern),
+                    User.phone.ilike(search_pattern),
+                )
+            )
+            .order_by(Order.created_at.desc())
+            .limit(limit)
+        )
+
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def list_orders(
         self,
         user_id: uuid.UUID | None = None,
@@ -676,32 +708,11 @@ class OrderService:
                 )
                 self.db.add(timeline_event)
 
-            # Award loyalty points on payment
-            if new_status == "paid" and order.user_id:
-                try:
-                    from app.domains.customers.services.loyalty_service import LoyaltyService
-
-                    loyalty = LoyaltyService(self.db)
-                    # 1 point per KES 100 spent
-                    base_points = int(order.total_amount / 100)
-                    if base_points > 0:
-                        # Apply tier multiplier
-                        profile = await loyalty._get_or_create_profile(order.user_id)
-                        tier_config = loyalty.TIERS.get(profile.loyalty_tier, {})
-                        multiplier = float(tier_config.get("multiplier", 1.0))
-                        final_points = max(1, int(base_points * multiplier))
-                        await loyalty.earn_points(
-                            customer_id=order.user_id,
-                            points=final_points,
-                            description=f"Earned from Order #{order.order_number}",
-                            reference_type="order",
-                            reference_id=order.id,
-                        )
-                except Exception as e:
-                    import logging
-
-                    logger = logging.getLogger(__name__)
-                    logger.error(f"Failed to award loyalty points for order {order.id}: {e}")
+            # Loyalty points for paid orders are awarded by the OutboxRelay when it
+            # processes the OrderPaid event (emitted by M-Pesa, manual mobile money
+            # verification, and COD order creation). The old "paid" status trigger
+            # never fired because no payment flow sets status="paid".
+            # (See LoyaltyService.award_points_for_order for the idempotent award.)
 
         # Transaction commits automatically
         order = await self.get_order(order_id)

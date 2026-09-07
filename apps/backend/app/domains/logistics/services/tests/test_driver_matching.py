@@ -1,13 +1,13 @@
 """Tests for driver matching service."""
 
+from datetime import UTC, datetime
+
 import pytest
-from datetime import datetime, UTC
 
 from app.domains.logistics.utils.matching import (
+    VEHICLE_TYPE_CONFIGS,
     DeliveryRequirements,
     EligibleDriver,
-    VehicleTypeConfig,
-    VEHICLE_TYPE_CONFIGS,
     get_compatible_vehicle_types,
     get_traffic_coefficient_for_time,
     get_vehicle_config,

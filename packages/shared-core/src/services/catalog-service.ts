@@ -32,9 +32,17 @@ import {
   TagCreate,
   TagUpdate,
   TagListResponse,
+  ProductStats,
 } from '../types/catalog';
 
 export const catalogService = {
+  // Stats
+  async getProductStats(vendor_id?: string): Promise<ProductStats> {
+    return apiClient.get<ProductStats>('/catalog/products-stats', {
+      params: vendor_id ? { vendor_id } : undefined,
+    });
+  },
+
   // Vendor Product APIs
   async getVendorProducts(params: {
     status_filter?: string;

@@ -93,7 +93,9 @@ class OTPService:
 
         return code
 
-    async def verify_otp(self, user_id: str, code: str, purpose: str = "verification") -> bool:
+    async def verify_otp(
+        self, user_id: str, code: str, purpose: str = "verification", consume: bool = True
+    ) -> bool:
         """
         Verify an OTP code for the user.
 
@@ -101,6 +103,7 @@ class OTPService:
             user_id: The user's UUID
             code: The OTP code to verify
             purpose: Purpose of OTP (verification, reset_password)
+            consume: Whether to mark OTP as used upon successful verification (default True)
 
         Returns:
             True if OTP is valid, False otherwise
@@ -125,9 +128,9 @@ class OTPService:
             logger.warning(f"Expired OTP attempt for user {user_id}")
             return False
 
-        # Verify code
+        # Verify code (constant-time comparison to avoid timing oracles)
         key = f"otp_attempts:{user_id}:{purpose}"
-        if otp.code != code:
+        if not secrets.compare_digest(otp.code, code):
             # Increment failed attempts
             attempts = 0
             if self.redis_client:
@@ -157,9 +160,10 @@ class OTPService:
                 logger.error(f"OTP invalidated due to excessive failed attempts for user {user_id}, purpose: {purpose}")
             return False
 
-        # Success - mark OTP as used
-        otp.is_used = True
-        await self.db.commit()
+        # Success - mark OTP as used if consume=True
+        if consume:
+            otp.is_used = True
+            await self.db.commit()
 
         # Clear attempts on success
         if self.redis_client:
@@ -170,7 +174,7 @@ class OTPService:
         _in_memory_attempts.pop(key, None)
         _in_memory_expiry.pop(key, None)
 
-        logger.info(f"OTP verified for user {user_id}, purpose: {purpose}")
+        logger.info(f"OTP verified for user {user_id}, purpose: {purpose} (consume={consume})")
         return True
 
     async def send_otp_sms(self, phone: str, code: str, purpose: str = "verification"):
@@ -186,7 +190,15 @@ class OTPService:
         cleaned_phone = phone.replace("+", "").strip()
 
         if not settings.HOSTPINNACLE_API_KEY or not settings.HOSTPINNACLE_PARTNER_ID:
-            logger.info(f"HOSTPINNACLE SMS credentials not configured. SMS (simulated): To={phone}, Code={code}")
+            # Never log OTP codes outside local development environments —
+            # a login-purpose OTP is a live credential.
+            if settings.ENVIRONMENT.lower() in ("development", "dev", "local"):
+                logger.info(f"HOSTPINNACLE SMS credentials not configured. SMS (simulated): To={phone}, Code={code}")
+            else:
+                logger.warning(
+                    f"HOSTPINNACLE SMS credentials not configured in {settings.ENVIRONMENT} environment. "
+                    f"OTP SMS to {phone} was NOT delivered."
+                )
             return True
 
         payload = {

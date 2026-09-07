@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, Loader2 } from "lucide-react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { getValidImageUrl } from "@/lib/utils/image";
 import { useProductSearch } from "@/lib/hooks/useProductSearch";
 import type { Product } from "@/lib/data/types";
 import { formatCurrency } from "@/lib/utils/utils";
@@ -144,7 +145,10 @@ export const SearchBar: React.FC<SearchBarProps> = ({ placeholder }) => {
                 >
                   <div className="relative w-10 h-10 rounded-md overflow-hidden flex-shrink-0">
                     <Image
-                      src={item.images?.[0]?.src || (item.images?.[0] as any)?.url || "/logos/logo-portrait.png"}
+                      src={getValidImageUrl(
+                        item.images?.[0]?.src || (item.images?.[0] as any)?.url || (item as any)?.image_url,
+                        "/logos/logo-portrait.png"
+                      )}
                       alt={item.name}
                       fill
                       className="object-cover"

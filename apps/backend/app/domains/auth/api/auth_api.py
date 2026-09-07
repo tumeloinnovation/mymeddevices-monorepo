@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, security
+from app.core.exceptions import BusinessRuleError
 from app.core.logging import logger
 from app.core.rate_limiting import RateLimiterDependency
 from app.core.responses import ApiSuccessResponse, success_response
@@ -30,12 +31,14 @@ from app.domains.auth.schemas.auth_schemas import (
     RegisterCompleteRequest,
     RegisterInitiateRequest,
     ResetPasswordRequest,
+    SendOTPRequest,
     Token,
     UserCreate,
     UserRegisterResponse,
     UserResponse,
     VendorRegisterResponse,
     VendorUserCreate,
+    VerifyOTPRequest,
 )
 from app.domains.auth.services.auth_service import AuthFailure, AuthService
 
@@ -486,6 +489,41 @@ async def forgot_password(request: ForgotPasswordRequest, db: AsyncSession = Dep
 
 
 @router.post(
+    "/verify-otp",
+    response_model=ApiSuccessResponse[dict[str, Any]],
+    dependencies=[Depends(RateLimiterDependency("otp"))],
+)
+async def verify_otp(request: VerifyOTPRequest, db: AsyncSession = Depends(get_db)):
+    """
+    Verify OTP code under /api/v1/auth/verify-otp.
+    For reset_password, confirms code is valid without prematurely consuming it.
+    """
+    from app.domains.auth.services.otp_service import OTPService
+
+    email_clean = request.email.strip().lower()
+    result = await db.execute(select(User).where(func.lower(User.email) == email_clean))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+
+    otp_service = OTPService(db)
+    consume = request.purpose != "reset_password"
+    is_valid = await otp_service.verify_otp(str(user.id), request.code, request.purpose, consume=consume)
+
+    if not is_valid:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+
+    if request.purpose == "verification":
+        user.is_verified = True
+        await db.commit()
+        logger.info(f"User {user.email} verified successfully")
+
+    message = "Email verified successfully!" if request.purpose == "verification" else "Verification code is valid"
+    return success_response({"message": message, "is_verified": user.is_verified})
+
+
+@router.post(
     "/reset-password",
     response_model=ApiSuccessResponse[dict[str, str]],
     dependencies=[Depends(RateLimiterDependency("password_reset"))],
@@ -500,12 +538,14 @@ async def reset_password(request: ResetPasswordRequest, db: AsyncSession = Depen
     user = result.scalar_one_or_none()
 
     if not user:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+        # Same response as an invalid code: revealing whether the email exists
+        # would let attackers enumerate registered accounts.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
 
     auth_service = AuthService(db)
     try:
         success = await auth_service.reset_password(user, request.code, request.new_password)
-    except ValueError as e:
+    except (ValueError, BusinessRuleError) as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
     if not success:

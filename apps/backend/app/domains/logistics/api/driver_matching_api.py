@@ -7,12 +7,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import get_db, get_current_active_user
+from app.core.dependencies import get_current_active_user, get_db
 from app.domains.auth.models.user import User
 from app.domains.logistics.schemas.delivery_schemas import (
-    DeliveryRequirementsRequest,
     EligibleDriverResponse,
-    ETAResponse,
     FindDriversRequest,
     FindDriversResponse,
     MultiDropBatchRequest,
@@ -20,7 +18,6 @@ from app.domains.logistics.schemas.delivery_schemas import (
 )
 from app.domains.logistics.services.capacity_management_service import CapacityManagementService
 from app.domains.logistics.services.driver_matching_service import DriverMatchingService
-from app.domains.logistics.services.eta_estimation_service import ETAEstimationService
 from app.domains.logistics.utils.matching import DeliveryRequirements
 
 logger = logging.getLogger(__name__)
@@ -357,7 +354,7 @@ async def get_traffic_info(
     Returns:
         Current traffic information
     """
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
 
     from app.domains.logistics.utils.matching import get_traffic_coefficient_for_time
 
@@ -366,7 +363,6 @@ async def get_traffic_info(
 
     # Add zone modifier if zone provided
     if zone_code:
-        from app.domains.logistics.utils.matching import get_zone_center
 
         zone_modifiers = {
             "CBD": 1.3,

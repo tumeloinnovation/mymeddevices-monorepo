@@ -54,9 +54,9 @@ export default function AdminRefundsPage() {
     const q = search.toLowerCase();
     return (
       !q ||
-      r.id?.toLowerCase().includes(q) ||
-      r.order_number?.toLowerCase().includes(q) ||
-      r.user?.email?.toLowerCase().includes(q)
+      String(r.id || "").toLowerCase().includes(q) ||
+      String(r.order_number || "").toLowerCase().includes(q) ||
+      String(r.user?.email || "").toLowerCase().includes(q)
     );
   });
 

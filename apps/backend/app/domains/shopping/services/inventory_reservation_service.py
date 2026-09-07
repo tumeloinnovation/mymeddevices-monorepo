@@ -1,5 +1,5 @@
 import uuid
-from typing import Sequence
+from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +26,7 @@ class InsufficientStockException(Exception):
 class InventoryReservationService:
     """
     Authoritative concurrency-safe Inventory Reservation & Stock Mutation Service.
-    
+
     Principles:
     - Pure row-level locking via PostgreSQL SELECT ... FOR UPDATE.
     - Deadlock prevention via deterministic sorting of offer IDs in batch reservations.
@@ -144,8 +144,14 @@ class InventoryReservationService:
         if inventory.quantity_on_hand < quantity:
             raise InsufficientStockException(vendor_offer_id, quantity, inventory.quantity_on_hand)
 
+        if inventory.quantity_reserved < quantity:
+            raise ValueError(
+                f"Cannot commit stock deduction: requested quantity ({quantity}) exceeds reserved quantity ({inventory.quantity_reserved}) for offer {vendor_offer_id}"
+            )
+
         inventory.quantity_on_hand -= quantity
-        inventory.quantity_reserved = max(0, inventory.quantity_reserved - quantity)
+        inventory.quantity_reserved -= quantity
+
 
         # Update vendor offer status if out of stock
         if inventory.quantity_on_hand == 0:

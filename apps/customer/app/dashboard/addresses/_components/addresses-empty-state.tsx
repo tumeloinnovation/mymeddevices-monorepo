@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Plus, Navigation } from 'lucide-react';
+import { MapPin, Plus, Navigation, ShieldCheck, Hospital } from 'lucide-react';
 
 interface AddressesEmptyStateProps {
   onAdd: () => void;
@@ -10,20 +10,30 @@ interface AddressesEmptyStateProps {
 
 export function AddressesEmptyState({ onAdd }: AddressesEmptyStateProps) {
   return (
-    <Card className="border border-border/80 bg-card shadow-sm">
-      <CardContent className="flex flex-col items-center justify-center p-8 sm:p-12 text-center max-w-md mx-auto">
-        <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-primary/10 text-primary mb-4 border border-primary/20 shadow-xs">
-          <MapPin className="h-7 w-7" />
+    <Card className="border border-border/80 bg-card shadow-xs rounded-2xl overflow-hidden">
+      <CardContent className="flex flex-col items-center justify-center p-8 sm:p-14 text-center max-w-md mx-auto space-y-4">
+        <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary/20 to-emerald-500/10 text-primary border border-primary/25 shadow-xs">
+          <MapPin className="h-8 w-8 animate-bounce" />
         </div>
 
-        <h3 className="text-base font-bold tracking-tight text-foreground">No saved addresses yet</h3>
-        <p className="text-xs text-muted-foreground mt-1.5 max-w-xs leading-relaxed">
-          Add your delivery locations for 1-click checkout. You can pinpoint exact locations using Google Maps.
-        </p>
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold tracking-tight text-foreground">No Delivery Locations Saved</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Save your hospital, clinic, practice, or residential address for quick procurement and expedited courier dispatch across Kenya.
+          </p>
+        </div>
 
-        <div className="flex items-center justify-center gap-1.5 mt-6 text-[11px] text-muted-foreground/80 pt-4 border-t border-border/50 w-full">
-          <Navigation className="h-3 w-3 text-primary shrink-0" />
-          <span>Real-time GPS pin location supported</span>
+        <Button
+          onClick={onAdd}
+          className="rounded-xl font-semibold gap-2 shadow-xs mt-2"
+        >
+          <Plus className="h-4 w-4" />
+          Add Your First Address
+        </Button>
+
+        <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground pt-4 border-t border-border/60 w-full">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+          <span>Google Maps verified GPS pin coordinates supported</span>
         </div>
       </CardContent>
     </Card>

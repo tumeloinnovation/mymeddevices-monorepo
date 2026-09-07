@@ -10,7 +10,7 @@ from app.domains.auth.services.auth_service import AuthService
 from app.domains.catalog.models.product import Product
 from app.domains.customers.models.customer_profile import CustomerProfile
 from app.domains.customers.models.review import Review
-from app.domains.shopping.models.vendor_ledger import LedgerTransaction, LedgerTransactionType, VendorLedger
+from app.domains.payments.models.vendor_ledger import LedgerTransaction, LedgerTransactionType, VendorLedger
 from app.domains.vendor.models.vendor_profile import VendorProfile
 
 

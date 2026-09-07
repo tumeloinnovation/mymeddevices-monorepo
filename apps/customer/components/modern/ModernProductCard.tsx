@@ -3,6 +3,7 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import { Product } from "@/lib/data/types";
 import { formatCurrency } from "@/lib/utils/utils";
+import { getValidImageUrl } from "@/lib/utils/image";
 import { Button } from "@/components/ui/button";
 import { ShoppingCart, Heart, GitCompare } from "lucide-react";
 import useCartStore from "@/lib/store/useCartStore";
@@ -13,7 +14,12 @@ interface ModernProductCardProps {
 }
 
 export const ModernProductCard: React.FC<ModernProductCardProps> = ({ product }) => {
-  const [imgSrc, setImgSrc] = useState(product?.images?.[0]?.src || (product?.images?.[0] as any)?.url || '/logos/logo-portrait.png');
+  const [imgSrc, setImgSrc] = useState(() =>
+    getValidImageUrl(
+      product?.images?.[0]?.src || (product?.images?.[0] as any)?.url || (product as any)?.image_url,
+      '/logos/logo-portrait.png'
+    )
+  );
   const price = product ? parseFloat(product.on_sale ? product.sale_price : product.price) : 0;
   
   const addToCart = useCartStore((state) => state.addItem);

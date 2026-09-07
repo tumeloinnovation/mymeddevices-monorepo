@@ -99,3 +99,37 @@ async def test_guest_login_success(client: AsyncClient):
     data = response.json()
     assert data["success"] is True
     assert "access_token" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_user_registration_and_login_case_insensitivity(client: AsyncClient):
+    """Test that email normalization handles mixed case during registration and login."""
+    reg_payload = {
+        "email": "  CaseSensitiveUser@MyMedDevices.CO.KE  ",
+        "password": "Password123!",
+        "first_name": "Case",
+        "last_name": "Test",
+        "phone": "+254719999999",
+        "role": "customer",
+    }
+    reg_res = await client.post("/api/v1/auth/register", json=reg_payload)
+    assert reg_res.status_code == 200
+    assert reg_res.json()["data"]["email"] == "casesensitiveuser@mymeddevices.co.ke"
+
+    # Attempt duplicate registration with lowercase
+    dup_res = await client.post("/api/v1/auth/register", json={
+        "email": "casesensitiveuser@mymeddevices.co.ke",
+        "password": "Password123!",
+        "role": "customer",
+    })
+    assert dup_res.status_code == 409
+
+    # Attempt login with uppercase
+    login_res = await client.post("/api/v1/auth/login", json={
+        "email": "CASESENSITIVEUSER@MYMEDDEVICES.CO.KE",
+        "password": "Password123!",
+        "device_id": "test-device-case-123",
+    })
+    assert login_res.status_code == 200
+    assert login_res.json()["data"]["user"]["email"] == "casesensitiveuser@mymeddevices.co.ke"
+

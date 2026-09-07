@@ -52,6 +52,19 @@ class DeliveryDriverResponse(BaseModel):
     rating: float | None = None
 
 
+class DeliveryItemResponse(BaseModel):
+    """Schema for item details attached to a delivery."""
+
+    id: uuid.UUID | None = None
+    product_id: uuid.UUID | None = None
+    product_name: str
+    quantity: int
+    temperature_sensitive: bool = False
+    fragile: bool = False
+    weight_kg: float | None = None
+    price: float | None = None
+
+
 class DeliveryResponse(BaseModel):
     """Schema for delivery response."""
 
@@ -70,6 +83,10 @@ class DeliveryResponse(BaseModel):
     shipping_amount: float | None
     delivery_notes: str | None
     customer_phone: str | None
+    assignment_status: str | None = "pending"
+    customer_name: str | None = None
+    proof_photo_url: str | None = None
+    signature_url: str | None = None
     created_at: datetime
     updated_at: datetime
     # Enriched fields
@@ -78,6 +95,7 @@ class DeliveryResponse(BaseModel):
     calculated_distance_km: float | None = None
     estimated_duration_minutes: int | None = None
     stops: list[DeliveryStopResponse] = []
+    items: list[DeliveryItemResponse] = []
     driver: DeliveryDriverResponse | None = None
 
     @classmethod
@@ -108,6 +126,45 @@ class DeliveryResponse(BaseModel):
 
         stops = [DeliveryStopResponse.model_validate(s) for s in (delivery.stops or [])]
 
+        # Extract items from order if available
+        items: list[DeliveryItemResponse] = []
+        order = getattr(delivery, "order", None)
+        if order is not None and getattr(order, "items", None):
+            for order_item in order.items:
+                product = getattr(order_item, "product", None)
+                items.append(
+                    DeliveryItemResponse(
+                        id=order_item.id,
+                        product_id=order_item.product_id,
+                        product_name=product.name if product else "Medical item",
+                        quantity=order_item.quantity,
+                        temperature_sensitive=bool(getattr(product, "requires_prescription", False)),
+                        fragile=False,
+                        weight_kg=float(getattr(product, "weight_kg", 0.5)) if getattr(product, "weight_kg", None) else None,
+                        price=float(order_item.unit_price) if order_item.unit_price is not None else None,
+                    )
+                )
+
+        # Extract proof URLs from proofs
+        proof_photo_url = None
+        signature_url = None
+        proofs = getattr(delivery, "proofs", None) or []
+        for proof in proofs:
+            p_data = getattr(proof, "proof_data", {}) or {}
+            p_type = getattr(proof, "proof_type", None)
+            if p_type == "photo" or getattr(p_type, "value", None) == "photo":
+                proof_photo_url = p_data.get("photo_url")
+            elif p_type == "signature" or getattr(p_type, "value", None) == "signature":
+                signature_url = p_data.get("signature_url")
+
+        # Resolve customer name
+        customer_name = None
+        if delivery.delivery_address:
+            customer_name = delivery.delivery_address.get("full_name") or f"{delivery.delivery_address.get('first_name', '')} {delivery.delivery_address.get('last_name', '')}".strip() or None
+        if not customer_name and order is not None and getattr(order, "user", None):
+            customer = order.user
+            customer_name = f"{(customer.first_name or '')} {(customer.last_name or '')}".strip() or customer.email
+
         return cls(
             id=delivery.id,
             order_id=delivery.order_id,
@@ -122,6 +179,10 @@ class DeliveryResponse(BaseModel):
             shipping_amount=float(delivery.shipping_amount) if delivery.shipping_amount is not None else None,
             delivery_notes=delivery.delivery_notes,
             customer_phone=delivery.customer_phone,
+            assignment_status=getattr(delivery, "assignment_status", "pending") or "pending",
+            customer_name=customer_name,
+            proof_photo_url=proof_photo_url,
+            signature_url=signature_url,
             created_at=delivery.created_at,
             updated_at=delivery.updated_at,
             delivery_address=delivery.delivery_address,
@@ -129,6 +190,7 @@ class DeliveryResponse(BaseModel):
             calculated_distance_km=delivery.calculated_distance_km,
             estimated_duration_minutes=delivery.estimated_duration_minutes,
             stops=stops,
+            items=items,
             driver=driver,
         )
 

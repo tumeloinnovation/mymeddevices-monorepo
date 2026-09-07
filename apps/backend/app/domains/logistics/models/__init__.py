@@ -16,6 +16,7 @@ from app.domains.logistics.models.driver_profile import (
     DriverStatus,
 )
 from app.domains.logistics.models.tracking_token import DeliveryTrackingToken
+from app.domains.shopping.models.order import Order  # noqa: F401
 
 __all__ = [
     "Delivery",

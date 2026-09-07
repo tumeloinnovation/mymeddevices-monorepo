@@ -5,7 +5,6 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-
 # Office coordinates for default reference
 OFFICE_LAT = -1.3011758537859464
 OFFICE_LON = 36.800690681948126

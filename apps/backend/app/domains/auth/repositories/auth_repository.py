@@ -13,7 +13,8 @@ class UserRepository(BaseRepository[User]):
         super().__init__(User, db)
 
     async def get_by_email(self, email: str) -> User | None:
-        return await self.get_by(email=email)
+        clean_email = email.strip().lower() if email else ""
+        return await self.get_by(email=clean_email)
 
 
 class RefreshTokenRepository(BaseRepository[RefreshToken]):

@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils";
 const TARGET_URL_PRESETS = [
   { label: "Offers & Deals", value: "/offers" },
   { label: "All Products", value: "/products" },
-  { label: "Diagnostic Equipment", value: "/categories/diagnostic-equipment" },
+  { label: "Diagnostic Devices", value: "/categories/diagnostic-devices" },
   { label: "Best Sellers", value: "/best-sellers" },
   { label: "New Arrivals", value: "/new-arrivals" },
 ];

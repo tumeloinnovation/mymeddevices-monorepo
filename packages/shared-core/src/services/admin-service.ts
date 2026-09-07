@@ -13,6 +13,48 @@ export interface AdminAnalyticsOverview {
   conversion_rate: number;
   avg_order_value: number;
   abandoned_carts: number;
+  pending_vendors?: number;
+  unfulfilled_orders?: number;
+  low_stock_count?: number;
+  open_tickets?: number;
+  compliance_score?: number;
+  total_products?: number;
+  verified_products?: number;
+}
+
+export interface AdminActionItem {
+  id: string;
+  type: "vendor" | "order" | "stock" | "support" | "review";
+  title: string;
+  description: string;
+  urgency: "high" | "medium" | "low";
+  count: number;
+  link: string;
+  action_label: string;
+}
+
+export interface AdminStockAlert {
+  id: string;
+  name: string;
+  stock_quantity: number;
+  threshold: number;
+  price: number;
+}
+
+export interface AdminOrderStatusDistribution {
+  status: string;
+  key: string;
+  count: number;
+  revenue: number;
+  color: string;
+}
+
+export interface AdminPaymentDistribution {
+  method: string;
+  raw_method: string;
+  orders_count: number;
+  revenue: number;
+  share: number;
 }
 
 export interface AdminAnalyticsData {
@@ -30,6 +72,7 @@ export interface AdminAnalyticsData {
     total: number;
   }>;
   status_breakdown: Record<string, number>;
+  order_status_distribution?: AdminOrderStatusDistribution[];
   recent_orders: Array<{
     id: string;
     order_number: string;
@@ -49,6 +92,9 @@ export interface AdminAnalyticsData {
     units_sold: number;
     revenue: number;
   }>;
+  stock_alerts?: AdminStockAlert[];
+  action_items?: AdminActionItem[];
+  payment_distribution?: AdminPaymentDistribution[];
   segmentation: Array<{
     name: string;
     value: number;
@@ -190,6 +236,85 @@ class AdminService {
   async deleteEmailCampaign(id: string): Promise<{ message: string }> {
     return apiClient.delete<{ message: string }>(`/admin/marketing/email-campaigns/${id}`);
   }
+
+  // Reviews Moderation
+  async getReviews(params?: {
+    moderation_status?: string;
+    contains_profanity?: boolean;
+    vendor_id?: string;
+    product_id?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<AdminReviewsResponse> {
+    const query = new URLSearchParams();
+    if (params?.moderation_status && params.moderation_status !== "all") query.append("moderation_status", params.moderation_status);
+    if (params?.contains_profanity !== undefined) query.append("contains_profanity", String(params.contains_profanity));
+    if (params?.vendor_id) query.append("vendor_id", params.vendor_id);
+    if (params?.product_id) query.append("product_id", params.product_id);
+    if (params?.page) query.append("page", String(params.page));
+    if (params?.limit) query.append("limit", String(params.limit));
+
+    const qs = query.toString();
+    return apiClient.get<AdminReviewsResponse>(`/admin/reviews${qs ? `?${qs}` : ""}`);
+  }
+
+  async getReviewsSummary(): Promise<AdminReviewsSummary> {
+    return apiClient.get<AdminReviewsSummary>("/admin/reviews/summary");
+  }
+
+  async getFlaggedReviews(page: number = 1, limit: number = 50): Promise<AdminReviewsResponse> {
+    return apiClient.get<AdminReviewsResponse>(`/admin/reviews/flagged?page=${page}&limit=${limit}`);
+  }
+
+  async moderateReview(
+    reviewId: string,
+    data: { moderation_status: "visible" | "hidden" | "removed"; reason?: string }
+  ): Promise<AdminReview> {
+    return apiClient.put<AdminReview>(`/admin/reviews/${reviewId}/moderate`, data);
+  }
+
+  async deleteReview(reviewId: string): Promise<{ message: string }> {
+    return apiClient.delete<{ message: string }>(`/admin/reviews/${reviewId}`);
+  }
+}
+
+export interface AdminReview {
+  id: string;
+  customer_id: string;
+  product_id: string;
+  rating: number;
+  comment: string;
+  is_verified_purchase: boolean;
+  contains_profanity: boolean;
+  flagged_words?: string[] | null;
+  moderation_status: "visible" | "hidden" | "removed";
+  moderation_reason?: string | null;
+  moderated_by?: string | null;
+  moderated_at?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+  customer_email?: string | null;
+  customer_name?: string | null;
+  product_name?: string | null;
+  vendor_id?: string | null;
+  vendor_name?: string | null;
+}
+
+export interface AdminReviewsSummary {
+  total_reviews: number;
+  average_rating: number;
+  visible_reviews: number;
+  hidden_reviews: number;
+  removed_reviews: number;
+  flagged_profanity: number;
+  rating_distribution: Record<string, number>;
+}
+
+export interface AdminReviewsResponse {
+  reviews: AdminReview[];
+  total: number;
+  page: number;
+  limit: number;
 }
 
 export const adminService = new AdminService();

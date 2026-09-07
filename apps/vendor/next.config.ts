@@ -38,10 +38,18 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
-      // Seed data images (Unsplash)
+      // Seed data images (Unsplash & PostImage)
       {
         protocol: 'https',
         hostname: 'images.unsplash.com',
+      },
+      {
+        protocol: 'https',
+        hostname: 'postimg.cc',
+      },
+      {
+        protocol: 'https',
+        hostname: 'i.postimg.cc',
       },
       // Wikipedia (used in some legacy pages)
       {

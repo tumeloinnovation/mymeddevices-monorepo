@@ -6,11 +6,9 @@ during development while maintaining strict CORS in production.
 """
 
 import re
-from urllib.parse import urlparse
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.logging import logger

@@ -1,4 +1,5 @@
 import uuid
+
 import pytest
 
 from app.domains.catalog.models.manufacturer import Manufacturer
@@ -10,7 +11,7 @@ from app.domains.catalog.services.ai_assist_service import ai_assist_service
 @pytest.mark.asyncio
 async def test_deterministic_barcode_match(db_session):
     """Verify exact GTIN/EAN barcode match returns auto_merge_eligible = True."""
-    
+
     prod = Product(
         id=uuid.uuid4(),
         name="Digital Thermometer Pro",
@@ -46,7 +47,7 @@ async def test_deterministic_barcode_match(db_session):
 @pytest.mark.asyncio
 async def test_deterministic_manufacturer_model_match(db_session):
     """Verify exact Manufacturer + Model match returns auto_merge_eligible = True."""
-    
+
     mfg = Manufacturer(id=uuid.uuid4(), name="Philips Healthcare", slug="philips-health")
     db_session.add(mfg)
     await db_session.flush()
@@ -79,7 +80,7 @@ async def test_deterministic_manufacturer_model_match(db_session):
 @pytest.mark.asyncio
 async def test_fuzzy_match_requires_admin_review(db_session):
     """Verify fuzzy/semantic match NEVER auto-merges and routes to admin moderation."""
-    
+
     prod = Product(
         id=uuid.uuid4(),
         name="Stethoscope Cardiology IV",

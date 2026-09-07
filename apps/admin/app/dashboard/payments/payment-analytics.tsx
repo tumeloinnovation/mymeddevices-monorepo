@@ -62,7 +62,7 @@ export default function PaymentAnalytics() {
     try {
       // Fetch from backend shopping analytics & mobile money
       const analytics = await apiClient.get<any>("/shopping/admin/analytics").catch(() => null);
-      const mmData = await apiClient.get<any>("/shopping/mobile-money?limit=100").catch(() => null);
+      const mmData = await apiClient.get<any>("/admin/payments/mobile-money?limit=100").catch(() => null);
 
       const payments = mmData?.payments || [];
       const totalAmount = analytics?.total_revenue || payments.reduce((acc: number, p: any) => acc + (p.amount || 0), 0);

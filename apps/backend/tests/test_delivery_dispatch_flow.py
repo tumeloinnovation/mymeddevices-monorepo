@@ -18,6 +18,7 @@ from app.domains.auth.services.auth_service import AuthService
 from app.domains.catalog.models.product import Product
 from app.domains.logistics.models.delivery_proof import DeliveryProof
 from app.domains.logistics.models.driver_profile import DriverProfile, DriverStatus
+from app.domains.notifications.models.notification import UserNotification
 from app.domains.shopping.models.order import Order, OrderItem, OrderStatus
 from app.domains.shopping.models.sub_order import SubOrder, SubOrderStatus
 from app.domains.vendor.models.vendor_profile import VendorProfile
@@ -153,6 +154,7 @@ async def dispatch_setup(db_session):
     tokens_driver = await auth_service.create_tokens(driver_user)
 
     return {
+        "customer": customer,
         "order": order,
         "item": item,
         "vendor": vendor,
@@ -198,7 +200,7 @@ async def test_auto_dispatch_when_all_items_packed(client: AsyncClient, dispatch
 
 
 @pytest.mark.asyncio
-async def test_pickup_and_delivery_lifecycle(client: AsyncClient, dispatch_setup):
+async def test_pickup_and_delivery_lifecycle(client: AsyncClient, db_session, dispatch_setup):
     """Driver confirms pickup (items -> shipped) then delivers (order -> delivered)."""
     data = dispatch_setup
     headers_vendor = {"Authorization": f"Bearer {data['tokens_vendor'].access_token}"}
@@ -242,6 +244,14 @@ async def test_pickup_and_delivery_lifecycle(client: AsyncClient, dispatch_setup
     assert shipped.status_code == 200
     shipped_items = shipped.json()["data"]["items"]
     assert all(it["status"] == "shipped" for it in shipped_items), shipped_items
+
+    notifications = (
+        await db_session.execute(
+            select(UserNotification).where(UserNotification.user_id == data["customer"].id)
+        )
+    ).scalars().all()
+    # The pickup transaction queues the durable event; relay processing is covered by outbox integration.
+    assert not notifications
 
     # 4. Medical-device completion requires photo and GPS evidence.
     blocked = await client.patch(

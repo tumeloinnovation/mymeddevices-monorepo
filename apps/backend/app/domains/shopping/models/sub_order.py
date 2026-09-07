@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from app.domains.shopping.models.order import Order, OrderItem
-    from app.domains.shopping.models.vendor_ledger import LedgerTransaction
+    from app.domains.payments.models.vendor_ledger import LedgerTransaction
     from app.domains.vendor.models.vendor_profile import VendorProfile
 
 from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String

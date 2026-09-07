@@ -5,7 +5,7 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy import select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings as catalog_settings
@@ -16,6 +16,7 @@ from app.domains.auth.models.user import User
 from app.domains.catalog.dependencies import CatalogServiceDep
 from app.domains.catalog.models.brand import Brand
 from app.domains.catalog.models.category import Category
+from app.domains.catalog.models.product import Product
 from app.domains.catalog.schemas.brand_schemas import (
     BrandCreate,
     BrandListResponse,
@@ -783,6 +784,65 @@ async def list_products(
         page_size=page_size,
     )
     return {"products": products, "total": total, "page": page, "page_size": page_size}
+
+
+@router.get("/products-stats", tags=["Vendor Catalog"])
+async def get_products_stats(
+    vendor_profile: Annotated[VendorProfile | None, Depends(get_vendor_context)],
+    vendor_id: str | None = Query(None, description="Filter by vendor ID (admin only)"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return platform or vendor catalog statistics: total, published, pending, draft, low stock, verified."""
+    effective_vendor_id = vendor_id if vendor_profile is None else str(vendor_profile.id)
+    base_conds = [Product.is_deleted == False]
+    if effective_vendor_id is not None:
+        base_conds.append(Product.vendor_id == effective_vendor_id)
+
+    total_res = await db.execute(select(func.count(Product.id)).where(*base_conds))
+    total = total_res.scalar() or 0
+
+    published_res = await db.execute(
+        select(func.count(Product.id)).where(and_(*base_conds, Product.status == "published"))
+    )
+    published = published_res.scalar() or 0
+
+    pending_res = await db.execute(
+        select(func.count(Product.id)).where(and_(*base_conds, Product.status == "pending_review"))
+    )
+    pending = pending_res.scalar() or 0
+
+    draft_res = await db.execute(
+        select(func.count(Product.id)).where(and_(*base_conds, Product.status == "draft"))
+    )
+    draft = draft_res.scalar() or 0
+
+    archived_res = await db.execute(
+        select(func.count(Product.id)).where(and_(*base_conds, Product.status == "archived"))
+    )
+    archived = archived_res.scalar() or 0
+
+    low_stock_res = await db.execute(
+        select(func.count(Product.id)).where(
+            and_(*base_conds, Product.stock_quantity <= Product.low_stock_threshold)
+        )
+    )
+    low_stock = low_stock_res.scalar() or 0
+
+    verified_res = await db.execute(
+        select(func.count(Product.id)).where(and_(*base_conds, Product.is_verified == True))
+    )
+    verified = verified_res.scalar() or 0
+
+    return {
+        "total": total,
+        "published": published,
+        "pending_review": pending,
+        "draft": draft,
+        "archived": archived,
+        "low_stock": low_stock,
+        "verified": verified,
+        "compliance_rate": round((verified / max(total, 1)) * 100, 1) if total > 0 else 100.0,
+    }
 
 
 @router.get(

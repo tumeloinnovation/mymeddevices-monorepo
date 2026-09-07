@@ -1,7 +1,7 @@
+import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
-import uuid
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domains.catalog.models.bundle import BundleDiscountType
@@ -11,13 +11,13 @@ class BundleComponentCreate(BaseModel):
     product_id: uuid.UUID
     quantity: int = Field(default=1, gt=0)
     sort_order: int = Field(default=0)
-    allowed_vendor_ids: Optional[list[str]] = None
+    allowed_vendor_ids: list[str] | None = None
 
 
 class BundleCreate(BaseModel):
     name: str = Field(min_length=3, max_length=255)
     slug: str = Field(min_length=3, max_length=255)
-    description: Optional[str] = None
+    description: str | None = None
     discount_type: BundleDiscountType = BundleDiscountType.FIXED_AMOUNT
     discount_value: Decimal = Field(default=Decimal("0.00"), ge=0)
     funding_source: str = Field(default="PLATFORM")
@@ -26,13 +26,13 @@ class BundleCreate(BaseModel):
 
 
 class BundleUpdate(BaseModel):
-    name: Optional[str] = Field(None, min_length=3, max_length=255)
-    slug: Optional[str] = Field(None, min_length=3, max_length=255)
-    description: Optional[str] = None
-    discount_type: Optional[BundleDiscountType] = None
-    discount_value: Optional[Decimal] = Field(None, ge=0)
-    funding_source: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = Field(None, min_length=3, max_length=255)
+    slug: str | None = Field(None, min_length=3, max_length=255)
+    description: str | None = None
+    discount_type: BundleDiscountType | None = None
+    discount_value: Decimal | None = Field(None, ge=0)
+    funding_source: str | None = None
+    is_active: bool | None = None
 
 
 class BundleComponentResponse(BaseModel):
@@ -44,10 +44,10 @@ class BundleComponentResponse(BaseModel):
     product_slug: str
     quantity: int
     sort_order: int
-    gross_unit_price: Optional[Decimal] = None
-    allocated_discount: Optional[Decimal] = None
-    net_unit_price: Optional[Decimal] = None
-    winning_vendor_name: Optional[str] = None
+    gross_unit_price: Decimal | None = None
+    allocated_discount: Decimal | None = None
+    net_unit_price: Decimal | None = None
+    winning_vendor_name: str | None = None
 
 
 class BundleResponse(BaseModel):
@@ -56,15 +56,15 @@ class BundleResponse(BaseModel):
     id: uuid.UUID
     name: str
     slug: str
-    description: Optional[str] = None
+    description: str | None = None
     discount_type: BundleDiscountType
     discount_value: Decimal
     funding_source: str
     is_active: bool
     is_available: bool = True
-    gross_customer_price: Optional[Decimal] = None
-    discount_amount: Optional[Decimal] = None
-    net_customer_price: Optional[Decimal] = None
+    gross_customer_price: Decimal | None = None
+    discount_amount: Decimal | None = None
+    net_customer_price: Decimal | None = None
     components: list[BundleComponentResponse] = []
     created_at: datetime
     updated_at: datetime

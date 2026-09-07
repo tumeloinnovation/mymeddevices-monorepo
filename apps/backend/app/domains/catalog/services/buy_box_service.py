@@ -1,13 +1,11 @@
+import uuid
 from dataclasses import dataclass
 from decimal import Decimal
-import uuid
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.domains.catalog.models.category import Category
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.product_variant import ProductVariant
 from app.domains.catalog.services.pricing_engine import PricingBreakdown, pricing_engine
@@ -30,7 +28,7 @@ class BuyBoxOfferCandidate:
 
 @dataclass
 class BuyBoxResult:
-    winning_candidate: Optional[BuyBoxOfferCandidate]
+    winning_candidate: BuyBoxOfferCandidate | None
     all_candidates: list[BuyBoxOfferCandidate]
     variant_id: uuid.UUID
     selling_unit: SellingUnitEnum
@@ -41,7 +39,7 @@ class BuyBoxResult:
 class BuyBoxService:
     """
     Authoritative Buy-Box Resolution Service for MyMedDevices.
-    
+
     Principles:
     - Scoped strictly to (product_variant_id, selling_unit, package_quantity).
     - Filters: Approved vendor, active offer, published product, sufficient inventory, warranty compliance.

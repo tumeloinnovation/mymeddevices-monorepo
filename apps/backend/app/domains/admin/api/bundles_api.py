@@ -3,22 +3,22 @@ Admin API for managing merchandising bundles.
 Bundles are standalone products that group multiple items together with discounts.
 """
 import uuid
-from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_admin_user
 from app.domains.auth.models.user import User
-from app.domains.catalog.models.bundle import Bundle, BundleComponent, BundleDiscountType
+from app.domains.catalog.models.bundle import Bundle, BundleComponent
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.schemas.bundle_schemas import (
-    BundleCreate,
-    BundleResponse,
     BundleComponentCreate,
     BundleComponentResponse,
+    BundleCreate,
+    BundleResponse,
     BundleUpdate,
 )
 
@@ -101,7 +101,7 @@ async def create_bundle(
 
 @router.get("/", response_model=list[BundleResponse])
 async def list_bundles(
-    is_active: Optional[bool] = Query(None, description="Filter by active status"),
+    is_active: bool | None = Query(None, description="Filter by active status"),
     current_admin: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ):

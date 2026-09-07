@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, field_serializer, field_validator
 from app.core.field_types import OptionalKenyanPhone
 
 # Import mobile money schemas for OrderResponse
-from app.domains.shopping.schemas.mobile_money_schemas import MobileMoneyPaymentResponse
+from app.domains.payments.schemas.mobile_money_schemas import MobileMoneyPaymentResponse
 
 
 class ProductMinResponse(BaseModel):

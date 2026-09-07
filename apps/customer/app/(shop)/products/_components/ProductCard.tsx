@@ -21,6 +21,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { getValidImageUrl } from "@/lib/utils/image";
 import { useCompareStore } from "@/lib/store/useCompareStore";
 import Link from "next/link";
 import type { Product } from "@/lib/hooks/useProducts";
@@ -47,7 +48,12 @@ interface ProductCardProps {
 
 
   // Extract product details
-  const [imgSrc, setImgSrc] = useState(product?.images?.[0]?.src || (product?.images?.[0] as any)?.url || '/logos/logo-portrait.png');
+  const [imgSrc, setImgSrc] = useState(() =>
+    getValidImageUrl(
+      product?.images?.[0]?.src || (product?.images?.[0] as any)?.url || (product as any)?.image_url,
+      '/logos/logo-portrait.png'
+    )
+  );
   const name = product?.name || '';
   // Try multiple possible category field structures
   const category = product?.categories?.[0]?.name || (product as any)?.category_name || (product as any)?.category || '';
@@ -101,14 +107,16 @@ interface ProductCardProps {
     router.push(`/products/${slug}`);
   };
 
+  const variants = (product as any)?.variants || [];
+  const hasMultipleOptions =
+    (product?.type === 'variable' || product?.product_type === 'variable' || variants.length > 0) &&
+    variants.length > 1;
+
+  const isBundle = product?.type === 'bundle' || product?.product_type === 'bundle';
+
   const handleAddToCart = () => {
-    // Bundles and variable products require configuration/selection on the detail page
-    if (
-      product?.type === 'bundle' ||
-      product?.product_type === 'bundle' ||
-      product?.product_type === 'variable' ||
-      ((product as any)?.variants && (product as any)?.variants.length > 0)
-    ) {
+    // Bundles and products with multiple variable options require selection on the detail page
+    if (isBundle || hasMultipleOptions) {
       router.push(`/products/${slug}`);
       return;
     }
@@ -334,7 +342,7 @@ interface ProductCardProps {
                       >
                         Out of stock
                       </Button>
-                    ) : (product?.type === 'bundle' || product?.product_type === 'bundle') ? (
+                    ) : isBundle ? (
                       <Button
                         onClick={() => router.push(`/products/${slug}`)}
                         className="w-full h-full rounded-md shadow-sm text-xs font-medium bg-amber-600 hover:bg-amber-500 text-white flex items-center justify-center gap-1.5"
@@ -343,7 +351,7 @@ interface ProductCardProps {
                         <ShoppingCart className="h-4 w-4" />
                         Configure Bundle
                       </Button>
-                    ) : (product?.product_type === 'variable' || ((product as any)?.variants && (product as any)?.variants.length > 0)) ? (
+                    ) : hasMultipleOptions ? (
                       <Button
                         onClick={() => router.push(`/products/${slug}`)}
                         className="w-full h-full rounded-md shadow-sm text-xs font-medium bg-primary/90 hover:bg-primary text-white flex items-center justify-center gap-1.5"

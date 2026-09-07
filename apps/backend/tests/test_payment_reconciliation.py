@@ -12,7 +12,7 @@ from app.domains.shared.models.outbox import OutboxEvent
 from app.domains.shared.services.outbox_relay import OutboxRelay
 from app.domains.shopping.models.order import Order, OrderItem, OrderStatus
 from app.domains.shopping.models.sub_order import SubOrder, SubOrderStatus
-from app.domains.shopping.models.vendor_ledger import VendorLedger
+from app.domains.payments.models.vendor_ledger import VendorLedger
 from app.domains.vendor.models.vendor_profile import VendorProfile
 
 
@@ -162,7 +162,7 @@ async def test_mobile_money_payment_lifecycle_and_ledger_credit(client: AsyncCli
         "phone_number": "254712345678",
         "notes": "Verified via Daraja STK",
     }
-    response = await client.post("/api/v1/admin/shopping/mobile-money/record", json=payload, headers=admin_headers)
+    response = await client.post("/api/v1/admin/payments/mobile-money/record", json=payload, headers=admin_headers)
     assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
     payment_data = response.json()["data"]
     payment_id = payment_data["id"]
@@ -196,7 +196,7 @@ async def test_mobile_money_payment_lifecycle_and_ledger_credit(client: AsyncCli
 
     # Step 5: Duplicate recording attempt on the same order must be rejected
     dup_res = await client.post(
-        "/api/v1/admin/shopping/mobile-money/record",
+        "/api/v1/admin/payments/mobile-money/record",
         json={
             "order_id": str(data["order"].id),
             "transaction_id": "MPESANEW123",
@@ -210,7 +210,7 @@ async def test_mobile_money_payment_lifecycle_and_ledger_credit(client: AsyncCli
     # Step 6: Refund payment
     refund_txn = f"REF{uuid.uuid4().hex[:6].upper()}"
     refund_res = await client.post(
-        f"/api/v1/admin/shopping/mobile-money/{payment_id}/refund",
+        f"/api/v1/admin/payments/mobile-money/{payment_id}/refund",
         json={"refund_transaction_id": refund_txn, "refund_reason": "Customer returned device"},
         headers=admin_headers,
     )

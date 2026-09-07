@@ -204,6 +204,52 @@ class LoyaltyService:
         result = await self.db.execute(stmt)
         return result.scalar_one()
 
+    async def award_points_for_order(self, order: Any) -> bool:
+        """Award loyalty points for a paid order exactly once.
+
+        Idempotent: keyed on the earn ledger entry referenced to the order, so
+        repeated OrderPaid event processing never double-awards. Returns True
+        if points were awarded this call.
+
+        Points: 1 point per KES 100 spent, multiplied by the customer's tier
+        multiplier (minimum 1 point for any order above KES 0).
+        """
+        if not order.user_id:
+            return False
+
+        existing = (
+            await self.db.execute(
+                select(LoyaltyLedger).where(
+                    LoyaltyLedger.customer_id == order.user_id,
+                    LoyaltyLedger.transaction_type == "earn",
+                    LoyaltyLedger.reference_type == "order",
+                    LoyaltyLedger.reference_id == order.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return False
+
+        from decimal import Decimal
+
+        base_points = int(order.total_amount / Decimal("100"))
+        if base_points <= 0:
+            return False
+
+        profile = await self._get_or_create_profile(order.user_id)
+        tier_config = self.TIERS.get((profile.loyalty_tier or "bronze").lower(), {})
+        multiplier = Decimal(str(tier_config.get("multiplier", 1.0)))
+        final_points = max(1, int(base_points * multiplier))
+
+        await self.earn_points(
+            customer_id=order.user_id,
+            points=final_points,
+            description=f"Earned from Order #{order.order_number}",
+            reference_type="order",
+            reference_id=order.id,
+        )
+        return True
+
     async def redeem_points(
         self,
         customer_id: uuid.UUID,

@@ -157,7 +157,7 @@ async def test_permissions_matrix_operations(client: AsyncClient, admin_ops_setu
 async def test_staff_permissions_and_custom_overrides(client: AsyncClient, admin_ops_setup, db_session):
     """Test staff list dynamic permission count and staff-specific permission overrides."""
     data = admin_ops_setup
-    admin = data["admin"]
+    data["admin"]
     admin_headers = {"Authorization": f"Bearer {data['admin_tokens'].access_token}"}
 
     # 1. Create a worker staff member
@@ -181,7 +181,7 @@ async def test_staff_permissions_and_custom_overrides(client: AsyncClient, admin
     worker_item = next((s for s in staff_items if s["id"] == str(worker.id)), None)
     assert worker_item is not None
     assert worker_item["permissions_count"] > 0
-    initial_count = worker_item["permissions_count"]
+    worker_item["permissions_count"]
 
     # 3. Query staff detail permissions
     perm_res = await client.get(f"/api/v1/admin/users/staff/{worker.id}/permissions", headers=admin_headers)

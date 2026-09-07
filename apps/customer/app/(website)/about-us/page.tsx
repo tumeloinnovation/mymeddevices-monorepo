@@ -34,8 +34,8 @@ export default function AboutPage() {
     },
     {
       icon: HeartHandshake,
-      title: 'Direct Vendor Partnerships',
-      description: 'We source directly from licensed global medical manufacturers to eliminate middleman price markups.',
+      title: 'Direct Supply & Transparent Pricing',
+      description: 'We source directly from licensed medical manufacturers to give Kenyan families affordable, genuine equipment.',
     },
     {
       icon: Award,
@@ -64,7 +64,7 @@ export default function AboutPage() {
           >
             <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-bold uppercase tracking-wider">
               <ShieldCheck className="w-4 h-4 text-primary" />
-              <span>Kenya’s Preferred Medical Marketplace</span>
+              <span>Kenya&apos;s Trusted Medical Device Store</span>
             </div>
 
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-foreground tracking-tight leading-[1.15]">
@@ -72,7 +72,7 @@ export default function AboutPage() {
             </h1>
 
             <p className="text-sm sm:text-base text-muted-foreground leading-relaxed max-w-2xl">
-              At <strong>MyMedDevices</strong>, we bridge the gap between world-class healthcare vendors and patients across Kenya. From vital sign monitors to clinical facility setups, we make certified medical equipment accessible, affordable, and dependable.
+              At <strong>MyMedDevices</strong>, we are Kenya&apos;s dedicated online medical equipment store. From blood pressure and glucose monitors to wheelchairs and home patient aids, we make genuine, certified medical devices accessible and easy to order directly to your door.
             </p>
 
             <div className="grid grid-cols-2 gap-4 pt-2">
@@ -255,7 +255,7 @@ export default function AboutPage() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
                 <h3 className="text-xl font-bold text-foreground mb-3">A Healthier, Self-Reliant Kenya</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">
-                  To become East Africa's most trusted digital healthcare procurement network, ensuring that no patient or medical clinic lacks immediate access to certified life-saving equipment.
+                  To become Kenya&apos;s most trusted online medical device store, ensuring every family and clinic has fast, reliable access to genuine health essentials.
                 </p>
               </motion.div>
             )}

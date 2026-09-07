@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.rate_limiting import RateLimiterDependency
 from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.auth.models.user import User
 from app.domains.shopping.api.dependencies import get_optional_current_user
@@ -11,7 +12,12 @@ from app.domains.shopping.services.order_service import CheckoutService
 router = APIRouter(prefix="/checkout", tags=["Checkout"])
 
 
-@router.post("", response_model=ApiSuccessResponse[OrderResponse], status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=ApiSuccessResponse[OrderResponse],
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(RateLimiterDependency("checkout"))],
+)
 async def create_order(
     data: OrderCreate,
     current_user: User | None = Depends(get_optional_current_user),

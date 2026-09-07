@@ -58,8 +58,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3002",
     ]
     ADDITIONAL_ALLOWED_ORIGINS: list[str] = []
-    # Allow local network origins for mobile testing in development
-    # Enables wildcard patterns like http://192.168.*:* for same-network mobile access
+    # Allow local network origins for mobile testing in local development
     ALLOW_LOCAL_NETWORK: bool = True
 
     @property
@@ -72,27 +71,20 @@ class Settings(BaseSettings):
             if extra and extra not in origins:
                 origins.append(extra)
 
-        # In development, add wildcard patterns for local network access
-        # This enables mobile testing from devices on the same network
+        # In local development only, allow local network access when explicitly enabled
         if self.ALLOW_LOCAL_NETWORK and self.ENVIRONMENT.lower() in ("development", "dev", "local"):
             # localhost with any port
             origins.extend(["http://localhost:*", "http://127.0.0.1:*"])
 
-            # Private network ranges (RFC 1918) for local mobile testing
-            # 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+            # Private network ranges (RFC 1918: 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
             origins.extend([
                 "http://10.*:*",
-                "http://172.16.*:*",
-                "http://172.17.*:*",
-                "http://172.18.*:*",
-                "http://172.19.*:*",
-                "http://172.2*.*:*",
-                "http://172.30.*:*",
-                "http://172.31.*:*",
+                *(f"http://172.{i}.*:*" for i in range(16, 32)),
                 "http://192.168.*:*",
             ])
 
         return origins
+
 
     # HostPinnacle SMS Settings
     HOSTPINNACLE_API_KEY: str | None = None
@@ -117,7 +109,7 @@ class Settings(BaseSettings):
     MPESA_PASSKEY: str | None = None
     MPESA_SHORTCODE: str = "174379"  # Default Safaricom Daraja test shortcode
     MPESA_INITIATOR_NAME: str | None = None
-    MPESA_CALLBACK_URL: str = "https://api.mymeddevices.com/api/v1/shopping/mpesa/callback"
+    MPESA_CALLBACK_URL: str = "https://api.mymeddevices.com/api/v1/payments/mpesa/callback"
     MPESA_CALLBACK_SECRET: str | None = None
     MPESA_TIMEOUT_SECONDS: float = 15.0
 
@@ -179,6 +171,16 @@ class Settings(BaseSettings):
                 raise ValueError("JWT_PRIVATE_KEY must be configured in production/staging environment.")
             if not self.JWT_PUBLIC_KEY:
                 raise ValueError("JWT_PUBLIC_KEY must be configured in production/staging environment.")
+            if not self.MPESA_CALLBACK_SECRET:
+                raise ValueError(
+                    "MPESA_CALLBACK_SECRET must be configured in production/staging environment "
+                    "to authenticate Safaricom M-Pesa callbacks."
+                )
+            if self.ALGORITHM.upper() != "RS256":
+                raise ValueError(
+                    "ALGORITHM must be RS256 in production/staging environment. "
+                    "HS256 is only permitted in development."
+                )
 
         # Auto-generate RSA key pair for local dev/testing if not provided
         if not self.JWT_PRIVATE_KEY or not self.JWT_PUBLIC_KEY:

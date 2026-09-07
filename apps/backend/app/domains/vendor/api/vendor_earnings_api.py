@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.core.dependencies import require_role
 from app.core.responses import success_response
 from app.domains.auth.models.user import User
-from app.domains.shopping.models.vendor_ledger import LedgerTransaction, LedgerTransactionType, VendorLedger
+from app.domains.payments.models.vendor_ledger import LedgerTransaction, LedgerTransactionType, VendorLedger
 from app.domains.vendor.models.vendor_profile import VendorProfile
 
 router = APIRouter(prefix="/vendor/earnings", tags=["Vendor Earnings"])
@@ -250,41 +250,22 @@ async def request_payout(
     if amount < 5000:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Minimum payout amount is KES 5,000")
 
-    # Get or create ledger with row lock to prevent concurrent double-payouts
-    ledger_stmt = select(VendorLedger).where(VendorLedger.vendor_id == profile.id).with_for_update()
-    ledger_result = await db.execute(ledger_stmt)
-    ledger = ledger_result.scalar_one_or_none()
-    if not ledger:
-        ledger = VendorLedger(vendor_id=profile.id, balance=Decimal("0"))
-        db.add(ledger)
-        await db.flush()
+    from app.core.exceptions import BusinessRuleError
+    from app.domains.payments.services.ledger_service import LedgerService
 
-    # Check sufficient balance
-    if ledger.balance < amount:
+    ledger_service = LedgerService(db)
+    try:
+        payout_txn = await ledger_service.debit_vendor_for_payout(
+            vendor_id=profile.id,
+            amount=amount,
+            method=method,
+            processed_by=current_user.id,
+        )
+    except BusinessRuleError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Insufficient balance. Available: KES {ledger.balance:.2f}, Requested: KES {amount:.2f}",
+            detail=e.message,
         )
-
-    # Create debit transaction for the payout
-    payout_txn = LedgerTransaction(
-        id=uuid.uuid4(),
-        vendor_id=profile.id,
-        gross_amount=amount,
-        platform_fee_rate=Decimal("0"),
-        platform_fee_amount=Decimal("0"),
-        net_amount=amount,
-        transaction_type=LedgerTransactionType.DEBIT_PAYOUT,
-        reference_id=str(uuid.uuid4()),
-        reference_type="payout",
-        notes=f"Payout requested via {method}",
-        processed_by=current_user.id,
-    )
-    db.add(payout_txn)
-
-    # Deduct from ledger
-    ledger.balance -= amount
-    ledger.last_updated_at = datetime.now(UTC)
 
     await db.commit()
 

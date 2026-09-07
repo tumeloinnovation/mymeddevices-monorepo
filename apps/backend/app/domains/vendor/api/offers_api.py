@@ -1,7 +1,6 @@
-from datetime import datetime, UTC
-from decimal import Decimal
-from typing import Annotated
 import uuid
+from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -10,9 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.dependencies import require_role
-from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.auth.models.user import User
-from app.domains.catalog.models.category import Category
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.product_variant import ProductVariant
 from app.domains.catalog.schemas.offer_schemas import (
@@ -22,7 +19,6 @@ from app.domains.catalog.schemas.offer_schemas import (
     VendorOfferResponse,
     VendorOfferUpdate,
 )
-from app.domains.catalog.services.ai_assist_service import ai_assist_service
 from app.domains.catalog.services.pricing_engine import pricing_engine
 from app.domains.vendor.models.vendor_offer import (
     OfferInventory,
@@ -119,7 +115,7 @@ async def create_vendor_offer(
     await db.commit()
 
     pricing = pricing_engine.calculate_customer_price(offer.vendor_price)
-    
+
     return VendorOfferResponse(
         id=offer.id,
         vendor_id=offer.vendor_id,

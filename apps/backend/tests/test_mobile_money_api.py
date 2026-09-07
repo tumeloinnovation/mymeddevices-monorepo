@@ -55,7 +55,7 @@ async def test_record_mobile_money_payment_as_admin_success(client: AsyncClient,
         "notes": "Verified via M-Pesa SMS",
     }
 
-    response = await client.post("/api/v1/admin/shopping/mobile-money/record", json=payload, headers=headers)
+    response = await client.post("/api/v1/admin/payments/mobile-money/record", json=payload, headers=headers)
     assert response.status_code == 200
     res_data = response.json()
     assert res_data["success"] is True
@@ -81,7 +81,7 @@ async def test_record_mobile_money_payment_customer_forbidden(client: AsyncClien
 
     payload = {"order_id": str(uuid.uuid4()), "transaction_id": "MPESA12345678", "provider": "mpesa"}
 
-    response = await client.post("/api/v1/admin/shopping/mobile-money/record", json=payload, headers=headers)
+    response = await client.post("/api/v1/admin/payments/mobile-money/record", json=payload, headers=headers)
     assert response.status_code == 403
 
 
@@ -89,7 +89,7 @@ async def test_record_mobile_money_payment_customer_forbidden(client: AsyncClien
 async def test_record_mobile_money_payment_unauthenticated(client: AsyncClient):
     """Test unauthenticated request returns 401."""
     payload = {"order_id": str(uuid.uuid4()), "transaction_id": "MPESA12345678", "provider": "mpesa"}
-    response = await client.post("/api/v1/admin/shopping/mobile-money/record", json=payload)
+    response = await client.post("/api/v1/admin/payments/mobile-money/record", json=payload)
     assert response.status_code == 401
 
 
@@ -115,7 +115,7 @@ async def test_record_mobile_money_payment_invalid_transaction_id(client: AsyncC
         "provider": "mpesa",
     }
 
-    response = await client.post("/api/v1/admin/shopping/mobile-money/record", json=payload, headers=headers)
+    response = await client.post("/api/v1/admin/payments/mobile-money/record", json=payload, headers=headers)
     assert response.status_code in (400, 422)
 
 
@@ -137,5 +137,5 @@ async def test_record_mobile_money_payment_order_not_found(client: AsyncClient, 
 
     payload = {"order_id": str(uuid.uuid4()), "transaction_id": "MPESA88888888", "provider": "mpesa"}
 
-    response = await client.post("/api/v1/admin/shopping/mobile-money/record", json=payload, headers=headers)
+    response = await client.post("/api/v1/admin/payments/mobile-money/record", json=payload, headers=headers)
     assert response.status_code == 404

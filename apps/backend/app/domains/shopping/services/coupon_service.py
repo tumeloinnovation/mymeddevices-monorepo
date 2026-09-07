@@ -231,7 +231,7 @@ class CouponService:
     async def validate_coupon(
         self,
         code: str,
-        order_subtotal: float,
+        order_subtotal: float | Decimal,
         user_id: uuid.UUID | None = None,
         cart_id: uuid.UUID | None = None,
         for_checkout: bool = False,
@@ -261,7 +261,7 @@ class CouponService:
         if coupon.restrictions:
             # Min order value
             if coupon.restrictions.min_order_value:
-                if order_subtotal < float(coupon.restrictions.min_order_value):
+                if Decimal(str(order_subtotal)) < Decimal(str(coupon.restrictions.min_order_value)):
                     return False, None, f"Minimum order value of {coupon.restrictions.min_order_value} required"
 
             # Global usage limit
@@ -335,12 +335,16 @@ class CouponService:
     async def record_coupon_usage(
         self,
         coupon_id: uuid.UUID,
-        user_id: uuid.UUID,
+        user_id: uuid.UUID | None,
         order_id: uuid.UUID,
         discount_amount: Decimal,
         vendor_id: uuid.UUID | None = None,
     ) -> CouponUsage:
-        """Record a coupon usage for tracking with row locking and limit verification."""
+        """Record a coupon usage for tracking with row locking and limit verification.
+
+        user_id is None for guest checkouts: the usage is still recorded (so
+        global usage limits hold for guests) while per-user checks are skipped.
+        """
         # Use transaction for atomic usage recording
         async with self._transaction():
             stmt = select(Coupon).where(Coupon.id == coupon_id).with_for_update()
@@ -355,8 +359,8 @@ class CouponService:
                 if usage_count >= coupon.restrictions.global_usage_limit:
                     raise BusinessRuleError("Coupon has reached its usage limit")
 
-            # Concurrency guard: verify per user limit under lock
-            if coupon.restrictions and coupon.restrictions.one_time_per_user:
+            # Concurrency guard: verify per user limit under lock (authenticated users only)
+            if user_id and coupon.restrictions and coupon.restrictions.one_time_per_user:
                 has_used = await self._has_user_used_coupon(coupon.id, user_id)
                 if has_used:
                     raise BusinessRuleError("You have already used this coupon")
@@ -405,16 +409,16 @@ class CouponService:
         return result.scalar() or 0
 
     async def refund_coupon_usage(self, order_id: uuid.UUID) -> bool:
-        """Mark coupon usage as refunded when an order is refunded."""
+        """Mark all coupon usage rows for an order as refunded (an order may
+        have several coupons applied)."""
         # Use transaction for atomic refund update
         async with self._transaction():
             stmt = select(CouponUsage).where(CouponUsage.order_id == order_id)
             result = await self.db.execute(stmt)
-            usage = result.scalar_one_or_none()
-
-            if usage:
-                usage.is_refunded = True
-                usage.refunded_at = datetime.now(UTC)
+            for usage in result.scalars().all():
+                if not usage.is_refunded:
+                    usage.is_refunded = True
+                    usage.refunded_at = datetime.now(UTC)
 
         # Transaction commits automatically
         return True

@@ -6,7 +6,7 @@ from httpx import AsyncClient
 
 from app.domains.auth.models.user import User
 from app.domains.auth.services.auth_service import AuthService
-from app.domains.shopping.models.vendor_ledger import VendorLedger
+from app.domains.payments.models.vendor_ledger import VendorLedger
 from app.domains.vendor.models.vendor_profile import VendorProfile
 
 

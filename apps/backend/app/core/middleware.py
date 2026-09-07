@@ -6,11 +6,16 @@ from uuid import uuid4
 from opentelemetry import trace
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
+from app.core.config import settings
+
 from .logging import logger
 
 SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie"}
 MAX_BODY_LOG_BYTES = 1024 * 16
-SENSITIVE_BODY_KEYS = {"password", "token", "access_token", "refresh_token"}
+# Exact-key matches for common field names that are too short to substring-match safely
+SENSITIVE_EXACT_KEYS = {"code", "otp", "pin", "verification_code", "confirmation_code"}
+# Substring matches catch variants like old_password, new_password, otp_code, api_token
+SENSITIVE_KEY_SUBSTRINGS = ("password", "passwd", "secret", "token", "pin", "otp", "credential", "authorization")
 EXCLUDED_PATHS = {"/openapi.json", "/docs", "/redoc", "/metrics"}
 
 
@@ -21,9 +26,14 @@ def get_trace_id() -> str:
     return "n/a"
 
 
+def _is_sensitive_key(key: Any) -> bool:
+    lowered = str(key).lower()
+    return lowered in SENSITIVE_EXACT_KEYS or any(substring in lowered for substring in SENSITIVE_KEY_SUBSTRINGS)
+
+
 def _redact_body(data: Any) -> Any:
     if isinstance(data, dict):
-        return {k: ("<redacted>" if k.lower() in SENSITIVE_BODY_KEYS else _redact_body(v)) for k, v in data.items()}
+        return {k: ("<redacted>" if _is_sensitive_key(k) else _redact_body(v)) for k, v in data.items()}
     if isinstance(data, list):
         return [_redact_body(item) for item in data]
     return data
@@ -89,14 +99,28 @@ class RequestLoggingMiddleware:
             await self.app(scope, receive, send_wrapper)
             return
 
-        # Buffer the request body for standard non-upload endpoints
+        # Buffer the request body for standard non-upload endpoints with bound enforcement
         body_chunks = []
+        accumulated_size = 0
         more_body = True
+        max_allowed_size = getattr(settings, "MAX_CONTENT_LENGTH", 10 * 1024 * 1024)
+
         while more_body:
             message = await receive()
             if message["type"] == "http.request":
                 chunk = message.get("body", b"")
                 if chunk:
+                    accumulated_size += len(chunk)
+                    if accumulated_size > max_allowed_size:
+                        # Abort immediately to prevent memory pressure from oversized chunked requests
+                        ctx_logger.warning(
+                            f"Request body exceeded maximum allowed size ({max_allowed_size} bytes) during buffering"
+                        )
+                        await send({"type": "http.response.start", "status": 413, "headers": [(b"content-type", b"application/json")]})
+                        await send(
+                            {"type": "http.response.body", "body": b'{"detail": "Request entity too large"}', "more_body": False}
+                        )
+                        return
                     body_chunks.append(chunk)
                 more_body = message.get("more_body", False)
             else:
@@ -114,6 +138,7 @@ class RequestLoggingMiddleware:
                 body_sent = True
                 return {"type": "http.request", "body": request_body, "more_body": False}
             return await receive()
+
 
         # Log Request
         request_info = {

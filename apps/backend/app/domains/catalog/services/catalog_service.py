@@ -503,7 +503,14 @@ class CatalogService:
         # Database Fallback
         query = (
             select(Product)
-            .options(selectinload(Product.images), selectinload(Product.category), selectinload(Product.brand_relation))
+            .options(
+                selectinload(Product.images),
+                selectinload(Product.category),
+                selectinload(Product.brand_relation),
+                selectinload(Product.variants),
+                selectinload(Product.bundle_items).selectinload(BundleItem.component_product),
+                selectinload(Product.related_products).selectinload(RelatedProduct.related_product),
+            )
             .where(Product.status == "published", Product.is_verified == True, Product.is_deleted == False)
         )
 
@@ -520,7 +527,7 @@ class CatalogService:
                 all_cat_ids = [target_cat_id] + list(child_cats_res.scalars().all())
                 query = query.where(Product.category_id.in_(all_cat_ids))
             else:
-                query = query.where(Product.category_id == None)
+                query = query.where(Product.category_id is None)
         elif category_id:
             try:
                 target_uuid = uuid.UUID(str(category_id))
@@ -771,7 +778,10 @@ class CatalogService:
                 name=cat.name,
                 slug=cat.slug,
                 description=cat.description,
+                permalink=cat.permalink,
                 icon_url=cat.icon_url,
+                tax_category_code=cat.tax_category_code or "STANDARD_VAT_16",
+                min_warranty_months=cat.min_warranty_months or 0,
                 parent_id=cat.parent_id,
                 sort_order=cat.sort_order,
                 is_active=cat.is_active,
@@ -811,7 +821,7 @@ class CatalogService:
             child_ids_res = await self.db.execute(
                 select(Category.id).where(Category.parent_id == category.id, Category.is_deleted == False)
             )
-            cat_ids = [category.id] + [cid for cid in child_ids_res.scalars().all()]
+            cat_ids = [category.id] + list(child_ids_res.scalars().all())
             product_count_res = await self.db.execute(
                 select(func.count(Product.id)).where(
                     Product.category_id.in_(cat_ids),

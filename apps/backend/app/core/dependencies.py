@@ -208,25 +208,8 @@ def require_role(*roles: str):
     return role_checker
 
 
-async def get_optional_current_user(
-    credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(security)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-) -> User | None:
-    """
-    Dependency to get optional authenticated user from JWT token.
-    Returns None if no credentials or if token is invalid.
-    """
-    if credentials is None:
-        return None
-    try:
-        return await get_current_user(credentials, db)
-    except HTTPException:
-        return None
-
-
-get_current_user_optional = get_optional_current_user
-
 # Standardized dependency type aliases for clean route parameter declarations
 DbDep = Annotated[AsyncSession, Depends(get_db)]
 CurrentUserDep = Annotated[User, Depends(get_current_user)]
-OptionalUserDep = Annotated[User | None, Depends(get_optional_current_user)]
+OptionalUserDep = Annotated[User | None, Depends(get_current_user_optional)]
+

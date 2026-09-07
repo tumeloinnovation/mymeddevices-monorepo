@@ -5,11 +5,10 @@ import logging
 import uuid
 from typing import Any
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from app.core.exceptions import BusinessRuleError, NotFoundError, ValidationError
+from app.core.exceptions import NotFoundError, ValidationError
 from app.domains.logistics.models.delivery import Delivery, DeliveryStatus
 from app.domains.logistics.models.driver_profile import DriverProfile, DriverStatus
 

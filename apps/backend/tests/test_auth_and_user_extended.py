@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -190,6 +190,58 @@ async def test_password_reset_flow(client: AsyncClient, db_session, sample_user)
 
 
 @pytest.mark.asyncio
+async def test_two_step_password_reset_with_otp_verify(client: AsyncClient, db_session, sample_user):
+    """AUTH-003B: Test 2-step password reset flow (OTP verify then reset-password)."""
+    user = sample_user["user"]
+    email = user.email
+
+    # 1. Forgot password request
+    forgot_res = await client.post("/api/v1/auth/forgot-password", json={"email": email})
+    assert forgot_res.status_code == 200
+
+    # 2. Generate OTP for reset_password
+    otp_service = OTPService(db_session)
+    code = await otp_service.generate_otp(str(user.id), purpose="reset_password")
+
+    # 3. Step 1: Pre-verify OTP without consuming it
+    verify_res = await client.post(
+        "/api/v1/auth/verify-otp",
+        json={"email": email, "code": code, "purpose": "reset_password"},
+    )
+    assert verify_res.status_code == 200
+    assert verify_res.json()["data"]["message"] == "Verification code is valid"
+
+    # Also verify that /api/v1/otp/verify works
+    verify_otp_res = await client.post(
+        "/api/v1/otp/verify",
+        json={"email": email, "code": code, "purpose": "reset_password"},
+    )
+    assert verify_otp_res.status_code == 200
+
+    # 4. Step 2: Reset password using the verified code
+    new_password = "TwoStepResetPassword2026!"
+    reset_res = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"email": email, "code": code, "new_password": new_password},
+    )
+    assert reset_res.status_code == 200
+
+    # 5. Trying to reset password again with same consumed OTP -> 400
+    duplicate_reset = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"email": email, "code": code, "new_password": "AnotherPassword2026!"},
+    )
+    assert duplicate_reset.status_code == 400
+
+    # 6. Login with new password -> 200
+    new_login = await client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": new_password, "device_id": "test-device"},
+    )
+    assert new_login.status_code == 200
+
+
+@pytest.mark.asyncio
 async def test_change_password_and_token_invalidation(client: AsyncClient, db_session, sample_user):
     """AUTH-004: Test changing password when authenticated and token revocation."""
     headers = {"Authorization": f"Bearer {sample_user['tokens'].access_token}"}
@@ -267,9 +319,9 @@ async def test_devices_management_lifecycle(client: AsyncClient, db_session, sam
 async def test_token_refresh_and_logout_lifecycle(client: AsyncClient, sample_user):
     """AUTH-006: Test refresh token rotation and logout endpoint."""
     refresh_token = sample_user["tokens"].refresh_token
-    access_token = sample_user["tokens"].access_token
 
     # 1. Refresh token
+
     ref_res = await client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
     assert ref_res.status_code == 200
     new_tokens = ref_res.json()["data"]

@@ -1,18 +1,16 @@
-from decimal import Decimal
 import uuid
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import get_db
 from app.core.rate_limiting import RateLimiterDependency
 from app.core.responses import ApiSuccessResponse, success_response
-from app.domains.catalog.models.bundle import Bundle
-from app.domains.catalog.models.category import Category
+from app.domains.catalog.models.bundle import Bundle, BundleComponent
 from app.domains.catalog.models.product import Product
-from app.domains.catalog.models.product_variant import ProductVariant
 from app.domains.catalog.schemas.bundle_schemas import (
     BundleComponentResponse,
     BundleResponse,
@@ -27,13 +25,10 @@ from app.domains.catalog.schemas.product_schemas import (
 from app.domains.catalog.services.bundle_service import bundle_service
 from app.domains.catalog.services.buy_box_service import buy_box_service
 from app.domains.catalog.services.catalog_service import CatalogService
-from app.domains.catalog.services.pricing_engine import pricing_engine
 from app.domains.customers.repositories.customer_repository import ReviewRepository
 from app.domains.customers.schemas.customer_schemas import PublicReviewResponse
 from app.domains.vendor.models.vendor_offer import (
-    OfferInventory,
     OfferStatusEnum,
-    SellingUnitEnum,
     VendorOffer,
 )
 
@@ -69,10 +64,18 @@ async def get_storefront_products(
     Browse published and verified products on the storefront.
     Hides vendor identity and internal fields like base_price, markup_price, cost_price, etc.
     """
-    effective_slug = category_slug or category
+    effective_id = category_id
+    effective_slug = category_slug
+    if category:
+        try:
+            uuid.UUID(str(category))
+            effective_id = effective_id or category
+        except (ValueError, TypeError, AttributeError):
+            effective_slug = effective_slug or category
+
     service = CatalogService(db)
     products, total = await service.get_storefront_products(
-        category_id=category_id,
+        category_id=effective_id,
         category_slug=effective_slug,
         search=search,
         price_min=price_min,
@@ -472,20 +475,19 @@ async def get_product_reviews(slug: str, db: AsyncSession = Depends(get_db)):
     Get visible reviews for a product by slug.
     Returns only reviews with moderation_status='visible'.
     """
-    is_uuid = False
+    product = None
     try:
         product_uuid = uuid.UUID(slug)
-        is_uuid = True
-    except ValueError:
+        product_stmt = select(Product).where((Product.id == product_uuid) | (Product.slug == slug))
+        product_result = await db.execute(product_stmt)
+        product = product_result.scalar_one_or_none()
+    except (ValueError, TypeError):
         pass
 
-    if is_uuid:
-        product_stmt = select(Product).where((Product.id == product_uuid) | (Product.slug == slug))
-    else:
+    if not product:
         product_stmt = select(Product).where(Product.slug == slug)
-
-    product_result = await db.execute(product_stmt)
-    product = product_result.scalar_one_or_none()
+        product_result = await db.execute(product_stmt)
+        product = product_result.scalar_one_or_none()
 
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found")

@@ -1,0 +1,53 @@
+[
+  { "code": "KE30", "state": "Nairobi County", "price": 200 },
+  { "code": "KE13", "state": "Kiambu", "price": 250 },
+  { "code": "KE10", "state": "Kajiado", "price": 300 },
+  { "code": "KE22", "state": "Machakos", "price": 300 },
+
+  { "code": "KE29", "state": "Murang'a", "price": 350 },
+  { "code": "KE36", "state": "Nyeri", "price": 400 },
+  { "code": "KE15", "state": "Kirinyaga", "price": 400 },
+  { "code": "KE35", "state": "Nyandarua", "price": 450 },
+
+  { "code": "KE31", "state": "Nakuru", "price": 500 },
+  { "code": "KE12", "state": "Kericho", "price": 550 },
+  { "code": "KE02", "state": "Bomet", "price": 550 },
+  { "code": "KE33", "state": "Narok", "price": 600 },
+
+  { "code": "KE17", "state": "Kisumu", "price": 650 },
+  { "code": "KE11", "state": "Kakamega", "price": 650 },
+  { "code": "KE45", "state": "Vihiga", "price": 650 },
+  { "code": "KE44", "state": "Uasin Gishu", "price": 650 },
+  { "code": "KE32", "state": "Nandi", "price": 700 },
+
+  { "code": "KE03", "state": "Bungoma", "price": 750 },
+  { "code": "KE04", "state": "Busia", "price": 750 },
+  { "code": "KE38", "state": "Siaya", "price": 750 },
+  { "code": "KE08", "state": "Homa Bay", "price": 800 },
+  { "code": "KE27", "state": "Migori", "price": 800 },
+
+  { "code": "KE28", "state": "Mombasa", "price": 800 },
+  { "code": "KE14", "state": "Kilifi", "price": 800 },
+  { "code": "KE19", "state": "Kwale", "price": 800 },
+  { "code": "KE39", "state": "Taita-Taveta", "price": 850 },
+
+  { "code": "KE43", "state": "Turkana", "price": 900 },
+  { "code": "KE21", "state": "Lamu", "price": 900 },
+  { "code": "KE40", "state": "Tana River", "price": 900 },
+  { "code": "KE25", "state": "Marsabit", "price": 950 },
+  { "code": "KE24", "state": "Mandera", "price": 1000 },
+  { "code": "KE09", "state": "Isiolo", "price": 900 },
+  { "code": "KE07", "state": "Garissa", "price": 950 },
+  { "code": "KE06", "state": "Wajir", "price": 1000 },
+
+  { "code": "KE42", "state": "Trans Nzoia", "price": 700 },
+  { "code": "KE01", "state": "Baringo", "price": 650 },
+  { "code": "KE05", "state": "Elgeyo-Marakwet", "price": 700 },
+  { "code": "KE47", "state": "West Pokot", "price": 800 },
+  { "code": "KE37", "state": "Samburu", "price": 850 },
+  { "code": "KE06", "state": "Embu", "price": 500 },
+  { "code": "KE26", "state": "Meru", "price": 550 },
+  { "code": "KE41", "state": "Tharaka-Nithi", "price": 600 },
+  { "code": "KE18", "state": "Kitui", "price": 500 },
+  { "code": "KE23", "state": "Makueni", "price": 450 }
+]

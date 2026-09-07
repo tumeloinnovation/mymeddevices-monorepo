@@ -1,4 +1,5 @@
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
@@ -30,6 +31,13 @@ class UserBase(BaseModel):
     )
 
     model_config = ConfigDict(populate_by_name=True)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
 
 
 class UserCreate(UserBase):
@@ -105,6 +113,13 @@ class VendorUserCreate(BaseModel):
     )
     place_id: str | None = Field(None, description="Google Places ID", json_schema_extra={"example": "ChIJbU59A..."})
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
@@ -137,6 +152,14 @@ class LoginRequest(BaseModel):
     email: EmailStr = Field(
         ..., description="User's registered email address", json_schema_extra={"example": "user@example.com"}
     )
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
     password: str = Field(
         ..., description="User's secure password", json_schema_extra={"example": "SuperSecurePass123!"}
     )
@@ -174,6 +197,13 @@ class OTPLoginRequest(BaseModel):
     device_name: str | None = Field(
         None, description="Friendly name of the login device", json_schema_extra={"example": "My Macbook Pro"}
     )
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
 
 
 class GuestLoginRequest(BaseModel):
@@ -223,6 +253,13 @@ class ChangeEmailRequest(BaseModel):
         json_schema_extra={"example": "SuperSecurePass123!"},
     )
 
+    @field_validator("new_email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
 
 class ConfirmEmailChangeRequest(BaseModel):
     """Confirm email change with OTP"""
@@ -235,6 +272,13 @@ class ConfirmEmailChangeRequest(BaseModel):
         description="6-digit verification code sent to the new email address",
         json_schema_extra={"example": "654321"},
     )
+
+    @field_validator("new_email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
 
 
 class DeleteAccountRequest(BaseModel):
@@ -259,6 +303,46 @@ class ForgotPasswordRequest(BaseModel):
         ..., description="User's registered email address", json_schema_extra={"example": "user@example.com"}
     )
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
+
+class SendOTPRequest(BaseModel):
+    """Request to send OTP code"""
+
+    email: EmailStr = Field(..., description="Recipient email address", json_schema_extra={"example": "user@example.com"})
+    purpose: Literal["verification", "reset_password", "login", "email_change"] = Field(
+        "verification", description="Purpose of OTP code"
+    )
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
+
+class VerifyOTPRequest(BaseModel):
+    """Request to verify OTP code"""
+
+    email: EmailStr = Field(..., description="User registered email address", json_schema_extra={"example": "user@example.com"})
+    code: str = Field(..., description="6-digit verification code", json_schema_extra={"example": "123456"})
+    purpose: Literal["verification", "reset_password", "login", "email_change"] = Field(
+        "verification", description="Purpose of OTP code"
+    )
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
 
 class ResetPasswordRequest(BaseModel):
     """Request to complete password reset with OTP"""
@@ -270,6 +354,13 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(
         ..., min_length=8, description="New secure password", json_schema_extra={"example": "NewPassword2026!"}
     )
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
 
     @field_validator("new_password")
     @classmethod
@@ -304,6 +395,13 @@ class RegisterInitiateRequest(BaseModel):
     email: EmailStr = Field(..., description="User's email address")
     role: str = Field("customer", description="The role to register as (customer, vendor, or guest)")
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
     @field_validator("role")
     @classmethod
     def validate_role(cls, v: str) -> str:
@@ -327,6 +425,13 @@ class RegisterCompleteRequest(BaseModel):
     longitude: float | None = Field(None, description="Physical location longitude coordinate")
     place_id: str | None = Field(None, max_length=100, description="Google Places ID")
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, v: str | None) -> str | None:
+        if isinstance(v, str):
+            return v.strip().lower()
+        return v
+
     @field_validator("password")
     @classmethod
     def validate_password(cls, v: str) -> str:
@@ -336,3 +441,4 @@ class RegisterCompleteRequest(BaseModel):
 
 class DeleteAllDevicesRequest(BaseModel):
     current_device_id: str = Field(..., description="Device ID of the current session to keep")
+

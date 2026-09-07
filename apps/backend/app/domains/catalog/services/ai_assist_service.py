@@ -1,10 +1,10 @@
-from dataclasses import dataclass
 import json
-from typing import Any, Optional
 import uuid
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -18,8 +18,8 @@ from app.domains.catalog.models.product_variant import ProductVariant
 @dataclass
 class ProductMatchResult:
     is_match_found: bool
-    matched_product_id: Optional[uuid.UUID]
-    matched_variant_id: Optional[uuid.UUID]
+    matched_product_id: uuid.UUID | None
+    matched_variant_id: uuid.UUID | None
     match_type: str  # "EXACT_BARCODE", "EXACT_MODEL_NUMBER", "FUZZY_CANDIDATE", "NONE"
     confidence_score: float
     auto_merge_eligible: bool
@@ -31,7 +31,7 @@ class ProductMatchResult:
 class AIAssistService:
     """
     Catalog Intelligence & Deterministic Matching Assistant for MyMedDevices.
-    
+
     Safety Rules:
     - AI is strictly prohibited from hallucinating clinical indications, patient populations, or regulatory clearances (PPB/KMPDB/FDA/CE).
     - Automatic catalog merge is permitted ONLY on 100% deterministic identity keys (exact GTIN/EAN or exact Manufacturer + Model Number).
@@ -153,8 +153,8 @@ class AIAssistService:
     async def generate_suggestions(
         self,
         product: Any,
-        category: Optional[Category] = None,
-        fields_to_generate: Optional[list[str]] = None,
+        category: Category | None = None,
+        fields_to_generate: list[str] | None = None,
     ) -> dict[str, Any]:
         """
         Generate structured MedAI product fields (description, short overview, key-value specs, tags, SEO).
@@ -232,7 +232,7 @@ class AIAssistService:
                 generated_json = json.loads(text_out)
 
                 filtered_suggestions = {k: v for k, v in generated_json.items() if k in fields}
-                confidence_map = {k: 0.95 for k in filtered_suggestions.keys()}
+                confidence_map = dict.fromkeys(filtered_suggestions.keys(), 0.95)
 
                 return {
                     "suggestions": filtered_suggestions,
@@ -286,7 +286,7 @@ class AIAssistService:
         }
 
         filtered = {k: v for k, v in full_suggestions.items() if k in fields}
-        confidence = {k: 0.85 for k in filtered.keys()}
+        confidence = dict.fromkeys(filtered.keys(), 0.85)
 
         return {
             "suggestions": filtered,
@@ -295,7 +295,7 @@ class AIAssistService:
         }
 
     async def ai_validate_product(
-        self, product: Any, category: Optional[Category] = None
+        self, product: Any, category: Category | None = None
     ) -> dict[str, Any]:
         """
         Validates product listing against medical device accuracy, completeness, and clarity.

@@ -13,6 +13,15 @@ export interface ProductFilters {
   search: string;
   status: string;
   categoryId: string;
+  vendorId?: string;
+}
+
+export function useProductStats(vendorId?: string) {
+  return useQuery({
+    queryKey: ["admin", "products", "stats", vendorId],
+    queryFn: () => catalogService.getProductStats(vendorId),
+    staleTime: 30 * 1000,
+  });
 }
 
 export function useProducts(filters: ProductFilters) {
@@ -25,6 +34,7 @@ export function useProducts(filters: ProductFilters) {
         search: filters.search || undefined,
         status_filter: filters.status !== "all" ? filters.status : undefined,
         category_id: filters.categoryId !== "all" ? filters.categoryId : undefined,
+        vendor_id: filters.vendorId !== "all" ? filters.vendorId : undefined,
       }),
     placeholderData: (prev) => prev,
   });

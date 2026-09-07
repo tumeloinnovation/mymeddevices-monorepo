@@ -7,21 +7,19 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.core.database import get_db
 from app.core.dependencies import get_current_user, require_role
 from app.domains.auth.models.user import User
 from app.domains.logistics.dependencies import DeliveryServiceDep
 from app.domains.logistics.models.delivery import DeliveryStatus
 from app.domains.logistics.models.delivery_proof import ProofType
+from app.domains.logistics.schemas.assignment_schemas import AssignmentDecision, FailedAttempt
 from app.domains.logistics.schemas.delivery_schemas import (
     DeliveryCreate,
     DeliveryResponse,
     DeliveryStatusUpdate,
 )
-from app.domains.logistics.schemas.assignment_schemas import AssignmentDecision, FailedAttempt
 
 router = APIRouter(prefix="/deliveries", tags=["Deliveries"])
 
@@ -38,6 +36,26 @@ async def create_delivery(
     """Create new delivery from order details."""
     delivery = await service.create_delivery_from_order(request.order_id)
     return DeliveryResponse.from_delivery(delivery)
+
+
+@router.get("/driver/{driver_id}")
+async def get_driver_deliveries(
+    driver_id: str,
+    service: DeliveryServiceDep,
+    delivery_status: DeliveryStatus | None = Query(default=None, alias="status"),
+    current_user: User = Depends(get_current_user),
+) -> list[DeliveryResponse]:
+    """Get deliveries assigned to a driver.
+
+    Drivers may only list their own deliveries; admin/worker may list any driver's.
+    """
+    if current_user.role == "driver" and current_user.id != uuid.UUID(driver_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Drivers can only view their own deliveries",
+        )
+    deliveries = await service.get_driver_deliveries(uuid.UUID(driver_id), delivery_status)
+    return [DeliveryResponse.from_delivery(d) for d in deliveries]
 
 
 @router.get("/{delivery_id}", response_model=DeliveryResponse)
@@ -127,13 +145,13 @@ async def confirm_pickup(
 async def upload_delivery_proof(
     delivery_id: str,
     service: DeliveryServiceDep,
-    file: UploadFile = File(...),
-    proof_type: ProofType = ProofType.PHOTO,
-    latitude: float | None = None,
-    longitude: float | None = None,
+    file: UploadFile | None = File(None),
+    proof_type: ProofType = Query(ProofType.PHOTO),
+    latitude: float | None = Query(None),
+    longitude: float | None = Query(None),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Upload proof-of-delivery evidence (photo/signature) for a delivery.
+    """Upload proof-of-delivery evidence (photo/signature/gps) for a delivery.
 
     Only the assigned driver (or admin/worker) may upload proof.
     """
@@ -147,55 +165,55 @@ async def upload_delivery_proof(
             detail="Only the assigned driver can upload proof",
         )
 
-    file.file.seek(0, os.SEEK_END)
-    file_size = file.file.tell()
-    await file.seek(0)
-    if file_size > _MAX_PROOF_SIZE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail="Proof files must be 10 MB or smaller",
+    if proof_type in (ProofType.PHOTO, ProofType.SIGNATURE):
+        if not file:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File is required for photo or signature proof",
+            )
+        file.file.seek(0, os.SEEK_END)
+        file_size = file.file.tell()
+        await file.seek(0)
+        if file_size > _MAX_PROOF_SIZE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail="Proof files must be 10 MB or smaller",
+            )
+
+        # Validate image content for photo proofs
+        file_ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
+        if proof_type == ProofType.PHOTO and file_ext not in _ALLOWED_PROOF_EXT:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported image format")
+
+        header = await file.read(512)
+        await file.seek(0)
+        is_valid_image = (
+            header.startswith(b"\xff\xd8\xff")
+            or header.startswith(b"\x89PNG\r\n\x1a\n")
+            or header.startswith(b"GIF87a")
+            or header.startswith(b"GIF89a")
+            or (header.startswith(b"RIFF") and b"WEBP" in header[:16])
         )
+        if proof_type == ProofType.PHOTO and not is_valid_image:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image content")
 
-    if proof_type == ProofType.GPS_COORDINATE and (latitude is None or longitude is None):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="latitude and longitude are required for GPS proof",
-        )
+        os.makedirs(settings.DELIVERY_PROOF_UPLOAD_DIR, exist_ok=True)
+        filename = f"{uuid.uuid4()}{file_ext}"
+        filepath = os.path.join(settings.DELIVERY_PROOF_UPLOAD_DIR, filename)
 
-    # Validate image content for photo proofs
-    file_ext = os.path.splitext(file.filename or "")[1].lower() or ".jpg"
-    if proof_type == ProofType.PHOTO and file_ext not in _ALLOWED_PROOF_EXT:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Unsupported image format")
+        def _save_file(src, dst):
+            with open(dst, "wb") as buffer:
+                shutil.copyfileobj(src, buffer)
 
-    header = await file.read(512)
-    await file.seek(0)
-    is_valid_image = (
-        header.startswith(b"\xff\xd8\xff")
-        or header.startswith(b"\x89PNG\r\n\x1a\n")
-        or header.startswith(b"GIF87a")
-        or header.startswith(b"GIF89a")
-        or (header.startswith(b"RIFF") and b"WEBP" in header[:16])
-    )
-    if proof_type == ProofType.PHOTO and not is_valid_image:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid image content")
-
-    os.makedirs(settings.DELIVERY_PROOF_UPLOAD_DIR, exist_ok=True)
-    filename = f"{uuid.uuid4()}{file_ext}"
-    filepath = os.path.join(settings.DELIVERY_PROOF_UPLOAD_DIR, filename)
-
-    def _save_file(src, dst):
-        with open(dst, "wb") as buffer:
-            shutil.copyfileobj(src, buffer)
-
-    await asyncio.to_thread(_save_file, file.file, filepath)
-
-    proof_url = f"/static/uploads/delivery-proofs/{filename}"
-    proof_data: dict[str, Any]
-    if proof_type == ProofType.PHOTO:
-        proof_data = {"photo_url": proof_url}
-    elif proof_type == ProofType.SIGNATURE:
-        proof_data = {"signature_url": proof_url}
+        await asyncio.to_thread(_save_file, file.file, filepath)
+        proof_url = f"/static/uploads/delivery-proofs/{filename}"
+        proof_data = {"photo_url": proof_url} if proof_type == ProofType.PHOTO else {"signature_url": proof_url}
     elif proof_type == ProofType.GPS_COORDINATE:
+        if latitude is None or longitude is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="latitude and longitude are required for GPS proof",
+            )
         proof_data = {"latitude": latitude, "longitude": longitude}
     else:
         proof_data = {}
@@ -208,29 +226,11 @@ async def upload_delivery_proof(
     )
 
     response: dict[str, Any] = {"message": "Proof uploaded", "proof_type": proof_type.value}
-    if "url" in str(proof_data):
-        response["proof_url"] = proof_url
+    if "photo_url" in proof_data:
+        response["proof_url"] = proof_data["photo_url"]
+    elif "signature_url" in proof_data:
+        response["proof_url"] = proof_data["signature_url"]
     return response
-
-
-@router.get("/driver/{driver_id}")
-async def get_driver_deliveries(
-    driver_id: str,
-    service: DeliveryServiceDep,
-    delivery_status: DeliveryStatus | None = Query(default=None, alias="status"),
-    current_user: User = Depends(get_current_user),
-) -> list[DeliveryResponse]:
-    """Get deliveries assigned to a driver.
-
-    Drivers may only list their own deliveries; admin/worker may list any driver's.
-    """
-    if current_user.role == "driver" and current_user.id != uuid.UUID(driver_id):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Drivers can only view their own deliveries",
-        )
-    deliveries = await service.get_driver_deliveries(uuid.UUID(driver_id), delivery_status)
-    return [DeliveryResponse.from_delivery(d) for d in deliveries]
 
 
 @router.post("/{delivery_id}/assignment/acknowledge")

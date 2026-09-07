@@ -5,14 +5,24 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends, FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# Ensure all SQLAlchemy models are registered
+import app.domains.auth.models  # noqa: F401
+import app.domains.catalog.models  # noqa: F401
+import app.domains.customers.models  # noqa: F401
+import app.domains.logistics.models  # noqa: F401
+import app.domains.returns.models  # noqa: F401
+import app.domains.shared.models  # noqa: F401
+import app.domains.shopping.models  # noqa: F401
+import app.domains.payments.models  # noqa: F401
+import app.domains.tickets.models  # noqa: F401
+import app.domains.vendor.models  # noqa: F401
 from app.core.config import settings
+from app.core.cors_middleware import add_cors_middleware
 from app.core.database import get_db
 from app.core.logging import logger
-from app.core.cors_middleware import add_cors_middleware
 from app.core.middleware import ContentLengthLimitMiddleware, RequestLoggingMiddleware
 from app.core.security_headers import APIProtectionMiddleware, NoCacheMiddleware, SecurityHeadersMiddleware
 from app.core.tasks import start_cleanup_scheduler, start_outbox_relay_scheduler
@@ -27,6 +37,13 @@ from app.domains.auth.api.otp_api import router as otp_router
 from app.domains.catalog.api.catalog_api import router as catalog_router
 from app.domains.catalog.api.storefront_api import router as storefront_router
 from app.domains.customers.api.customer_api import router as customer_router
+from app.domains.logistics.api.delivery_api import router as logistics_delivery_router
+from app.domains.logistics.api.driver_api import router as logistics_driver_router
+from app.domains.logistics.api.driver_matching_api import router as logistics_driver_matching_router
+from app.domains.logistics.api.live_tracking_api import router as live_tracking_router
+from app.domains.logistics.api.routing_api import router as logistics_routing_router
+from app.domains.logistics.api.tracking_api import router as logistics_tracking_router
+from app.domains.notifications.api.notifications_api import router as notifications_router
 from app.domains.recommendations.api.recommendations_api import router as recommendations_router
 from app.domains.returns.api.returns_api import router as returns_router
 from app.domains.shopping.api.admin_orders_api import router as admin_orders_router
@@ -38,8 +55,8 @@ from app.domains.shopping.api.cart_api import router as cart_router
 from app.domains.shopping.api.cart_share_api import router as cart_share_router
 from app.domains.shopping.api.checkout_api import router as checkout_router
 from app.domains.shopping.api.coupons_api import router as coupons_router
-from app.domains.shopping.api.mobile_money_api import router as mobile_money_router
-from app.domains.shopping.api.mpesa_stk_api import router as mpesa_stk_router
+from app.domains.payments.api.mobile_money_api import router as mobile_money_router
+from app.domains.payments.api.mpesa_stk_api import router as mpesa_stk_router
 from app.domains.shopping.api.order_api import router as order_router
 from app.domains.shopping.api.saved_cart_api import router as saved_cart_router
 from app.domains.shopping.api.shipping_api import router as shipping_router
@@ -47,17 +64,11 @@ from app.domains.shopping.api.vendor_coupons_api import router as vendor_coupons
 from app.domains.shopping.api.vendor_orders_api import router as vendor_orders_router
 from app.domains.tickets.api.tickets_api import router as tickets_router
 from app.domains.users.api.users_api import router as users_router
+from app.domains.vendor.api.offers_api import router as vendor_offers_router
 from app.domains.vendor.api.vendor_analytics_api import router as vendor_analytics_router
 from app.domains.vendor.api.vendor_api import router as vendor_router
 from app.domains.vendor.api.vendor_earnings_api import router as vendor_earnings_router
 from app.domains.vendor.api.vendor_reviews_api import router as vendor_reviews_router
-from app.domains.vendor.api.offers_api import router as vendor_offers_router
-from app.domains.logistics.api.routing_api import router as logistics_routing_router
-from app.domains.logistics.api.delivery_api import router as logistics_delivery_router
-from app.domains.logistics.api.driver_api import router as logistics_driver_router
-from app.domains.logistics.api.driver_matching_api import router as logistics_driver_matching_router
-from app.domains.logistics.api.tracking_api import router as logistics_tracking_router
-from app.domains.logistics.api.live_tracking_api import router as live_tracking_router
 
 
 @asynccontextmanager
@@ -225,8 +236,9 @@ app.include_router(tickets_router, prefix="/api/v1")
 app.include_router(returns_router, prefix="/api/v1")
 app.include_router(admin_orders_router, prefix="/api/v1")
 app.include_router(vendor_orders_router, prefix="/api/v1")
-app.include_router(mobile_money_router, prefix="/api/v1")
-app.include_router(mpesa_stk_router, prefix="/api/v1")
+# Payments Domain Routers
+app.include_router(mpesa_stk_router, prefix="/api/v1/payments/mpesa")
+app.include_router(mobile_money_router, prefix="/api/v1/admin/payments/mobile-money")
 app.include_router(admin_banners_router, prefix="/api/v1")
 app.include_router(public_banners_router, prefix="/api/v1/shopping")
 app.include_router(admin_promotions_router, prefix="/api/v1")
@@ -243,6 +255,7 @@ app.include_router(logistics_driver_router, prefix="/api/v1/logistics")
 app.include_router(logistics_driver_matching_router, prefix="/api/v1")
 app.include_router(logistics_tracking_router, prefix="/api/v1/logistics")
 app.include_router(live_tracking_router, prefix="/api/v1")
+app.include_router(notifications_router, prefix="/api/v1/notifications")
 
 # Serve uploaded static files
 os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
@@ -257,7 +270,9 @@ async def root():
     return {"message": "Welcome to MyMedDevices API"}
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/api/v1/health", methods=["GET", "HEAD"])
+@app.api_route("/api/v1/healthcheck", methods=["GET", "HEAD"])
 async def health_check(db: AsyncSession = Depends(get_db)):
     health_status = {"status": "healthy", "timestamp": datetime.now(UTC).isoformat()}
 

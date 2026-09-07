@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { Link2, Search, Plus, Trash2, Package, ArrowUpRight, Shield, Layers, HelpCircle, Box, ToggleLeft, ToggleRight, Minus, Plus as PlusIcon } from "lucide-react";
+import { Link2, Search, Plus, Trash2, Package, ArrowUpRight, Shield, Layers, HelpCircle, Box, ToggleLeft, ToggleRight, Minus, Plus as PlusIcon, Share2 } from "lucide-react";
 import { catalogService, RelatedProduct, Product, RelationType, BundleItem } from "@mymeddevices/shared-core";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -202,371 +202,217 @@ export function RelatedProductsEditor({ productId, initialProductType = 'simple'
     }
   };
 
+  const [subTab, setSubTab] = useState<'cross_sell' | 'upsell' | 'bundle'>(
+    initialProductType === 'bundle' ? 'bundle' : 'cross_sell'
+  );
+
+  useEffect(() => {
+    if (productType === 'bundle') {
+      setSubTab('bundle');
+    } else if (subTab === 'bundle') {
+      setSubTab('cross_sell');
+    }
+  }, [productType]);
+
+  const crossSellCount = relations.filter(r => r.relation_type === 'cross_sell').length;
+  const upsellCount = relations.filter(r => r.relation_type === 'upsell').length;
+
   return (
     <div className="space-y-6">
-      <Card className="border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
-        <CardHeader className="py-4 px-5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/40">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <CardTitle className="text-sm font-semibold uppercase tracking-wider text-zinc-900 dark:text-zinc-100 flex items-center gap-2">
-                {editorMode === 'bundle' ? (
-                  <><Box className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Bundle Manager</>
+      <Card className="border border-border/80 shadow-xs rounded-2xl bg-card overflow-hidden">
+        <CardHeader className="bg-muted/10 border-b border-border/60 p-4 sm:p-5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                {productType === 'bundle' ? (
+                  <>
+                    <Box className="h-4 w-4 text-primary" />
+                    Bundle Package &amp; Merchandising
+                  </>
                 ) : (
-                  <><Link2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Related Products Manager</>
+                  <>
+                    <Share2 className="h-4 w-4 text-primary" />
+                    Product Relations &amp; Upsell Merchandising
+                  </>
                 )}
               </CardTitle>
-              <Badge variant="outline" className="font-mono text-[10px]">
-                {editorMode === 'bundle'
-                  ? bundleViewMode === 'components'
-                    ? `${bundleItems.length} Components`
-                    : `${relations.length} Related`
-                  : `${relations.length} Links`}
-              </Badge>
+              <CardDescription className="text-xs text-muted-foreground mt-0.5">
+                {productType === 'bundle'
+                  ? 'Manage kit components, package quantities, and additional cross-sell accessories.'
+                  : 'Configure complementary accessories and premium upgrade recommendations for this device.'}
+              </CardDescription>
+            </div>
+
+            {/* Sub-Tabs Dock + Product Architecture Action */}
+            <div className="flex flex-wrap items-center gap-2 self-start lg:self-auto">
+              <div className="inline-flex items-center p-1 rounded-xl bg-muted/70 dark:bg-muted/30 border border-border/80 shadow-2xs gap-1">
+                {productType === 'bundle' && (
+                  <button
+                    type="button"
+                    onClick={() => setSubTab('bundle')}
+                    className={cn(
+                      "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer",
+                      subTab === 'bundle'
+                        ? "bg-card text-foreground font-semibold shadow-xs ring-1 ring-border"
+                        : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                    )}
+                  >
+                    <Box className={cn("size-3.5", subTab === 'bundle' ? "text-primary" : "opacity-70")} />
+                    <span>Bundle Components</span>
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "text-[10px] font-bold px-1.5 py-0 h-4 rounded-full ms-0.5 border border-border/40",
+                        subTab === 'bundle' ? "bg-primary/15 text-primary border-primary/30" : "bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {bundleItems.length}
+                    </Badge>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => { setSubTab('cross_sell'); setActiveRelationType('cross_sell'); }}
+                  className={cn(
+                    "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer",
+                    subTab === 'cross_sell'
+                      ? "bg-card text-foreground font-semibold shadow-xs ring-1 ring-border"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                  )}
+                >
+                  <Link2 className={cn("size-3.5", subTab === 'cross_sell' ? "text-primary" : "opacity-70")} />
+                  <span>Cross-Sells</span>
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "text-[10px] font-bold px-1.5 py-0 h-4 rounded-full ms-0.5 border border-border/40",
+                      subTab === 'cross_sell' ? "bg-primary/15 text-primary border-primary/30" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {crossSellCount}
+                  </Badge>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setSubTab('upsell'); setActiveRelationType('upsell'); }}
+                  className={cn(
+                    "inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 cursor-pointer",
+                    subTab === 'upsell'
+                      ? "bg-card text-foreground font-semibold shadow-xs ring-1 ring-border"
+                      : "text-muted-foreground hover:text-foreground hover:bg-background/40"
+                  )}
+                >
+                  <ArrowUpRight className={cn("size-3.5", subTab === 'upsell' ? "text-primary" : "opacity-70")} />
+                  <span>Upsells</span>
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "text-[10px] font-bold px-1.5 py-0 h-4 rounded-full ms-0.5 border border-border/40",
+                      subTab === 'upsell' ? "bg-primary/15 text-primary border-primary/30" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {upsellCount}
+                  </Badge>
+                </button>
+              </div>
+
+              {/* Conversion Switcher */}
+              {productType === 'simple' ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleProductTypeChange('bundle')}
+                  className="h-8 text-xs font-semibold rounded-xl border-dashed border-border/90 hover:bg-muted"
+                >
+                  <Box className="size-3.5 mr-1.5 text-primary" />
+                  Convert to Bundle
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleProductTypeChange('simple')}
+                  className="h-8 text-xs font-medium rounded-xl text-muted-foreground hover:text-foreground"
+                >
+                  <Package className="size-3.5 mr-1.5" />
+                  Revert to Simple
+                </Button>
+              )}
             </div>
           </div>
-          <CardDescription className="text-xs text-zinc-500">
-            {editorMode === 'bundle'
-              ? bundleViewMode === 'components'
-                ? 'Manage bundle components, set quantities, and mark items as optional for the complete package.'
-                : 'Link cross-sell items and upgrade recommendations for this bundle.'
-              : 'Link cross-sell items and upgrade recommendations for this product.'}
-          </CardDescription>
         </CardHeader>
 
-        <CardContent className="p-6 space-y-6">
-          {/* Product Type Toggle */}
-          <div className="flex items-center justify-between p-4 border border-zinc-200 dark:border-zinc-800 rounded-xl bg-zinc-50 dark:bg-zinc-900/40">
-            <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                {productType === 'bundle' ? <Box className="h-5 w-5 text-emerald-600 dark:text-emerald-400" /> : <Package className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />}
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                  Product Type: <span className="font-mono uppercase">{productType}</span>
-                </p>
-                <p className="text-xs text-zinc-500">
-                  {productType === 'bundle'
-                    ? 'Bundle products contain multiple components sold together at a bundled price.'
-                    : 'Simple products are standalone items with optional related product links.'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                type="button"
-                variant={productType === 'simple' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => handleProductTypeChange('simple')}
-                className="text-xs"
-              >
-                <Package className="h-3.5 w-3.5 mr-1.5" /> Simple
-              </Button>
-              <Button
-                type="button"
-                variant={productType === 'bundle' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => handleProductTypeChange('bundle')}
-                className="text-xs"
-              >
-                <Box className="h-3.5 w-3.5 mr-1.5" /> Bundle
-              </Button>
-            </div>
-          </div>
-
-          <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-
-          {/* Bundle Mode: View Toggle between Components and Related Products */}
-          {editorMode === 'bundle' && (
-            <div className="flex items-center gap-2 p-1 bg-muted/40 rounded-lg border border-border/60">
-              <button
-                type="button"
-                onClick={() => setBundleViewMode('components')}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all",
-                  bundleViewMode === 'components'
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                )}
-              >
-                <Box className="h-3.5 w-3.5" />
-                Bundle Components ({bundleItems.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setBundleViewMode('cross_sell')}
-                className={cn(
-                  "flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-xs font-semibold transition-all",
-                  bundleViewMode === 'cross_sell'
-                    ? "bg-background text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-                )}
-              >
-                <Link2 className="h-3.5 w-3.5" />
-                Cross-Sell & Upsell ({relations.length})
-              </button>
-            </div>
-          )}
-
-          <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-
-          {/* Bundle Items Mode */}
-          {editorMode === 'bundle' && bundleViewMode === 'components' && (
-            <>
-              {/* Bundle Items List */}
-              <div className="space-y-3">
-                <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
-                  <span>Bundle Components ({bundleItems.length})</span>
-                  <span className="text-[10px] text-zinc-400 font-normal">
-                    Items included in this bundle package
-                  </span>
-                </Label>
-
-                {bundleItems.length === 0 ? (
-                  <div className="text-center py-8 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg p-4">
-                    <Box className="h-8 w-8 text-zinc-400 mx-auto mb-2" />
-                    <p className="text-sm text-zinc-500 font-medium">No bundle components added yet.</p>
-                    <p className="text-xs text-zinc-400 mt-1">Search and add products below to build your bundle.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {bundleItems.map((item, index) => (
-                      <div key={item.id} className="p-4 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-lg">
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex items-center gap-3 flex-1">
-                            <div className="text-xs font-mono text-zinc-400 w-6">
-                          #{index + 1}
-                            </div>
-                            <div className="w-10 h-10 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center shrink-0">
-                              {item.component_product?.image_url ? (
-                                <img src={item.component_product.image_url} alt={item.component_product.name} className="w-8 h-8 object-contain" />
-                              ) : (
-                                <Package className="h-5 w-5 text-zinc-400" />
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-semibold text-sm text-zinc-900 dark:text-zinc-100 truncate">
-                                {item.component_product?.name || "Component Item"}
-                              </p>
-                              <p className="text-xs text-zinc-500 font-mono">
-                                SKU: {item.component_product?.sku || "N/A"} · Price: KES {(item.component_product?.price || 0).toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-4">
-                            {/* Optional Toggle */}
-                            <div className="flex items-center gap-2">
-                              <Label className="text-[10px] uppercase text-zinc-500">Optional</Label>
-                              <Switch
-                                checked={item.is_optional}
-                                onCheckedChange={(checked) => handleUpdateBundleItem(item.id, { is_optional: checked })}
-                                className="data-[state=true]:bg-emerald-600"
-                              />
-                            </div>
-
-                            <Badge variant={item.is_optional ? "outline" : "default"} className="text-[10px]">
-                              {item.is_optional ? "Optional" : "Required"}
-                            </Badge>
-
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveBundleItem(item.id)}
-                              className="h-8 w-8 p-0 text-zinc-400 hover:text-rose-500"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <Separator className="bg-zinc-200 dark:border-zinc-800" />
-
-              {/* Add Bundle Item Section */}
-              <div className="space-y-3">
-                <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">
-                  Add Component to Bundle
-                </Label>
-                <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
-                    <Input
-                      placeholder="Search catalog to add bundle component..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSearch())}
-                      className="pl-9 text-xs font-mono"
-                    />
-                  </div>
-                  <Button type="button" onClick={handleSearch} disabled={searchLoading || !searchQuery.trim()} variant="outline" className="text-xs">
-                    {searchLoading ? "Searching..." : "Search"}
-                  </Button>
+        <CardContent className="p-4 sm:p-6 space-y-6">
+          {/* Sub-Tab 1: Cross-Sells */}
+          {subTab === 'cross_sell' && (
+            <div className="space-y-6">
+              <div className="p-4 border border-border/70 rounded-xl bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Cross-Sell Items</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Complementary clinical accessories &amp; disposables commonly purchased alongside this medical device.
+                  </p>
                 </div>
-
-                {/* Bundle Item Add Options */}
-                {searchResults.length > 0 && (
-                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 bg-zinc-50 dark:bg-zinc-900/40 space-y-2">
-                    <p className="text-[10px] font-semibold uppercase text-zinc-500">Search Results</p>
-                    <div className="space-y-2">
-                      {searchResults.map(prod => {
-                        const pending = pendingBundleItems[prod.id] || { isOptional: false };
-
-                        return (
-                          <div key={prod.id} className="p-3 bg-white dark:bg-zinc-900 rounded border border-zinc-200 dark:border-zinc-800">
-                            <div className="flex items-center justify-between gap-4">
-                              <div className="flex items-center gap-3 flex-1">
-                                <div className="w-8 h-8 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center">
-                                  {prod.images?.[0]?.url ? (
-                                    <img src={prod.images[0].url} alt={prod.name} className="w-6 h-6 object-contain" />
-                                  ) : (
-                                    <Package className="h-4 w-4 text-zinc-400" />
-                                  )}
-                                </div>
-                                <div>
-                                  <p className="font-medium text-xs text-zinc-900 dark:text-zinc-100">{prod.name}</p>
-                                  <p className="text-[10px] text-zinc-500 font-mono">SKU: {prod.sku || "N/A"} · KES {(prod.price || 0).toLocaleString()}</p>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-2">
-                                  <Label className="text-[10px]">Optional</Label>
-                                  <Switch
-                                    checked={pending.isOptional}
-                                    onCheckedChange={(checked) => setPendingBundleItems(prev => ({
-                                      ...prev,
-                                      [prod.id]: { isOptional: checked }
-                                    }))}
-                                    className="data-[state=true]:bg-emerald-600"
-                                  />
-                                </div>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  onClick={() => handleAddBundleItem(prod, pending.isOptional)}
-                                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7"
-                                >
-                                  <Plus className="h-3 w-3 mr-1" /> Add
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                <Badge variant="outline" className="text-[11px] font-semibold self-start sm:self-auto shrink-0">
+                  {crossSellCount} Linked Items
+                </Badge>
               </div>
-            </>
-          )}
-
-          {/* Related Products Mode (Simple Product or Cross-sell/Upsell for Bundles) */}
-          {(editorMode === 'related' || (editorMode === 'bundle' && bundleViewMode === 'cross_sell')) && (
-            <>
-              {/* Relation Type Cards */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
-                  Select Relation Category
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-                  {RELATED_RELATION_TYPES.map((rel) => {
-                    const count = relations.filter((r) => r.relation_type === rel.type).length;
-                    const isSelected = activeRelationType === rel.type;
-                    const IconComponent = rel.type === "cross_sell" ? Link2 : HelpCircle;
-
-                    return (
-                      <button
-                        key={rel.type}
-                        type="button"
-                        onClick={() => setActiveRelationType(rel.type)}
-                        className={cn(
-                          "p-4 text-left border rounded-2xl transition-all duration-150 flex flex-col justify-between gap-2.5 cursor-pointer relative group",
-                          isSelected
-                            ? "border-primary bg-primary/5 shadow-xs ring-1 ring-primary"
-                            : "border-border/80 bg-card hover:border-border hover:bg-muted/30"
-                        )}
-                      >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex items-center gap-2">
-                            <div className={cn(
-                              "h-8 w-8 rounded-xl flex items-center justify-center shrink-0 transition-colors",
-                              isSelected ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground group-hover:bg-muted/80"
-                            )}>
-                              <IconComponent className="h-4 w-4" />
-                            </div>
-                            <span className="font-bold text-xs text-foreground leading-snug">
-                              {rel.title}
-                            </span>
-                          </div>
-                          <Badge
-                            variant={isSelected ? "default" : "outline"}
-                            className={cn(
-                              "text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0",
-                              isSelected ? "bg-primary text-primary-foreground" : "border-border text-muted-foreground"
-                            )}
-                          >
-                            {count} {count === 1 ? "Link" : "Links"}
-                          </Badge>
-                        </div>
-
-                        <p className="text-xs text-muted-foreground leading-normal">
-                          {rel.desc}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <Separator className="bg-zinc-200 dark:bg-zinc-800" />
 
               {/* Search to Link */}
               <div className="space-y-2">
-                <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300 flex items-center justify-between">
-                  <span>Link Product as <strong className="text-emerald-600 font-mono uppercase">{activeRelationType}</strong></span>
-                  <span className="text-[10px] text-zinc-400 font-normal">
-                    {RELATED_RELATION_TYPES.find(r => r.type === activeRelationType)?.desc}
+                <Label className="text-xs uppercase tracking-wider font-semibold text-foreground flex items-center justify-between">
+                  <span>Link Cross-Sell Product</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">
+                    Search your catalog to link complementary items
                   </span>
                 </Label>
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                    <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                     <Input
-                      placeholder={`Search catalog to add ${activeRelationType}...`}
+                      placeholder="Search catalog by name, brand, SKU or model..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSearch())}
-                      className="pl-9 text-xs font-mono"
+                      className="pl-9 text-xs rounded-xl"
                     />
                   </div>
-                  <Button type="button" onClick={handleSearch} disabled={searchLoading || !searchQuery.trim()} variant="outline" className="text-xs">
+                  <Button type="button" onClick={handleSearch} disabled={searchLoading || !searchQuery.trim()} variant="outline" className="text-xs rounded-xl">
                     {searchLoading ? "Searching..." : "Search"}
                   </Button>
                 </div>
 
                 {/* Search Results */}
                 {searchResults.length > 0 && (
-                  <div className="border border-zinc-200 dark:border-zinc-800 rounded-lg p-3 bg-zinc-50 dark:bg-zinc-900/40 space-y-2 mt-2">
-                    <p className="text-[10px] font-semibold uppercase text-zinc-500">Catalog Results</p>
-                    <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  <div className="border border-border/80 rounded-xl p-3 bg-muted/30 space-y-2 mt-2">
+                    <p className="text-[10px] font-semibold uppercase text-muted-foreground">Catalog Search Results</p>
+                    <div className="divide-y divide-border/60">
                       {searchResults.map(prod => (
-                        <div key={prod.id} className="py-2 flex items-center justify-between">
-                          <div>
-                            <p className="font-medium text-xs text-zinc-900 dark:text-zinc-100">{prod.name}</p>
-                            <p className="text-[10px] text-zinc-500 font-mono">SKU: {prod.sku || "N/A"} · KES {(prod.price || 0).toLocaleString()}</p>
+                        <div key={prod.id} className="py-2.5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border/60">
+                              {prod.images?.[0]?.url ? (
+                                <img src={prod.images[0].url} alt={prod.name} className="w-6 h-6 object-contain rounded" />
+                              ) : (
+                                <Package className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-xs text-foreground truncate">{prod.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">SKU: {prod.sku || "N/A"} · KES {(prod.price || 0).toLocaleString("en-KE")}</p>
+                            </div>
                           </div>
                           <Button
                             type="button"
                             size="sm"
                             onClick={() => handleAddRelation(prod)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs h-7"
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-7 rounded-lg shrink-0"
                           >
-                            <Plus className="h-3 w-3 mr-1" /> Link Product
+                            <Plus className="h-3 w-3 mr-1" /> Link Cross-Sell
                           </Button>
                         </div>
                       ))}
@@ -575,40 +421,40 @@ export function RelatedProductsEditor({ productId, initialProductType = 'simple'
                 )}
               </div>
 
-              <Separator className="bg-zinc-200 dark:bg-zinc-800" />
+              <Separator className="border-border/60" />
 
               {/* Active Relations List */}
               <div className="space-y-3">
-                <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">
-                  Active Linked Products for {activeRelationType.toUpperCase()} ({relations.filter(r => r.relation_type === activeRelationType).length})
+                <Label className="text-xs uppercase tracking-wider font-semibold text-foreground">
+                  Active Linked Cross-Sells ({crossSellCount})
                 </Label>
 
-                {relations.filter(r => r.relation_type === activeRelationType).length === 0 ? (
-                  <div className="text-center py-6 border-2 border-dashed border-zinc-200 dark:border-zinc-800 rounded-lg p-4">
-                    <Package className="h-6 w-6 text-zinc-400 mx-auto mb-1" />
-                    <p className="text-xs text-zinc-500 font-medium">No {activeRelationType} products linked.</p>
-                    <p className="text-[11px] text-zinc-400 mt-0.5">Use the search box above to search and link related products.</p>
+                {crossSellCount === 0 ? (
+                  <div className="text-center py-8 border border-dashed border-border/80 rounded-2xl p-4 bg-muted/10">
+                    <Link2 className="h-7 w-7 text-muted-foreground mx-auto mb-2 opacity-50" />
+                    <p className="text-xs font-semibold text-foreground">No cross-sell products linked yet</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Use the search box above to add complementary items.</p>
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {relations.filter(r => r.relation_type === activeRelationType).map(rel => (
-                      <div key={rel.id} className="p-3 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 rounded-lg flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 bg-zinc-100 dark:bg-zinc-800 rounded flex items-center justify-center shrink-0">
+                    {relations.filter(r => r.relation_type === 'cross_sell').map(rel => (
+                      <div key={rel.id} className="p-3.5 border border-border/70 bg-card rounded-xl flex items-center justify-between gap-3 shadow-2xs">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center shrink-0 border border-border/60">
                             {rel.related_product?.image_url ? (
-                              <img src={rel.related_product.image_url} alt={rel.related_product.name} className="w-7 h-7 object-contain" />
+                              <img src={rel.related_product.image_url} alt={rel.related_product.name} className="w-8 h-8 object-contain rounded" />
                             ) : (
-                              <Package className="h-4 w-4 text-zinc-400" />
+                              <Package className="h-4 w-4 text-muted-foreground" />
                             )}
                           </div>
-                          <div>
-                            <p className="font-semibold text-xs text-zinc-900 dark:text-zinc-100">{rel.related_product?.name || "Linked Product"}</p>
-                            <p className="text-[10px] text-zinc-500 font-mono">
-                              SKU: {rel.related_product?.sku || "N/A"} · Price: KES {(rel.related_product?.price || 0).toLocaleString()}
+                          <div className="min-w-0">
+                            <p className="font-semibold text-xs text-foreground truncate">{rel.related_product?.name || "Linked Product"}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">
+                              SKU: {rel.related_product?.sku || "N/A"} · Price: KES {(rel.related_product?.price || 0).toLocaleString("en-KE")}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2.5 shrink-0">
                           <Badge variant="outline" className="text-[10px] font-mono">
                             {rel.is_bidirectional ? "Bidirectional" : "One-Way"}
                           </Badge>
@@ -617,7 +463,7 @@ export function RelatedProductsEditor({ productId, initialProductType = 'simple'
                             variant="ghost"
                             size="sm"
                             onClick={() => handleRemoveRelation(rel.id)}
-                            className="h-7 w-7 p-0 text-zinc-400 hover:text-rose-500"
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive rounded-lg"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
@@ -627,7 +473,334 @@ export function RelatedProductsEditor({ productId, initialProductType = 'simple'
                   </div>
                 )}
               </div>
-            </>
+            </div>
+          )}
+
+          {/* Sub-Tab 2: Upsell Alternatives */}
+          {subTab === 'upsell' && (
+            <div className="space-y-6">
+              <div className="p-4 border border-border/70 rounded-xl bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-foreground">Upsell Alternatives</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Higher-tier models or upgraded configurations recommended to customers considering this item.
+                  </p>
+                </div>
+                <Badge variant="outline" className="text-[11px] font-semibold self-start sm:self-auto shrink-0">
+                  {upsellCount} Linked Alternatives
+                </Badge>
+              </div>
+
+              {/* Search to Link */}
+              <div className="space-y-2">
+                <Label className="text-xs uppercase tracking-wider font-semibold text-foreground flex items-center justify-between">
+                  <span>Link Upsell Alternative</span>
+                  <span className="text-[10px] text-muted-foreground font-normal">
+                    Search higher-tier models or alternative configurations
+                  </span>
+                </Label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="Search catalog for upgrade model..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSearch())}
+                      className="pl-9 text-xs rounded-xl"
+                    />
+                  </div>
+                  <Button type="button" onClick={handleSearch} disabled={searchLoading || !searchQuery.trim()} variant="outline" className="text-xs rounded-xl">
+                    {searchLoading ? "Searching..." : "Search"}
+                  </Button>
+                </div>
+
+                {/* Search Results */}
+                {searchResults.length > 0 && (
+                  <div className="border border-border/80 rounded-xl p-3 bg-muted/30 space-y-2 mt-2">
+                    <p className="text-[10px] font-semibold uppercase text-muted-foreground">Catalog Search Results</p>
+                    <div className="divide-y divide-border/60">
+                      {searchResults.map(prod => (
+                        <div key={prod.id} className="py-2.5 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-lg bg-muted flex items-center justify-center shrink-0 border border-border/60">
+                              {prod.images?.[0]?.url ? (
+                                <img src={prod.images[0].url} alt={prod.name} className="w-6 h-6 object-contain rounded" />
+                              ) : (
+                                <Package className="h-4 w-4 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-xs text-foreground truncate">{prod.name}</p>
+                              <p className="text-[10px] text-muted-foreground font-mono">SKU: {prod.sku || "N/A"} · KES {(prod.price || 0).toLocaleString("en-KE")}</p>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={() => handleAddRelation(prod)}
+                            className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-7 rounded-lg shrink-0"
+                          >
+                            <Plus className="h-3 w-3 mr-1" /> Link Upsell
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <Separator className="border-border/60" />
+
+              {/* Active Relations List */}
+              <div className="space-y-3">
+                <Label className="text-xs uppercase tracking-wider font-semibold text-foreground">
+                  Active Linked Upsells ({upsellCount})
+                </Label>
+
+                {upsellCount === 0 ? (
+                  <div className="text-center py-8 border border-dashed border-border/80 rounded-2xl p-4 bg-muted/10">
+                    <ArrowUpRight className="h-7 w-7 text-muted-foreground mx-auto mb-2 opacity-50" />
+                    <p className="text-xs font-semibold text-foreground">No upsell alternatives linked yet</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">Use the search box above to add premium alternatives.</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {relations.filter(r => r.relation_type === 'upsell').map(rel => (
+                      <div key={rel.id} className="p-3.5 border border-border/70 bg-card rounded-xl flex items-center justify-between gap-3 shadow-2xs">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center shrink-0 border border-border/60">
+                            {rel.related_product?.image_url ? (
+                              <img src={rel.related_product.image_url} alt={rel.related_product.name} className="w-8 h-8 object-contain rounded" />
+                            ) : (
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-semibold text-xs text-foreground truncate">{rel.related_product?.name || "Linked Product"}</p>
+                            <p className="text-[10px] text-muted-foreground font-mono">
+                              SKU: {rel.related_product?.sku || "N/A"} · Price: KES {(rel.related_product?.price || 0).toLocaleString("en-KE")}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2.5 shrink-0">
+                          <Badge variant="outline" className="text-[10px] font-mono">
+                            {rel.is_bidirectional ? "Bidirectional" : "One-Way"}
+                          </Badge>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveRelation(rel.id)}
+                            className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive rounded-lg"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Sub-Tab 3: Bundle Package Components */}
+          {subTab === 'bundle' && (
+            <div className="space-y-6">
+              {/* Product Type Toggle */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border border-border/70 rounded-xl bg-muted/20 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                    {productType === 'bundle' ? <Box className="h-5 w-5 text-primary" /> : <Package className="h-5 w-5 text-primary" />}
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-foreground">
+                      Product Architecture: <span className="font-mono uppercase text-primary">{productType}</span>
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {productType === 'bundle'
+                        ? 'Bundle products contain multiple components sold together at a single bundled price.'
+                        : 'Simple products are standalone items with optional cross-sell and upsell recommendations.'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 self-start sm:self-auto">
+                  <Button
+                    type="button"
+                    variant={productType === 'simple' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => handleProductTypeChange('simple')}
+                    className="text-xs rounded-xl h-8"
+                  >
+                    <Package className="h-3.5 w-3.5 mr-1.5" /> Simple Product
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={productType === 'bundle' ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => handleProductTypeChange('bundle')}
+                    className="text-xs rounded-xl h-8"
+                  >
+                    <Box className="h-3.5 w-3.5 mr-1.5" /> Bundle Package
+                  </Button>
+                </div>
+              </div>
+
+              {productType === 'bundle' ? (
+                <>
+                  <Separator className="border-border/60" />
+
+                  {/* Bundle Items List */}
+                  <div className="space-y-3">
+                    <Label className="text-xs uppercase tracking-wider font-semibold text-foreground flex items-center justify-between">
+                      <span>Bundle Components ({bundleItems.length})</span>
+                      <span className="text-[10px] text-muted-foreground font-normal">
+                        Items included inside this bundle package
+                      </span>
+                    </Label>
+
+                    {bundleItems.length === 0 ? (
+                      <div className="text-center py-8 border border-dashed border-border/80 rounded-2xl p-4 bg-muted/10">
+                        <Box className="h-7 w-7 text-muted-foreground mx-auto mb-2 opacity-50" />
+                        <p className="text-xs font-semibold text-foreground">No bundle components configured</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Search catalog below to add bundled items.</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {bundleItems.map((item, index) => (
+                          <div key={item.id} className="p-3.5 border border-border/70 bg-card rounded-xl flex items-center justify-between gap-4 shadow-2xs">
+                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                              <span className="text-xs font-mono text-muted-foreground w-5 shrink-0">#{index + 1}</span>
+                              <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center shrink-0 border border-border/60">
+                                {item.component_product?.image_url ? (
+                                  <img src={item.component_product.image_url} alt={item.component_product.name} className="w-8 h-8 object-contain rounded" />
+                                ) : (
+                                  <Package className="h-4 w-4 text-muted-foreground" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-xs text-foreground truncate">
+                                  {item.component_product?.name || "Component Item"}
+                                </p>
+                                <p className="text-[10px] text-muted-foreground font-mono">
+                                  SKU: {item.component_product?.sku || "N/A"} · Price: KES {(item.component_product?.price || 0).toLocaleString("en-KE")}
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              <div className="flex items-center gap-2">
+                                <Label className="text-[10px] uppercase text-muted-foreground">Optional</Label>
+                                <Switch
+                                  checked={item.is_optional}
+                                  onCheckedChange={(checked) => handleUpdateBundleItem(item.id, { is_optional: checked })}
+                                />
+                              </div>
+
+                              <Badge variant={item.is_optional ? "outline" : "default"} className="text-[10px]">
+                                {item.is_optional ? "Optional" : "Included"}
+                              </Badge>
+
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveBundleItem(item.id)}
+                                className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive rounded-lg"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <Separator className="border-border/60" />
+
+                  {/* Add Component Search */}
+                  <div className="space-y-3">
+                    <Label className="text-xs uppercase tracking-wider font-semibold text-foreground">
+                      Add Component to Bundle
+                    </Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          placeholder="Search catalog to add bundle component..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleSearch())}
+                          className="pl-9 text-xs rounded-xl"
+                        />
+                      </div>
+                      <Button type="button" onClick={handleSearch} disabled={searchLoading || !searchQuery.trim()} variant="outline" className="text-xs rounded-xl">
+                        {searchLoading ? "Searching..." : "Search"}
+                      </Button>
+                    </div>
+
+                    {searchResults.length > 0 && (
+                      <div className="border border-border/80 rounded-xl p-3 bg-muted/30 space-y-2 mt-2">
+                        <p className="text-[10px] font-semibold uppercase text-muted-foreground">Catalog Search Results</p>
+                        <div className="space-y-2">
+                          {searchResults.map(prod => {
+                            const pending = pendingBundleItems[prod.id] || { isOptional: false };
+                            return (
+                              <div key={prod.id} className="p-3 bg-card rounded-xl border border-border/70 flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3 flex-1 min-w-0">
+                                  <div className="w-8 h-8 bg-muted rounded-lg flex items-center justify-center shrink-0 border border-border/60">
+                                    {prod.images?.[0]?.url ? (
+                                      <img src={prod.images[0].url} alt={prod.name} className="w-6 h-6 object-contain rounded" />
+                                    ) : (
+                                      <Package className="h-4 w-4 text-muted-foreground" />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-xs text-foreground truncate">{prod.name}</p>
+                                    <p className="text-[10px] text-muted-foreground font-mono">SKU: {prod.sku || "N/A"} · KES {(prod.price || 0).toLocaleString("en-KE")}</p>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3 shrink-0">
+                                  <div className="flex items-center gap-2">
+                                    <Label className="text-[10px]">Optional</Label>
+                                    <Switch
+                                      checked={pending.isOptional}
+                                      onCheckedChange={(checked) => setPendingBundleItems(prev => ({
+                                        ...prev,
+                                        [prod.id]: { isOptional: checked }
+                                      }))}
+                                    />
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    onClick={() => handleAddBundleItem(prod, pending.isOptional)}
+                                    className="bg-primary hover:bg-primary/90 text-primary-foreground text-xs h-7 rounded-lg"
+                                  >
+                                    <Plus className="h-3 w-3 mr-1" /> Add Component
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="p-6 border border-dashed border-border/80 rounded-2xl text-center bg-muted/10 space-y-2">
+                  <Package className="h-8 w-8 text-muted-foreground mx-auto opacity-50" />
+                  <p className="text-xs font-semibold text-foreground">Standalone Simple Product</p>
+                  <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                    This item is configured as a standalone product. Switch product architecture above to &quot;Bundle Package&quot; to add bundled component items.
+                  </p>
+                </div>
+              )}
+            </div>
           )}
         </CardContent>
       </Card>

@@ -19,23 +19,23 @@ if TYPE_CHECKING:
 class BannerPlacement(str, Enum):
     """Where banners can be displayed."""
 
-    HOMEPAGE_HERO = "homepage_hero"  # Full-width hero carousel
-    HOMEPAGE_SIDEBAR = "homepage_sidebar"  # Sidebar on homepage
-    CATEGORY_PAGE = "category_page"  # Top of category pages
-    PRODUCT_PAGE = "product_page"  # On product detail pages
-    CHECKOUT_PAGE = "checkout_page"  # During checkout
-    HEADER_BAR = "header_bar"  # Top announcement bar
-    FOOTER = "footer"  # Footer banner
+    HOMEPAGE_HERO = "HOMEPAGE_HERO"  # Full-width hero carousel
+    HOMEPAGE_SIDEBAR = "HOMEPAGE_SIDEBAR"  # Sidebar on homepage
+    CATEGORY_PAGE = "CATEGORY_PAGE"  # Top of category pages
+    PRODUCT_PAGE = "PRODUCT_PAGE"  # On product detail pages
+    CHECKOUT_PAGE = "CHECKOUT_PAGE"  # During checkout
+    HEADER_BAR = "HEADER_BAR"  # Top announcement bar
+    FOOTER = "FOOTER"  # Footer banner
 
 
 class BannerStatus(str, Enum):
     """Banner status."""
 
-    DRAFT = "draft"
-    SCHEDULED = "scheduled"
-    ACTIVE = "active"
-    PAUSED = "paused"
-    EXPIRED = "expired"
+    DRAFT = "DRAFT"
+    SCHEDULED = "SCHEDULED"
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    EXPIRED = "EXPIRED"
 
 
 class Banner(Base, IDMixin, AuditMixin):
@@ -81,7 +81,7 @@ class Banner(Base, IDMixin, AuditMixin):
     # Scheduling
     status: Mapped[str] = mapped_column(
         SQLEnum(BannerStatus, name="bannerstatus", values_callable=lambda obj: [e.value for e in obj]),
-        server_default="draft",
+        server_default="DRAFT",
         default=BannerStatus.DRAFT.value,
         nullable=False,
         index=True,

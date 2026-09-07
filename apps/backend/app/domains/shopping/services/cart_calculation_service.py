@@ -1,6 +1,7 @@
 import math
 import uuid
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
+from typing import Any
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -14,6 +15,41 @@ from app.domains.shopping.models.coupon import Coupon
 
 OFFICE_LAT = -1.3011758537859464
 OFFICE_LON = 36.800690681948126
+
+TWO_PLACES = Decimal("0.01")
+
+# Money keys in the totals dict that are computed as Decimal internally and
+# exposed as floats for API compatibility (pydantic serializes Decimal as a
+# string, which would break frontend consumers expecting numbers).
+_MONEY_KEYS = (
+    "subtotal",
+    "discount_amount",
+    "tax_amount",
+    "shipping_amount",
+    "packaging_fee",
+    "services_fee",
+    "total",
+)
+
+
+def quantize_money(value: Decimal | int | float | str) -> Decimal:
+    """Round a monetary amount to 2 decimal places using half-up rounding."""
+    return Decimal(str(value)).quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
+
+
+def _resolve_unit_price(item: CartItem) -> Decimal:
+    """Resolve the effective unit price for a cart item as an exact Decimal.
+
+    Numeric columns already yield Decimal values; str() coercion keeps this
+    safe for in-memory/float-sourced values (e.g. Float quantity columns).
+    """
+    if item.unit_price is not None:
+        return Decimal(str(item.unit_price))
+    if item.product_variant is not None and item.product_variant.calculated_price is not None:
+        return Decimal(str(item.product_variant.calculated_price))
+    if item.product is not None and item.product.price is not None:
+        return Decimal(str(item.product.price))
+    return Decimal("0")
 
 
 def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -29,9 +65,10 @@ def calculate_haversine_distance(lat1: float, lon1: float, lat2: float, lon2: fl
 class CartCalculationService:
     """Service for cart calculations."""
 
-    def __init__(self, db: AsyncSession, routing_service: "RoutingServiceDep | None" = None):
+    def __init__(self, db: AsyncSession, routing_service: Any | None = None):
         self.db = db
         self.routing_service = routing_service
+
 
     async def calculate_totals(self, cart_id: uuid.UUID, shipping_address: dict | None = None) -> dict:
         """Calculate cart totals with discounts.
@@ -53,30 +90,40 @@ class CartCalculationService:
         if not cart:
             raise NotFoundError("Cart", cart_id)
 
+        totals = await self._compute_totals(cart, shipping_address)
+
+        # API boundary: expose money values as floats (frontend contract)
+        for key in _MONEY_KEYS:
+            totals[key] = float(totals[key])
+        totals["applied_discounts"] = [
+            {**d, "discount_amount": float(d["discount_amount"])} for d in totals["applied_discounts"]
+        ]
+        return totals
+
+    async def _compute_totals(self, cart: Cart, shipping_address: dict | None = None) -> dict:
+        """Authoritative totals computation. All monetary math is exact Decimal.
+
+        Checkout persists values straight from this method; the public
+        calculate_totals() wrapper only float-converts for API responses.
+        """
         items = cart.items
 
         # Calculate subtotal
-        subtotal = 0.0
+        subtotal = Decimal("0")
         for item in items:
-            if item.unit_price is not None:
-                price = float(item.unit_price)
-            elif item.product_variant and item.product_variant.calculated_price is not None:
-                price = float(item.product_variant.calculated_price)
-            elif item.product and item.product.price is not None:
-                price = float(item.product.price)
-            else:
-                price = 0.0
-            subtotal += price * item.quantity
+            price = _resolve_unit_price(item)
+            subtotal += price * Decimal(str(item.quantity))
 
         # Get applied discounts
         discount_stmt = select(CartDiscount).where(
-            and_(CartDiscount.cart_id == cart_id, CartDiscount.is_applied == True)
+            and_(CartDiscount.cart_id == cart.id, CartDiscount.is_applied == True)
         )
         discount_result = await self.db.execute(discount_stmt)
         discounts = list(discount_result.scalars().all())
 
         # Calculate discount amount
-        discount_amount = 0.0
+        discount_amount = Decimal("0")
+        has_free_shipping = False
         for discount in discounts:
             # Query coupon to see its scope and restrictions
             coupon_stmt = (
@@ -94,72 +141,65 @@ class CartCalculationService:
             if coupon:
                 if coupon.discount_scope == "specific_categories":
                     allowed_categories = {c.category for c in coupon.categories}
-                    applicable_subtotal = 0.0
+                    applicable_subtotal = Decimal("0")
                     for item in items:
                         if (
                             item.product
                             and item.product.category_id
                             and str(item.product.category_id) in allowed_categories
                         ):
-                            price = (
-                                float(item.unit_price)
-                                if item.unit_price is not None
-                                else float(item.product.price or 0.0)
-                            )
-                            applicable_subtotal += price * item.quantity
+                            applicable_subtotal += _resolve_unit_price(item) * Decimal(str(item.quantity))
                 elif coupon.discount_scope == "specific_products":
                     allowed_products = {p.product_id for p in coupon.products}
-                    applicable_subtotal = 0.0
+                    applicable_subtotal = Decimal("0")
                     for item in items:
                         if item.product_id in allowed_products:
-                            price = (
-                                float(item.unit_price)
-                                if item.unit_price is not None
-                                else float(item.product.price or 0.0)
-                            )
-                            applicable_subtotal += price * item.quantity
+                            applicable_subtotal += _resolve_unit_price(item) * Decimal(str(item.quantity))
 
             # Calculate the discount
-            disc = 0.0
+            disc = Decimal("0")
             if discount.discount_type == "percentage":
-                disc = (applicable_subtotal * float(discount.discount_value)) / 100.0
+                disc = (applicable_subtotal * Decimal(str(discount.discount_value))) / Decimal("100")
                 if coupon and coupon.restrictions and coupon.restrictions.max_discount_amount:
-                    disc = min(disc, float(coupon.restrictions.max_discount_amount))
+                    disc = min(disc, Decimal(str(coupon.restrictions.max_discount_amount)))
             elif discount.discount_type in ("fixed", "fixed_amount"):
-                disc = min(float(discount.discount_value), applicable_subtotal)
+                disc = min(Decimal(str(discount.discount_value)), applicable_subtotal)
             elif discount.discount_type == "free_shipping":
-                disc = 0.0
+                has_free_shipping = True
 
+            disc = disc.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
             discount_amount += disc
-            discount.discount_amount = Decimal(str(round(disc, 2)))
-
-        # Discount updates already applied via ORM attribute mutation
+            discount.discount_amount = disc
 
         # Calculate subtotal after discount
-        discounted_subtotal = max(0.0, subtotal - discount_amount)
+        discounted_subtotal = max(Decimal("0"), subtotal - discount_amount)
 
         # Calculate tax (16% VAT on taxable products after discounts)
-        tax_amount = await self.calculate_tax(items, discounted_subtotal, subtotal)
+        tax_amount = await self._compute_tax(items, discounted_subtotal, subtotal)
 
         # Calculate shipping and logistics details
         shipping_details = await self.calculate_shipping_details(cart, shipping_address)
-        shipping_amount = shipping_details["amount"]
+        shipping_amount = Decimal(str(shipping_details["amount"]))
+
+        # Free-shipping coupons zero out the shipping charge
+        if has_free_shipping:
+            shipping_amount = Decimal("0")
 
         # Packaging & Service fees (applied during checkout when shipping address is provided)
-        packaging_fee = 100.0 if shipping_address else 0.0
-        services_fee = 50.0 if shipping_address else 0.0
+        packaging_fee = Decimal("100.00") if shipping_address else Decimal("0")
+        services_fee = Decimal("50.00") if shipping_address else Decimal("0")
 
         # Calculate total (Subtotal - Discounts + 16% VAT + Shipping + Packaging + Services)
         total = discounted_subtotal + tax_amount + shipping_amount + packaging_fee + services_fee
 
         return {
-            "subtotal": round(subtotal, 2),
-            "discount_amount": round(discount_amount, 2),
-            "tax_amount": round(tax_amount, 2),
-            "shipping_amount": round(shipping_amount, 2),
-            "packaging_fee": round(packaging_fee, 2),
-            "services_fee": round(services_fee, 2),
-            "total": round(total, 2),
+            "subtotal": subtotal.quantize(TWO_PLACES, rounding=ROUND_HALF_UP),
+            "discount_amount": discount_amount.quantize(TWO_PLACES, rounding=ROUND_HALF_UP),
+            "tax_amount": tax_amount,
+            "shipping_amount": shipping_amount.quantize(TWO_PLACES, rounding=ROUND_HALF_UP),
+            "packaging_fee": packaging_fee,
+            "services_fee": services_fee,
+            "total": total.quantize(TWO_PLACES, rounding=ROUND_HALF_UP),
             "currency": "KES",
             "item_count": len(items),
             "logistics_type": shipping_details["logistics_type"],
@@ -170,23 +210,29 @@ class CartCalculationService:
                     "id": str(d.id),
                     "coupon_code": d.coupon_code,
                     "description": d.description,
-                    "discount_amount": float(d.discount_amount),
+                    "discount_amount": d.discount_amount,
                 }
                 for d in discounts
             ],
         }
 
     async def calculate_tax(
-        self, items: list[CartItem], discounted_subtotal: float, subtotal: float
-    ) -> float:
+        self, items: list[CartItem], discounted_subtotal: float | Decimal, subtotal: float | Decimal
+    ) -> Decimal:
         """Calculate VAT tax for cart at 16% rate on taxable items."""
+        return await self._compute_tax(
+            items, Decimal(str(discounted_subtotal)), Decimal(str(subtotal))
+        )
+
+    async def _compute_tax(self, items: list[CartItem], discounted_subtotal: Decimal, subtotal: Decimal) -> Decimal:
+        """Exact-Decimal VAT computation on taxable items, prorated by discount ratio."""
         if subtotal <= 0 or discounted_subtotal <= 0:
-            return 0.0
+            return Decimal("0.00")
 
-        VAT_RATE = 0.16
-        discount_ratio = max(0.0, discounted_subtotal / subtotal) if subtotal > 0 else 1.0
+        VAT_RATE = Decimal("0.16")
+        discount_ratio = (discounted_subtotal / subtotal) if subtotal > 0 else Decimal("1")
 
-        total_tax = 0.0
+        total_tax = Decimal("0")
         for item in items:
             is_taxable = True
             rate = VAT_RATE
@@ -194,22 +240,14 @@ class CartCalculationService:
                 if hasattr(item.product, "has_vat") and item.product.has_vat is False:
                     is_taxable = False
                 elif hasattr(item.product, "vat_rate") and item.product.vat_rate is not None:
-                    rate = float(item.product.vat_rate) / 100.0
+                    rate = Decimal(str(item.product.vat_rate)) / Decimal("100")
 
             if is_taxable:
-                if item.unit_price is not None:
-                    price = float(item.unit_price)
-                elif item.product_variant and item.product_variant.calculated_price is not None:
-                    price = float(item.product_variant.calculated_price)
-                elif item.product and item.product.price is not None:
-                    price = float(item.product.price)
-                else:
-                    price = 0.0
-
-                item_taxable_amt = (price * item.quantity) * discount_ratio
+                price = _resolve_unit_price(item)
+                item_taxable_amt = (price * Decimal(str(item.quantity))) * discount_ratio
                 total_tax += item_taxable_amt * rate
 
-        return round(total_tax, 2)
+        return total_tax.quantize(TWO_PLACES, rounding=ROUND_HALF_UP)
 
     async def calculate_shipping_details(self, cart: Cart, shipping_address: dict | None = None) -> dict:
         """Calculate shipping amount and logistics routing details.
@@ -330,7 +368,7 @@ class CartCalculationService:
         shipping_fee = flat_fee + (total_distance * rate_per_km)
 
         return {
-            "amount": round(shipping_fee),
+            "amount": round(shipping_fee, 2),
             "logistics_type": "company_rider",
             "calculated_distance_km": round(total_distance, 2),
             "route_coordinates": route,

@@ -1,9 +1,9 @@
 import uuid
-from typing import Optional
-from sqlalchemy import select, func, and_
+
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.domains.shopping.models.promotion import Promotion, PromotionType
+from app.domains.shopping.models.promotion import Promotion
 
 
 class PromotionService:
@@ -12,7 +12,7 @@ class PromotionService:
 
     async def list_promotions(
         self,
-        promotion_type: Optional[str] = None,
+        promotion_type: str | None = None,
         only_active: bool = False,
         offset: int = 0,
         limit: int = 20,
@@ -40,12 +40,12 @@ class PromotionService:
 
         return promotions, total
 
-    async def get_by_id(self, promotion_id: uuid.UUID) -> Optional[Promotion]:
+    async def get_by_id(self, promotion_id: uuid.UUID) -> Promotion | None:
         stmt = select(Promotion).where(Promotion.id == promotion_id)
         res = await self.db.execute(stmt)
         return res.scalar_one_or_none()
 
-    async def create_promotion(self, data: dict, created_by_id: Optional[uuid.UUID] = None) -> Promotion:
+    async def create_promotion(self, data: dict, created_by_id: uuid.UUID | None = None) -> Promotion:
         promo = Promotion(
             id=uuid.uuid4(),
             created_by_id=created_by_id,
@@ -56,7 +56,7 @@ class PromotionService:
         await self.db.refresh(promo)
         return promo
 
-    async def update_promotion(self, promotion_id: uuid.UUID, data: dict) -> Optional[Promotion]:
+    async def update_promotion(self, promotion_id: uuid.UUID, data: dict) -> Promotion | None:
         promo = await self.get_by_id(promotion_id)
         if not promo:
             return None
@@ -78,7 +78,7 @@ class PromotionService:
         await self.db.commit()
         return True
 
-    async def toggle_status(self, promotion_id: uuid.UUID) -> Optional[Promotion]:
+    async def toggle_status(self, promotion_id: uuid.UUID) -> Promotion | None:
         promo = await self.get_by_id(promotion_id)
         if not promo:
             return None

@@ -1,7 +1,7 @@
+import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
-import uuid
+
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.domains.vendor.models.vendor_offer import OfferStatusEnum, SellingUnitEnum
@@ -9,39 +9,39 @@ from app.domains.vendor.models.vendor_offer import OfferStatusEnum, SellingUnitE
 
 class VendorOfferCreate(BaseModel):
     product_variant_id: uuid.UUID
-    vendor_sku: Optional[str] = None
+    vendor_sku: str | None = None
     vendor_price: Decimal = Field(gt=0, description="Vendor base price/payout")
-    compare_at_vendor_price: Optional[Decimal] = None
+    compare_at_vendor_price: Decimal | None = None
     selling_unit: SellingUnitEnum = SellingUnitEnum.PIECE
     package_quantity: int = Field(default=1, gt=0, description="Items per selling package")
     min_order_quantity: int = Field(default=1, gt=0)
-    max_order_quantity: Optional[int] = None
+    max_order_quantity: int | None = None
     lead_time_days: int = Field(default=1, ge=0)
     warranty_months: int = Field(default=0, ge=0)
     initial_stock_quantity: int = Field(default=0, ge=0)
     low_stock_threshold: int = Field(default=5, ge=0)
-    warehouse_location: Optional[str] = None
-    external_system: Optional[str] = None
-    external_offer_id: Optional[str] = None
+    warehouse_location: str | None = None
+    external_system: str | None = None
+    external_offer_id: str | None = None
 
 
 class VendorOfferUpdate(BaseModel):
-    vendor_sku: Optional[str] = None
-    vendor_price: Optional[Decimal] = Field(None, gt=0)
-    compare_at_vendor_price: Optional[Decimal] = None
-    selling_unit: Optional[SellingUnitEnum] = None
-    package_quantity: Optional[int] = Field(None, gt=0)
-    min_order_quantity: Optional[int] = Field(None, gt=0)
-    max_order_quantity: Optional[int] = None
-    lead_time_days: Optional[int] = Field(None, ge=0)
-    warranty_months: Optional[int] = Field(None, ge=0)
-    status: Optional[OfferStatusEnum] = None
+    vendor_sku: str | None = None
+    vendor_price: Decimal | None = Field(None, gt=0)
+    compare_at_vendor_price: Decimal | None = None
+    selling_unit: SellingUnitEnum | None = None
+    package_quantity: int | None = Field(None, gt=0)
+    min_order_quantity: int | None = Field(None, gt=0)
+    max_order_quantity: int | None = None
+    lead_time_days: int | None = Field(None, ge=0)
+    warranty_months: int | None = Field(None, ge=0)
+    status: OfferStatusEnum | None = None
 
 
 class OfferInventoryUpdate(BaseModel):
     quantity_on_hand: int = Field(ge=0)
-    low_stock_threshold: Optional[int] = Field(None, ge=0)
-    warehouse_location: Optional[str] = None
+    low_stock_threshold: int | None = Field(None, ge=0)
+    warehouse_location: str | None = None
 
 
 class OfferInventoryResponse(BaseModel):
@@ -52,7 +52,7 @@ class OfferInventoryResponse(BaseModel):
     quantity_reserved: int
     available_quantity: int
     low_stock_threshold: int
-    warehouse_location: Optional[str] = None
+    warehouse_location: str | None = None
     updated_at: datetime
 
 
@@ -62,18 +62,18 @@ class VendorOfferResponse(BaseModel):
     id: uuid.UUID
     vendor_id: uuid.UUID
     product_variant_id: uuid.UUID
-    vendor_sku: Optional[str] = None
+    vendor_sku: str | None = None
     vendor_price: Decimal
-    compare_at_vendor_price: Optional[Decimal] = None
+    compare_at_vendor_price: Decimal | None = None
     selling_unit: SellingUnitEnum
     package_quantity: int
     min_order_quantity: int
-    max_order_quantity: Optional[int] = None
+    max_order_quantity: int | None = None
     lead_time_days: int
     warranty_months: int
     status: OfferStatusEnum
-    calculated_customer_price: Optional[Decimal] = None
-    inventory: Optional[OfferInventoryResponse] = None
+    calculated_customer_price: Decimal | None = None
+    inventory: OfferInventoryResponse | None = None
     created_at: datetime
     updated_at: datetime
 

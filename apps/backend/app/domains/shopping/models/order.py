@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from app.domains.catalog.models.product import Product
     from app.domains.catalog.models.product_variant import ProductVariant
     from app.domains.logistics.models.delivery import Delivery
-    from app.domains.shopping.models.mobile_money_payment import MobileMoneyPayment
+    from app.domains.payments.models.mobile_money_payment import MobileMoneyPayment
     from app.domains.shopping.models.sub_order import SubOrder
     from app.domains.vendor.models.vendor_offer import VendorOffer
     from app.domains.vendor.models.vendor_profile import VendorProfile
@@ -109,6 +109,12 @@ class Order(Base, IDMixin, AuditMixin):
         return 50.0
 
     @property
+    def tax_amount(self) -> float:
+        if self.shipping_address and isinstance(self.shipping_address, dict):
+            return float(self.shipping_address.get("tax_amount", 0.0))
+        return 0.0
+
+    @property
     def discount_amount(self) -> float:
         if self.shipping_address and isinstance(self.shipping_address, dict):
             return float(self.shipping_address.get("discount_amount", 0.0))
@@ -144,7 +150,7 @@ class Order(Base, IDMixin, AuditMixin):
         if not self.mobile_money_payments:
             return None
         # Return the most recent non-refunded payment
-        from app.domains.shopping.models.mobile_money_payment import MobileMoneyPaymentStatus
+        from app.domains.payments.models.mobile_money_payment import MobileMoneyPaymentStatus
 
         for payment in self.mobile_money_payments:
             if payment.status != MobileMoneyPaymentStatus.REFUNDED:

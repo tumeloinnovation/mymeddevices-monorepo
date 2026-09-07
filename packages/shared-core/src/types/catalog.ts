@@ -2,6 +2,17 @@ export type ProductStatus = 'draft' | 'pending_review' | 'published' | 'archived
 export type PPBClassification = 'Class A' | 'Class B' | 'Class C' | 'Class D' | 'Unclassified';
 export type StockStatus = 'instock' | 'outofstock' | 'onbackorder' | 'backorder' | 'ondemand';
 
+export interface ProductStats {
+  total: number;
+  published: number;
+  pending_review: number;
+  draft: number;
+  archived: number;
+  low_stock: number;
+  verified: number;
+  compliance_rate: number;
+}
+
 export interface MedicalVariantAttributes {
   folds?: 2 | 3 | 4 | 5 | number;
   size?: string;
@@ -248,7 +259,10 @@ export interface Category {
   name: string;
   slug: string;
   description?: string;
+  permalink?: string;
   icon_url?: string;
+  tax_category_code?: string;
+  min_warranty_months?: number;
   parent_id?: string;
   sort_order: number;
   is_active: boolean;
@@ -261,7 +275,10 @@ export interface CategoryCreate {
   name: string;
   slug: string;
   description?: string;
+  permalink?: string;
   icon_url?: string;
+  tax_category_code?: string;
+  min_warranty_months?: number;
   parent_id?: string | null;
   sort_order?: number;
   is_active?: boolean;
@@ -274,7 +291,10 @@ export interface CategoryTree {
   name: string;
   slug: string;
   description?: string;
+  permalink?: string;
   icon_url?: string;
+  tax_category_code?: string;
+  min_warranty_months?: number;
   parent_id?: string | null;
   sort_order: number;
   is_active: boolean;

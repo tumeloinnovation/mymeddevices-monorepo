@@ -1,7 +1,9 @@
 'use client';
 
 import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
   Gift,
@@ -14,12 +16,26 @@ import {
   Award,
   Gem,
   Info,
-  HelpCircle,
   Sparkles,
-  CheckCircle2
+  CheckCircle2,
+  Coins,
+  ArrowRight,
+  Zap,
+  HelpCircle,
+  Clock,
+  Star,
+  Lock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useLoyaltySummary, useLoyaltyLedger } from '@/lib/hooks/useLoyalty';
+import { customerLoyaltyApi } from '@/lib/api/endpoints/loyalty';
+import { LoyaltyHero } from '@/app/dashboard/_components/loyalty/LoyaltyHero';
+import { TierProgressCard } from '@/app/dashboard/_components/loyalty/TierProgressCard';
+import { TierBenefitsCard } from '@/app/dashboard/_components/loyalty/TierBenefitsCard';
+import { RewardsQuickRedeem } from '@/app/dashboard/_components/loyalty/RewardsQuickRedeem';
+import { PointsHistoryTimeline } from '@/app/dashboard/_components/loyalty/PointsHistoryTimeline';
+import { useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 
 const tierIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   bronze: Shield,
@@ -29,18 +45,25 @@ const tierIcons: Record<string, React.ComponentType<{ className?: string }>> = {
 };
 
 export default function LoyaltyPage() {
-  // Fetch summary
+  const queryClient = useQueryClient();
   const { data: summary, isLoading: summaryLoading } = useLoyaltySummary();
-
-  // Fetch ledger
-  const { data: ledger, isLoading: ledgerLoading } = useLoyaltyLedger({ limit: 10 });
+  const { data: ledger, isLoading: ledgerLoading } = useLoyaltyLedger({ limit: 15 });
 
   if (summaryLoading || !summary) {
     return (
-      <div className="space-y-4 max-w-4xl mx-auto p-4">
-        <Skeleton className="h-8 w-48 mb-2" />
-        <Skeleton className="h-32 w-full rounded-xl" />
-        <Skeleton className="h-48 w-full rounded-xl" />
+      <div className="space-y-6 max-w-7xl mx-auto">
+        <Skeleton className="h-10 w-48 mb-2" />
+        <Skeleton className="h-44 w-full rounded-2xl" />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="lg:col-span-8 space-y-6">
+            <Skeleton className="h-64 w-full rounded-2xl" />
+            <Skeleton className="h-48 w-full rounded-2xl" />
+          </div>
+          <div className="lg:col-span-4 space-y-6">
+            <Skeleton className="h-64 w-full rounded-2xl" />
+            <Skeleton className="h-48 w-full rounded-2xl" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -48,179 +71,177 @@ export default function LoyaltyPage() {
   const currentTierName = summary.current_tier?.name || 'Bronze';
   const tierKey = currentTierName.toLowerCase();
   const TierIcon = tierIcons[tierKey] || Shield;
-  
+
   // Calculate discount value: 2 points = KES 1
   const kesValue = Math.floor(summary.total_points / 2);
-
-  // Progress to next tier
   const pointsToNext = summary.points_to_next_tier || 0;
   const nextTierName = summary.next_tier?.name;
 
+  const handleRedeem = async (points: number, description: string) => {
+    await customerLoyaltyApi.redeem(points, description);
+    queryClient.invalidateQueries({ queryKey: ['loyalty-summary'] });
+    queryClient.invalidateQueries({ queryKey: ['loyalty-ledger'] });
+  };
+
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      {/* 1. Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Loyalty Rewards</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Earn points automatically and redeem them as cash discounts at checkout.
-        </p>
+    <div className="space-y-6 max-w-7xl mx-auto">
+      {/* 1. Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-border/50">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-800 dark:text-amber-300 border border-amber-500/20 mb-2">
+            <Award className="h-3.5 w-3.5 text-amber-500" />
+            <span>Healthcare Procurement Rewards Program</span>
+          </div>
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
+            Loyalty Rewards & Cash Discounts
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Earn points automatically on all medical equipment purchases and redeem them as cash discounts at checkout.
+          </p>
+        </div>
+
+        <Button asChild size="sm" variant="outline" className="gap-2 rounded-xl font-semibold border-border bg-card hover:bg-muted shrink-0 self-start sm:self-auto">
+          <Link href="/products">
+            <ShoppingBag className="h-4 w-4 text-primary" />
+            <span>Browse Products</span>
+          </Link>
+        </Button>
       </div>
 
       {/* 2. Primary Hero Stat Card */}
-      <Card className="border border-border bg-card shadow-sm overflow-hidden">
-        <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground uppercase tracking-wider mb-1">
-                <Gift className="h-4 w-4 text-emerald-500" />
-                <span>Your Available Points</span>
-              </div>
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-bold text-foreground tracking-tight">
+      <Card className="border border-border/80 shadow-xs overflow-hidden rounded-2xl bg-card">
+        <div className="p-6 sm:p-8 bg-gradient-to-r from-amber-500/10 via-primary/5 to-transparent border-b border-border/60">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <Coins className="h-4 w-4 text-amber-500" />
+                Available Rewards Balance
+              </span>
+              <div className="flex items-baseline gap-3">
+                <span className="text-3xl sm:text-5xl font-extrabold text-foreground tracking-tight">
                   {summary.total_points.toLocaleString()}
                 </span>
-                <span className="text-sm text-muted-foreground font-medium">pts</span>
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 ml-2">
-                  = KES {kesValue.toLocaleString()} Checkout Discount
-                </span>
+                <span className="text-sm sm:text-base font-bold text-muted-foreground">pts</span>
+                <Badge className="ml-2 text-xs font-bold px-3 py-1 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                  = KES {kesValue.toLocaleString()} Store Credit
+                </Badge>
               </div>
+              <p className="text-xs text-muted-foreground">
+                Exchange rate: <strong>2 points = KES 1 discount</strong>. Points can be applied instantly at checkout.
+              </p>
             </div>
 
-            <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-muted/40 border border-border shrink-0 self-start sm:self-auto">
-              <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                <TierIcon className="h-5 w-5" />
+            {/* Current Tier Badge Card */}
+            <div className="flex items-center gap-4 px-5 py-3.5 rounded-2xl bg-card/80 border border-border/80 shadow-xs shrink-0 self-start md:self-auto">
+              <div className="p-3 rounded-xl bg-gradient-to-br from-amber-500/20 to-primary/20 text-amber-600 dark:text-amber-400">
+                <TierIcon className="h-6 w-6" />
               </div>
               <div>
-                <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Tier Level</span>
-                <span className="text-sm font-bold capitalize text-foreground">{currentTierName}</span>
+                <span className="text-[11px] text-muted-foreground uppercase font-bold block">Current Tier</span>
+                <span className="text-base font-extrabold capitalize text-foreground">{currentTierName} Member</span>
+                <span className="text-[11px] text-primary font-medium block">
+                  {summary.current_tier?.multiplier || 1}× Point Multiplier
+                </span>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Tier Progress */}
-          {nextTierName && pointsToNext > 0 && (
-            <div className="mt-6 pt-4 border-t border-border/60 space-y-1.5">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Progress to <strong className="text-foreground">{nextTierName}</strong></span>
-                <span className="font-medium text-foreground">{pointsToNext.toLocaleString()} pts remaining</span>
-              </div>
-              <Progress value={Math.max(5, 100 - (pointsToNext / 1000) * 100)} className="h-1.5" />
+        {/* Tier Progress Bar in Hero */}
+        {nextTierName && pointsToNext > 0 && (
+          <div className="p-5 sm:p-6 bg-muted/10 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-foreground flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
+                <span>Next Milestone: <strong className="text-primary">{nextTierName} Tier</strong></span>
+              </span>
+              <span className="font-bold text-muted-foreground">
+                {pointsToNext.toLocaleString()} pts remaining
+              </span>
             </div>
-          )}
-        </CardContent>
+            <div className="h-2.5 bg-muted/60 rounded-full overflow-hidden border border-border/40">
+              <div
+                className="h-full bg-gradient-to-r from-amber-500 to-primary rounded-full transition-all duration-700"
+                style={{ width: `${Math.min(100, Math.max(5, (1 - pointsToNext / 1000) * 100))}%` }}
+              />
+            </div>
+          </div>
+        )}
       </Card>
 
-      {/* 3. Program Rules & How to Earn */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* How to Earn */}
-        <Card className="border border-border bg-card shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <ShoppingBag className="h-4 w-4 text-primary" />
-              How You Earn Points
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-xs text-muted-foreground">
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/40">
-              <span className="font-medium text-foreground">Complete an Order</span>
-              <span className="font-bold text-primary">1 pt / KES 100</span>
-            </div>
+      {/* 3. Main 2-Column Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Quick Redeem & Points Ledger (8 cols) */}
+        <div className="lg:col-span-8 space-y-6">
+          {/* Quick Redeem Widget */}
+          <RewardsQuickRedeem
+            currentPoints={summary.total_points}
+            onRedeem={handleRedeem}
+          />
 
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/40">
-              <span className="font-medium text-foreground">Write a Verified Review</span>
-              <span className="font-bold text-primary">+25 pts</span>
-            </div>
+          {/* Points History Timeline */}
+          <PointsHistoryTimeline
+            entries={ledger?.items || []}
+            isLoading={ledgerLoading}
+          />
+        </div>
 
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-muted/30 border border-border/40">
-              <span className="font-medium text-foreground">Redemption Rate</span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">2 pts = KES 1</span>
-            </div>
-          </CardContent>
-        </Card>
+        {/* Right Column: Tier Progress, Benefits & Earning Guide (4 cols) */}
+        <div className="lg:col-span-4 space-y-6">
+          {/* Tier Milestones Card */}
+          <TierProgressCard
+            currentPoints={summary.total_points}
+            currentTier={currentTierName}
+            pointsToNextTier={pointsToNext}
+            nextTier={nextTierName}
+          />
 
-        {/* Tips & Program Guidelines */}
-        <Card className="border border-border bg-card shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-semibold flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-amber-500" />
-              Tips & Guidelines
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2.5 text-xs text-muted-foreground">
-            <div className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20">
-              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mt-0.5" />
-              <div>
-                <strong className="text-foreground block font-medium">Automatic Checkout Discounts</strong>
-                No coupon codes needed! Simply toggle "Apply Loyalty Points" on the payment summary step at checkout.
+          {/* Tier Benefits */}
+          <TierBenefitsCard currentTier={currentTierName} />
+
+          {/* How to Earn Points Guide */}
+          <Card className="border border-border/80 shadow-xs rounded-2xl bg-card overflow-hidden">
+            <CardHeader className="py-4 px-5 border-b border-border/60 bg-muted/10">
+              <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                <ShoppingBag className="h-4 w-4 text-primary" />
+                <span>How to Earn Points</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-5 space-y-3.5 text-xs">
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/20 border border-border/50">
+                <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+                  <ShoppingBag className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-foreground block text-xs">Place Medical Orders</span>
+                  <span className="text-muted-foreground text-[11px]">Earn 1 pt for every KES 100 spent on certified devices.</span>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20">
-              <Info className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
-              <div>
-                <strong className="text-foreground block font-medium">Tier Multipliers</strong>
-                Higher tiers earn faster points! Silver earns 1.25×, Gold earns 1.5×, and Platinum earns 2× points on every purchase.
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/20 border border-border/50">
+                <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 shrink-0">
+                  <Star className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-foreground block text-xs">Verified Product Reviews</span>
+                  <span className="text-muted-foreground text-[11px]">Get +25 bonus points for reviewing delivered equipment.</span>
+                </div>
               </div>
-            </div>
 
-            <div className="flex items-start gap-2.5 p-2 rounded-lg bg-muted/20">
-              <HelpCircle className="h-4 w-4 text-purple-500 shrink-0 mt-0.5" />
-              <div>
-                <strong className="text-foreground block font-medium">Points Validity</strong>
-                Points earned remain active on your account with any purchase activity within 12 months.
+              <div className="flex items-start gap-3 p-3 rounded-xl bg-muted/20 border border-border/50">
+                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600 shrink-0">
+                  <Coins className="h-4 w-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-foreground block text-xs">Instant Checkout Deductions</span>
+                  <span className="text-muted-foreground text-[11px]">Apply points during checkout for instant discounts without promo codes.</span>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      {/* 4. Recent Activity */}
-      <Card className="border border-border bg-card shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center justify-between">
-            <span className="flex items-center gap-2">
-              <History className="h-4 w-4 text-primary" />
-              Points History & Activity Log
-            </span>
-            <span className="text-[11px] font-normal text-muted-foreground">Last transactions</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {ledgerLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-8 w-full" />
-              <Skeleton className="h-8 w-full" />
-            </div>
-          ) : !ledger?.items || ledger.items.length === 0 ? (
-            <p className="text-xs text-muted-foreground py-4 text-center">
-              No activity recorded yet. Earn points on your next purchase!
-            </p>
-          ) : (
-            <div className="divide-y divide-border/60">
-              {ledger.items.slice(0, 5).map((entry: any) => {
-                const isEarn = entry.points > 0;
-                return (
-                  <div key={entry.id} className="py-2.5 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2.5 truncate pr-2">
-                      {isEarn ? (
-                        <TrendingUp className="h-4 w-4 text-emerald-500 shrink-0" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 text-rose-500 shrink-0" />
-                      )}
-                      <span className="truncate text-foreground font-medium">
-                        {entry.description || (isEarn ? 'Points Earned' : 'Points Redeemed')}
-                      </span>
-                    </div>
-                    <span className={cn("font-semibold shrink-0", isEarn ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
-                      {isEarn ? `+${entry.points}` : entry.points} pts
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
+

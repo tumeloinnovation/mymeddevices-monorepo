@@ -49,3 +49,31 @@ async def test_trusted_proxy_extracts_client_ip():
 
     # Invariant: Trusted proxy forwarding header should be extracted
     assert "203.0.113.50" in identifier, f"Expected forwarded IP 203.0.113.50 in identifier, got {identifier}"
+
+
+@pytest.mark.asyncio
+async def test_atomic_rate_limiting_concurrent_burst():
+    """
+    Test that concurrent requests are properly tracked and rejected once max_requests is exceeded,
+    preventing race condition bypasses.
+    """
+    import asyncio
+
+    from app.core.rate_limiting import rate_limiter
+
+    identifier = "ip:192.168.1.99"
+    rate_limiter.clear(identifier)
+    # login limit is 10 requests
+    limit = 10
+
+    # Launch 25 concurrent check_and_record calls
+    results = await asyncio.gather(
+        *[rate_limiter.check_and_record(identifier, "login") for _ in range(25)]
+    )
+
+    allowed_count = sum(1 for allowed, _ in results if allowed)
+    rejected_count = sum(1 for allowed, _ in results if not allowed)
+
+    assert allowed_count == limit, f"Expected exactly {limit} allowed requests, got {allowed_count}"
+    assert rejected_count == 15, f"Expected 15 rejected requests, got {rejected_count}"
+

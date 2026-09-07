@@ -1,7 +1,7 @@
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,7 +23,7 @@ class SmsCampaignCreate(BaseModel):
     message: str = Field(..., min_length=1)
     sender_id: str = Field(default="MYMEDDEVICE", max_length=50)
     target_audience: str = Field(default="all", max_length=50)
-    scheduled_at: Optional[datetime] = None
+    scheduled_at: datetime | None = None
 
 
 class SmsCampaignResponse(BaseModel):
@@ -36,8 +36,8 @@ class SmsCampaignResponse(BaseModel):
     target_audience: str
     recipient_count: int
     status: CampaignStatus
-    scheduled_at: Optional[datetime] = None
-    sent_at: Optional[datetime] = None
+    scheduled_at: datetime | None = None
+    sent_at: datetime | None = None
     cost_kes: Decimal
     created_at: datetime
     updated_at: datetime
@@ -46,10 +46,10 @@ class SmsCampaignResponse(BaseModel):
 class EmailCampaignCreate(BaseModel):
     title: str = Field(..., max_length=255)
     subject: str = Field(..., max_length=255)
-    preview_text: Optional[str] = None
+    preview_text: str | None = None
     html_content: str = Field(...)
     target_audience: str = Field(default="all", max_length=50)
-    scheduled_at: Optional[datetime] = None
+    scheduled_at: datetime | None = None
 
 
 class EmailCampaignResponse(BaseModel):
@@ -58,15 +58,15 @@ class EmailCampaignResponse(BaseModel):
     id: uuid.UUID
     title: str
     subject: str
-    preview_text: Optional[str] = None
+    preview_text: str | None = None
     html_content: str
     target_audience: str
     recipient_count: int
     open_count: int
     click_count: int
     status: CampaignStatus
-    scheduled_at: Optional[datetime] = None
-    sent_at: Optional[datetime] = None
+    scheduled_at: datetime | None = None
+    sent_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -82,7 +82,7 @@ async def list_sms_campaigns(
 ):
     offset = (page - 1) * page_size
     count_res = await db.execute(select(func.count(SmsCampaign.id)))
-    total = count_res.scalar() or 0
+    count_res.scalar() or 0
 
     stmt = select(SmsCampaign).order_by(desc(SmsCampaign.created_at)).offset(offset).limit(page_size)
     res = await db.execute(stmt)
@@ -173,7 +173,7 @@ async def list_email_campaigns(
 ):
     offset = (page - 1) * page_size
     count_res = await db.execute(select(func.count(EmailCampaign.id)))
-    total = count_res.scalar() or 0
+    count_res.scalar() or 0
 
     stmt = select(EmailCampaign).order_by(desc(EmailCampaign.created_at)).offset(offset).limit(page_size)
     res = await db.execute(stmt)

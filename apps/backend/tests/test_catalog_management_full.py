@@ -1,5 +1,4 @@
 import uuid
-from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
@@ -10,7 +9,6 @@ from app.domains.auth.services.auth_service import AuthService
 from app.domains.catalog.models.brand import Brand
 from app.domains.catalog.models.category import Category
 from app.domains.catalog.models.product import Product
-from app.domains.catalog.models.tag import Tag
 from app.domains.vendor.models.vendor_profile import VendorProfile
 
 
@@ -276,7 +274,7 @@ async def test_product_vendor_creation_and_admin_review_workflow(client: AsyncCl
 async def test_product_variants_and_bundle_items(client: AsyncClient, catalog_setup, db_session):
     """CAT-004: Product Variants and Bundle Items management."""
     d = catalog_setup
-    admin_headers = {"Authorization": f"Bearer {d['tokens_admin'].access_token}"}
+    {"Authorization": f"Bearer {d['tokens_admin'].access_token}"}
     vendor_headers = {"Authorization": f"Bearer {d['tokens_vendor'].access_token}"}
 
     # Create base product

@@ -67,7 +67,7 @@ export function useActiveOrders() {
   const { data: orders, ...rest } = useOrders({ limit: 20 });
 
   const activeOrders = orders?.items?.filter(
-    (order) => ['paid', 'processing', 'shipped'].includes(order.status)
+    (order) => ['shipped', 'in_transit', 'out_for_delivery'].includes(order.status?.toLowerCase())
   ) || [];
 
   return {

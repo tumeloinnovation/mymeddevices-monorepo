@@ -167,7 +167,7 @@ export default function PaymentMethods() {
   const fetchMethods = async () => {
     setLoading(true);
     try {
-      const data = await apiClient.get<any>("/shopping/mobile-money/methods").catch(() => null);
+      const data = await apiClient.get<any>("/admin/payments/mobile-money/methods").catch(() => null);
       if (data && data.payment_methods) {
         setMethods(data.payment_methods);
       } else {

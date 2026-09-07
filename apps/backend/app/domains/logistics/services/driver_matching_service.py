@@ -3,19 +3,17 @@
 import datetime as dt
 import logging
 import uuid
-from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import Base
 from app.domains.auth.models.user import User
-from app.domains.logistics.models.driver_profile import DriverProfile, DriverStatus
 from app.domains.logistics.models.delivery import Delivery, DeliveryStatus
+from app.domains.logistics.models.driver_profile import DriverProfile, DriverStatus
 from app.domains.logistics.utils.geometry import calculate_haversine_distance
 from app.domains.logistics.utils.matching import (
-    EligibleDriver,
     DeliveryRequirements,
+    EligibleDriver,
     VehicleTypeConfig,
     get_compatible_vehicle_types,
     get_traffic_coefficient_for_time,

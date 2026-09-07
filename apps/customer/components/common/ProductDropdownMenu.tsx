@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/navigation-menu";
 import Link from "next/link";
 import Image from 'next/image';
+import { getValidImageUrl } from "@/lib/utils/image";
 import { Product } from "@/lib/data/types";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/utils/utils";
@@ -91,7 +92,7 @@ export const ProductDropdownMenu: React.FC<ProductDropdownMenuProps> = ({
                       <div className="relative p-4 flex items-center justify-center h-28 bg-gray-50">
                         <Image
                           fill
-                          src={product.images?.[0]?.src || "/logos/logo-portrait.png"}
+                          src={getValidImageUrl(product.images?.[0]?.src || (product as any)?.image_url, "/logos/logo-portrait.png")}
                           alt={product.name}
                           className="object-contain"
                         />

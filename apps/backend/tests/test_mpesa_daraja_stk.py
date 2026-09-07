@@ -21,13 +21,13 @@ from sqlalchemy import select
 from app.core.security import create_access_token
 from app.domains.auth.models.user import User
 from app.domains.shared.models.outbox import OutboxEvent
-from app.domains.shopping.models.mobile_money_payment import (
+from app.domains.payments.models.mobile_money_payment import (
     MobileMoneyPayment,
     MobileMoneyPaymentStatus,
 )
 from app.domains.shopping.models.order import Order, OrderStatus
 from app.domains.shopping.models.sub_order import SubOrder, SubOrderStatus
-from app.domains.shopping.services.daraja_service import DarajaService
+from app.domains.payments.services.daraja_service import DarajaService
 from app.domains.vendor.models.vendor_profile import VendorProfile
 
 
@@ -149,7 +149,7 @@ async def test_stk_push_initiation_success(client: AsyncClient, daraja_setup):
 
     with patch.object(DarajaService, "initiate_stk_push", return_value=mock_daraja_resp):
         response = await client.post(
-            "/api/v1/shopping/mpesa/stk-push",
+            "/api/v1/payments/mpesa/stk-push",
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "order_id": str(order.id),
@@ -171,7 +171,7 @@ async def test_stk_push_forbidden_for_non_owner(client: AsyncClient, daraja_setu
     order = daraja_setup["order"]
 
     response = await client.post(
-        "/api/v1/shopping/mpesa/stk-push",
+        "/api/v1/payments/mpesa/stk-push",
         headers={"Authorization": f"Bearer {other_token}"},
         json={
             "order_id": str(order.id),
@@ -224,7 +224,7 @@ async def test_stk_callback_success_processing(client: AsyncClient, db_session, 
     }
 
     response = await client.post(
-        "/api/v1/shopping/mpesa/callback",
+        "/api/v1/payments/mpesa/callback",
         json=callback_payload,
     )
     assert response.status_code == 200
@@ -280,7 +280,7 @@ async def test_stk_callback_user_cancelled(client: AsyncClient, db_session, dara
     }
 
     response = await client.post(
-        "/api/v1/shopping/mpesa/callback",
+        "/api/v1/payments/mpesa/callback",
         json=callback_payload,
     )
     assert response.status_code == 200
@@ -313,18 +313,18 @@ async def test_stk_status_polling_endpoint_authenticated(client: AsyncClient, db
     await db_session.commit()
 
     # 1. Unauthenticated request rejected with 401
-    unauth_resp = await client.get(f"/api/v1/shopping/mpesa/status/{checkout_id}")
+    unauth_resp = await client.get(f"/api/v1/payments/mpesa/status/{checkout_id}")
     assert unauth_resp.status_code == 401
 
     # 2. Non-owner request rejected with 403
     forbidden_resp = await client.get(
-        f"/api/v1/shopping/mpesa/status/{checkout_id}", headers={"Authorization": f"Bearer {other_token}"}
+        f"/api/v1/payments/mpesa/status/{checkout_id}", headers={"Authorization": f"Bearer {other_token}"}
     )
     assert forbidden_resp.status_code == 403
 
     # 3. Order owner request succeeds and phone number is masked for privacy
     response = await client.get(
-        f"/api/v1/shopping/mpesa/status/{checkout_id}", headers={"Authorization": f"Bearer {token}"}
+        f"/api/v1/payments/mpesa/status/{checkout_id}", headers={"Authorization": f"Bearer {token}"}
     )
     assert response.status_code == 200
     res_json = response.json()
@@ -335,15 +335,16 @@ async def test_stk_status_polling_endpoint_authenticated(client: AsyncClient, db
 
 
 @pytest.mark.asyncio
-async def test_stk_callback_secret_validation(client: AsyncClient, db_session, daraja_setup):
-    """Test webhook callback secret validation when MPESA_CALLBACK_SECRET is configured."""
+async def test_stk_callback_token_validation(client: AsyncClient, db_session, daraja_setup):
+    """Test per-order callback token validation when MPESA_CALLBACK_SECRET is configured."""
     from app.core.config import settings
 
+    order = daraja_setup["order"]
     checkout_id = "ws_CO_14082026_SECRET_TEST"
 
     payment = MobileMoneyPayment(
         id=uuid.uuid4(),
-        order_id=daraja_setup["order"].id,
+        order_id=order.id,
         transaction_id=checkout_id,
         amount=Decimal("4500.00"),
         currency="KES",
@@ -376,21 +377,25 @@ async def test_stk_callback_secret_validation(client: AsyncClient, db_session, d
     settings.MPESA_CALLBACK_SECRET = "super_secret_mpesa_webhook_token_999"
 
     try:
-        # 1. Callback without secret is rejected
-        resp_no_secret = await client.post("/api/v1/shopping/mpesa/callback", json=callback_payload)
-        assert resp_no_secret.json()["ResultCode"] == 1
-        assert "Unauthorized" in resp_no_secret.json()["ResultDesc"]
+        # 1. Callback without a token is rejected
+        resp_no_token = await client.post("/api/v1/payments/mpesa/callback", json=callback_payload)
+        assert resp_no_token.json()["ResultCode"] == 1
+        assert "Unauthorized" in resp_no_token.json()["ResultDesc"]
 
-        # 2. Callback with wrong secret is rejected
-        resp_wrong_secret = await client.post(
-            "/api/v1/shopping/mpesa/callback?secret=wrong_secret", json=callback_payload
-        )
-        assert resp_wrong_secret.json()["ResultCode"] == 1
+        # 2. Callback with a wrong token is rejected
+        resp_wrong_token = await client.post("/api/v1/payments/mpesa/callback?token=wrong_token", json=callback_payload)
+        assert resp_wrong_token.json()["ResultCode"] == 1
 
-        # 3. Callback with valid secret succeeds
-        resp_valid = await client.post(
-            "/api/v1/shopping/mpesa/callback?secret=super_secret_mpesa_webhook_token_999", json=callback_payload
+        # 3. The legacy static-secret scheme no longer authenticates
+        resp_legacy_secret = await client.post(
+            "/api/v1/payments/mpesa/callback?secret=super_secret_mpesa_webhook_token_999", json=callback_payload
         )
+        assert resp_legacy_secret.json()["ResultCode"] == 1
+
+        # 4. Callback with the valid per-order token succeeds
+        valid_token = DarajaService.generate_callback_token(order.id)
+        assert valid_token is not None
+        resp_valid = await client.post(f"/api/v1/payments/mpesa/callback?token={valid_token}", json=callback_payload)
         assert resp_valid.status_code == 200
         assert resp_valid.json()["ResultCode"] == 0
 
@@ -398,6 +403,187 @@ async def test_stk_callback_secret_validation(client: AsyncClient, db_session, d
         assert payment.status == MobileMoneyPaymentStatus.VERIFIED
     finally:
         settings.MPESA_CALLBACK_SECRET = original_secret
+
+
+@pytest.mark.asyncio
+async def test_stk_callback_token_bound_to_order(client: AsyncClient, db_session, daraja_setup):
+    """A valid token for one order must not authenticate a callback for another order."""
+    from app.core.config import settings
+
+    order = daraja_setup["order"]
+    other_user = daraja_setup["other_user"]
+
+    other_order = Order(
+        id=uuid.uuid4(),
+        order_number=8802,
+        user_id=other_user.id,
+        status=OrderStatus.PENDING,
+        total_amount=Decimal("4500.00"),
+        currency="KES",
+    )
+    db_session.add(other_order)
+
+    checkout_id = "ws_CO_14082026_CROSS_ORDER"
+    payment = MobileMoneyPayment(
+        id=uuid.uuid4(),
+        order_id=other_order.id,
+        transaction_id=checkout_id,
+        amount=Decimal("4500.00"),
+        currency="KES",
+        provider="mpesa",
+        phone_number="254712345678",
+        status=MobileMoneyPaymentStatus.PENDING,
+    )
+    db_session.add(payment)
+    await db_session.commit()
+
+    callback_payload = {
+        "Body": {
+            "stkCallback": {
+                "MerchantRequestID": "29115-34620561-1",
+                "CheckoutRequestID": checkout_id,
+                "ResultCode": 0,
+                "ResultDesc": "Success",
+                "CallbackMetadata": {"Item": [{"Name": "Amount", "Value": 4500.00}]},
+            }
+        }
+    }
+
+    original_secret = settings.MPESA_CALLBACK_SECRET
+    settings.MPESA_CALLBACK_SECRET = "super_secret_mpesa_webhook_token_999"
+    try:
+        # Token derived from the FIRST order's id, replayed against the second order
+        foreign_token = DarajaService.generate_callback_token(order.id)
+        resp = await client.post(f"/api/v1/payments/mpesa/callback?token={foreign_token}", json=callback_payload)
+        assert resp.json()["ResultCode"] == 1
+        assert "Unauthorized" in resp.json()["ResultDesc"]
+
+        await db_session.refresh(payment)
+        assert payment.status == MobileMoneyPaymentStatus.PENDING
+    finally:
+        settings.MPESA_CALLBACK_SECRET = original_secret
+
+
+@pytest.mark.asyncio
+async def test_stk_push_charges_server_side_order_total(db_session, daraja_setup):
+    """The Daraja payload amount must always be the server-side order total."""
+    import httpx
+
+    order = daraja_setup["order"]
+    captured: dict = {}
+
+    class FakeDarajaResponse:
+        @staticmethod
+        def json():
+            return {
+                "MerchantRequestID": "29115-34620561-1",
+                "CheckoutRequestID": "ws_CO_AMOUNT_SERVER_SIDE",
+                "ResponseCode": "0",
+                "ResponseDescription": "Success. Request accepted for processing",
+                "CustomerMessage": "Success. Request accepted for processing",
+            }
+
+    async def fake_post(self, url, json=None, headers=None):
+        captured["url"] = url
+        captured["payload"] = json
+        return FakeDarajaResponse()
+
+    with (
+        patch.object(DarajaService, "get_oauth_token", return_value="fake-token"),
+        patch.object(httpx.AsyncClient, "post", fake_post),
+    ):
+        result = await DarajaService(db_session).initiate_stk_push(order_id=order.id, phone_number="0712345678")
+
+    assert result["ResponseCode"] == "0"
+    # Order total is 4500.00 — never a client-supplied amount
+    assert captured["payload"]["Amount"] == 4500
+
+    payment = (
+        await db_session.execute(
+            select(MobileMoneyPayment).where(MobileMoneyPayment.transaction_id == "ws_CO_AMOUNT_SERVER_SIDE")
+        )
+    ).scalar_one()
+    assert payment.amount == Decimal("4500")
+
+
+@pytest.mark.asyncio
+async def test_stk_push_ignores_client_supplied_amount(client: AsyncClient, daraja_setup):
+    """A client sending an `amount` field must have it silently ignored (schema drops it)."""
+    token = daraja_setup["customer_token"]
+    order = daraja_setup["order"]
+
+    mock_daraja_resp = {
+        "MerchantRequestID": "29115-34620561-1",
+        "CheckoutRequestID": "ws_CO_14082026130099999",
+        "ResponseCode": "0",
+        "ResponseDescription": "Success. Request accepted for processing",
+        "CustomerMessage": "Success. Request accepted for processing",
+    }
+
+    with patch.object(DarajaService, "initiate_stk_push", return_value=mock_daraja_resp) as mock_init:
+        response = await client.post(
+            "/api/v1/payments/mpesa/stk-push",
+            headers={"Authorization": f"Bearer {token}"},
+            json={
+                "order_id": str(order.id),
+                "phone_number": "0712345678",
+                "amount": 1,  # Underpayment attempt — must be ignored
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json()["success"] is True
+        # The service must be called without any client-controlled amount
+        assert "amount" not in mock_init.call_args.kwargs
+
+
+@pytest.mark.asyncio
+async def test_stk_push_rejected_for_non_pending_order(client: AsyncClient, db_session, daraja_setup):
+    """Orders that already progressed past PENDING must not be chargeable via STK push."""
+    token = daraja_setup["customer_token"]
+    order = daraja_setup["order"]
+
+    order.status = OrderStatus.DELIVERED
+    await db_session.commit()
+
+    response = await client.post(
+        "/api/v1/payments/mpesa/stk-push",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"order_id": str(order.id), "phone_number": "0712345678"},
+    )
+
+    assert response.status_code == 400
+    assert "not awaiting payment" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_stk_push_blocked_while_payment_pending(client: AsyncClient, db_session, daraja_setup):
+    """A second concurrent STK push on the same order must be blocked to prevent double charging."""
+    token = daraja_setup["customer_token"]
+    order = daraja_setup["order"]
+
+    payment = MobileMoneyPayment(
+        id=uuid.uuid4(),
+        order_id=order.id,
+        transaction_id="ws_CO_STILL_PENDING_001",
+        amount=Decimal("4500.00"),
+        currency="KES",
+        provider="mpesa",
+        phone_number="254712345678",
+        status=MobileMoneyPaymentStatus.PENDING,
+    )
+    db_session.add(payment)
+    await db_session.commit()
+    await db_session.refresh(payment)  # Load server-side created_at
+
+    response = await client.post(
+        "/api/v1/payments/mpesa/stk-push",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"order_id": str(order.id), "phone_number": "0712345678"},
+    )
+
+    assert response.status_code == 400
+    assert "already pending" in response.json()["detail"]
 
 
 @pytest.mark.asyncio
@@ -435,7 +621,7 @@ async def test_stk_callback_amount_mismatch_rejected(client: AsyncClient, db_ses
         }
     }
 
-    resp = await client.post("/api/v1/shopping/mpesa/callback", json=callback_payload)
+    resp = await client.post("/api/v1/payments/mpesa/callback", json=callback_payload)
     assert resp.json()["ResultCode"] == 1
     assert "Amount mismatch" in resp.json()["ResultDesc"]
 

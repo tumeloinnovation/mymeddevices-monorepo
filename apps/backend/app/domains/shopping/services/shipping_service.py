@@ -5,14 +5,19 @@
 
 import uuid
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
+from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
 from app.domains.shopping.models.order import Order, OrderStatus
 from app.domains.shopping.models.shipment import Shipment, ShipmentStatus
 from app.domains.shopping.schemas.shipment_schemas import MockShipmentProcess
+
+if TYPE_CHECKING:
+    from app.domains.logistics.services.delivery_service import DeliveryService
 
 
 class ShippingService:
@@ -68,7 +73,7 @@ class ShippingService:
             id=delivery.id,  # Use same ID for easy mapping
             order_id=delivery.order_id,
             tracking_number=delivery.tracking_number,
-            carrier=delivery.carrier,
+            carrier=data.carrier or delivery.carrier,
             status=ShipmentStatus.IN_TRANSIT,  # Map delivery status to shipment status
             estimated_delivery=delivery.estimated_delivery,
             shipping_details={
@@ -82,6 +87,24 @@ class ShippingService:
 
         # 4. Update order status
         order.status = OrderStatus.SHIPPED
+
+        self.db.add(
+            OutboxEvent(
+                id=uuid.uuid4(),
+                aggregate_type="Order",
+                aggregate_id=str(order.id),
+                event_type="OrderShipped",
+                payload={
+                    "delivery_id": str(delivery.id),
+                    "tracking_number": delivery.tracking_number,
+                    "carrier": delivery.carrier,
+                    "estimated_delivery": delivery.estimated_delivery.isoformat()
+                    if delivery.estimated_delivery
+                    else None,
+                },
+                status=OutboxStatus.PENDING,
+            )
+        )
 
         # Use transaction for atomic shipment creation
         async with self._transaction():

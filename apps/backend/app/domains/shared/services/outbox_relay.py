@@ -108,20 +108,16 @@ class OutboxRelay:
                             vendor_email = vendor_profile.business_email or user_email
                             if vendor_email:
                                 vendor_total = sum(float(item.subtotal) for item in items)
-                                try:
-                                    await self.email_service.send_vendor_new_order(
-                                        vendor_email=vendor_email,
-                                        vendor_name=vendor_profile.store_name,
-                                        order_number=str(order.order_number or order.id),
-                                        order_total=vendor_total,
-                                    )
-                                except Exception as mail_err:
-                                    logger.warning(
-                                        f"Failed sending new order email to vendor {vendor_email}: {mail_err}"
-                                    )
+                                await self.email_service.send_vendor_new_order(
+                                    vendor_email=vendor_email,
+                                    vendor_name=vendor_profile.store_name,
+                                    order_number=str(order.order_number or order.id),
+                                    order_total=vendor_total,
+                                )
             except Exception as e:
                 logger.error(f"Error handling OrderCreated event: {e}")
                 raise
+
 
         elif event.event_type == "OrderPaid":
             logger.info(f"Dispatching OrderPaid event for {event.aggregate_id}")
@@ -129,59 +125,22 @@ class OutboxRelay:
             sub_orders = payload.get("sub_orders") or []
 
             # 1. Credit vendor ledgers idempotently (net = gross - platform fee)
-            from app.domains.shopping.models.vendor_ledger import LedgerTransaction, LedgerTransactionType, VendorLedger
+            from app.domains.payments.services.ledger_service import LedgerService
 
+            ledger_service = LedgerService(self.db)
             for so in sub_orders:
                 vendor_id = so.get("vendor_id")
                 if not vendor_id:
                     continue
                 vendor_uuid = uuid.UUID(str(vendor_id))
                 sub_order_uuid = uuid.UUID(str(so["sub_order_id"])) if so.get("sub_order_id") else None
-
-                # Idempotency check: check if this sub-order was already credited
-                if sub_order_uuid:
-                    existing_txn = (
-                        await self.db.execute(
-                            select(LedgerTransaction).where(
-                                LedgerTransaction.sub_order_id == sub_order_uuid,
-                                LedgerTransaction.transaction_type == LedgerTransactionType.CREDIT,
-                            )
-                        )
-                    ).scalar_one_or_none()
-                    if existing_txn:
-                        logger.info(f"Sub-order {sub_order_uuid} already credited on ledger. Skipping duplicate.")
-                        continue
-
-                ledger_stmt = select(VendorLedger).where(VendorLedger.vendor_id == vendor_uuid)
-                if self.db.bind and self.db.bind.dialect.name != "sqlite":
-                    ledger_stmt = ledger_stmt.with_for_update()
-                ledger_res = await self.db.execute(ledger_stmt)
-                ledger = ledger_res.scalar_one_or_none()
-
-                if not ledger:
-                    ledger = VendorLedger(vendor_id=vendor_uuid, balance=Decimal("0.00"))
-                    self.db.add(ledger)
-                    await self.db.flush()
-
                 gross = Decimal(str(so.get("subtotal_amount", 0)))
-                platform_fee_rate = Decimal("0.10")
-                platform_fee = gross * platform_fee_rate
-                net = gross - platform_fee
-                ledger.balance += net
-                ledger.last_updated_at = datetime.now(UTC)
-                self.db.add(
-                    LedgerTransaction(
-                        vendor_id=vendor_uuid,
-                        sub_order_id=sub_order_uuid,
-                        gross_amount=gross,
-                        platform_fee_rate=platform_fee_rate,
-                        platform_fee_amount=platform_fee,
-                        net_amount=net,
-                        transaction_type=LedgerTransactionType.CREDIT,
-                        reference_id=str(event.aggregate_id),
-                        reference_type="order",
-                        notes=f"Order payment - Order {event.aggregate_id}",
-                    )
+
+                await ledger_service.credit_vendor_for_sub_order(
+                    vendor_id=vendor_uuid,
+                    sub_order_id=sub_order_uuid,
+                    gross_amount=gross,
+                    reference_id=str(event.aggregate_id),
                 )
 
             # 2. Record audit StockLog entries idempotently
@@ -206,22 +165,84 @@ class OutboxRelay:
                     product_res = await self.db.execute(select(Product).where(Product.id == product_id))
                     product = product_res.scalar_one_or_none()
                     current_qty = product.stock_quantity if product else 0
+                    deducted_qty = int(item.get("quantity", 0))
                     self.db.add(
                         StockLog(
                             product_id=product_id,
                             vendor_id=uuid.UUID(str(item.get("vendor_id", so.get("vendor_id")))),
-                            quantity_change=-int(item.get("quantity", 0)),
+                            quantity_change=-deducted_qty,
                             previous_quantity=current_qty,
-                            new_quantity=current_qty,
+                            new_quantity=max(0, current_qty - deducted_qty),
                             reason=StockChangeReason.ORDER_SALE,
                             reference_id=str(event.aggregate_id),
                             reference_type="order",
                         )
                     )
 
+            # 3. Award customer loyalty points for the paid order (idempotent).
+            # Placed here because every payment path (M-Pesa callback, manual
+            # mobile money verification, COD creation) emits OrderPaid.
+            from app.domains.customers.services.loyalty_service import LoyaltyService
+            from app.domains.shopping.models.order import Order
+
+            paid_order = (
+                await self.db.execute(select(Order).where(Order.id == uuid.UUID(event.aggregate_id)))
+            ).scalar_one_or_none()
+            if paid_order:
+                await LoyaltyService(self.db).award_points_for_order(paid_order)
+
+        elif event.event_type == "OrderCancelled":
+            logger.info(f"Dispatching OrderCancelled event for {event.aggregate_id}")
+            payload = event.payload or {}
+            sub_orders = payload.get("sub_orders") or []
+
+            # Reverse vendor ledger credits for sub-orders that were paid.
+            # Idempotent via the (sub_order_id, transaction_type) unique constraint.
+            from app.domains.payments.services.ledger_service import LedgerService
+
+            ledger_service = LedgerService(self.db)
+            for so in sub_orders:
+                if not so.get("sub_order_id") or not so.get("vendor_id"):
+                    continue
+                sub_order_uuid = uuid.UUID(str(so["sub_order_id"]))
+                vendor_uuid = uuid.UUID(str(so["vendor_id"]))
+
+                await ledger_service.reverse_vendor_credit(
+                    vendor_id=vendor_uuid,
+                    sub_order_id=sub_order_uuid,
+                    reference_id=str(event.aggregate_id),
+                )
+
         elif event.event_type == "OrderShipped":
             logger.info(f"Dispatching OrderShipped event for {event.aggregate_id}")
-            pass
+            from app.domains.notifications.models.notification import NotificationType
+            from app.domains.notifications.services.notification_service import (
+                NotificationService,
+            )
+            from app.domains.shopping.models.order import Order
+
+            result = await self.db.execute(
+                select(Order).where(Order.id == uuid.UUID(event.aggregate_id))
+            )
+            order = result.scalar_one_or_none()
+            if order and order.user_id:
+                payload = event.payload or {}
+                tracking_number = payload.get("tracking_number") or payload.get("tracking_no")
+                body = f"Order {order.order_number or order.id} has shipped."
+                if tracking_number:
+                    body += f" Tracking number: {tracking_number}."
+                await NotificationService(self.db).create_notification(
+                    user_id=order.user_id,
+                    notification_type=NotificationType.ORDER_SHIPPED,
+                    title="Your order has shipped",
+                    body=body,
+                    data={
+                        "order_id": str(order.id),
+                        "order_number": order.order_number,
+                        "status": "shipped",
+                        "tracking_number": tracking_number,
+                    },
+                )
 
         elif event.event_type == "DeliveryDispatchRetry":
             from app.domains.logistics.models.delivery import Delivery
@@ -258,3 +279,5 @@ class OutboxRelay:
                     )
                 except Exception as e:
                     logger.error(f"Error sending staff invitation email: {e}")
+                    raise
+

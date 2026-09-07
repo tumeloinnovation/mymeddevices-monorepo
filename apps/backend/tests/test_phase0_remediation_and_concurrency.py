@@ -1,11 +1,10 @@
-import asyncio
 import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select, update
+from sqlalchemy import select
 
 from app.domains.auth.models.user import User
 from app.domains.auth.services.auth_service import AuthService
@@ -15,8 +14,7 @@ from app.domains.catalog.models.product_variant import ProductVariant
 from app.domains.catalog.services.catalog_service import CatalogService
 from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
 from app.domains.shared.services.outbox_relay import OutboxRelay
-from app.domains.shopping.models.cart import Cart, CartItem
-from app.domains.shopping.models.coupon import Coupon, CouponRestriction, CouponUsage
+from app.domains.shopping.models.coupon import Coupon, CouponRestriction
 from app.domains.shopping.services.cart_service import CartService
 from app.domains.shopping.services.coupon_service import CouponService
 from app.domains.shopping.services.order_service import CheckoutService

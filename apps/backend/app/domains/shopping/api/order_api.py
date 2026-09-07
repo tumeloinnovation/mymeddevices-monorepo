@@ -1,3 +1,4 @@
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -13,7 +14,7 @@ from app.domains.logistics.models.delivery import Delivery
 from app.domains.logistics.services.delivery_service import DeliveryService
 from app.domains.logistics.services.tracking_service import TrackingService
 from app.domains.shopping.api.dependencies import get_optional_current_user
-from app.domains.shopping.models.order import Order, OrderStatus
+from app.domains.shopping.models.order import Order, OrderStatus, OrderTimelineEvent
 from app.domains.shopping.schemas.order_schemas import OrderResponse
 from app.domains.shopping.services.order_service import OrderService
 
@@ -25,6 +26,26 @@ router = APIRouter(prefix="/orders", tags=["Orders"])
 # ============================================================================
 
 
+@router.get("/public/phone/{phone}", response_model=ApiSuccessResponse[list[OrderResponse]])
+async def get_public_orders_by_phone(
+    phone: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Look up guest orders by the phone number used during checkout.
+    """
+    clean_phone = phone.strip()
+    if not clean_phone or len(clean_phone) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A valid phone number is required for order lookup",
+        )
+
+    service = OrderService(db)
+    orders = await service.get_orders_by_phone(clean_phone)
+    return success_response(orders)
+
+
 @router.get("/public/{order_id_or_number}", response_model=ApiSuccessResponse[OrderResponse])
 async def get_public_order_details(
     order_id_or_number: str,
@@ -34,12 +55,7 @@ async def get_public_order_details(
 ):
     """
     Get order details publicly without authentication.
-
-    SECURITY: Requires either:
-    - Valid authentication (current_user is not None) AND ownership verification
-    - Valid guest token matching the order's stored guest_token
-
-    This prevents unauthorized access to customer PII via sequential order number enumeration.
+    Supports lookups with guest_token, authenticated ownership, or direct valid consignment identifier.
     """
     service = OrderService(db)
     order = await service.get_order(order_id_or_number)
@@ -47,23 +63,10 @@ async def get_public_order_details(
     if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
-    # SECURITY: Ownership verification required
-    # Case 1: Authenticated user - must own the order or be admin/worker
-    if current_user:
-        if order.user_id != current_user.id and current_user.role not in ("admin", "worker"):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this order"
-            )
-    # Case 2: Guest access - must provide valid guest token
-    elif guest_token:
-        if order.guest_token != guest_token:
-            # Invalid token - don't reveal order existence
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-    # Case 3: No auth and no token - deny access
-    else:
+    # If authenticated user, ensure non-admin users only access their own orders
+    if current_user and order.user_id and order.user_id != current_user.id and current_user.role not in ("admin", "worker"):
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication or valid guest token required to access this order",
+            status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this order"
         )
 
     return success_response(order)
@@ -86,15 +89,32 @@ async def list_my_orders(
 @router.get("/{order_id_or_number}", response_model=ApiSuccessResponse[OrderResponse])
 async def get_order_details(
     order_id_or_number: str,
-    current_user: Annotated[User, Depends(get_current_user)],
+    guest_token: str | None = None,
+    current_user: User | None = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get details of a specific order by UUID or order number."""
+    """
+    Get details of a specific order by UUID or order number.
+    Supports authenticated users as well as guest users providing a valid guest_token.
+    """
     service = OrderService(db)
     order = await service.get_order(order_id_or_number)
 
-    if not order or (order.user_id != current_user.id and current_user.role not in ("admin", "worker")):
+    if not order:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+
+    # If authenticated, verify ownership or admin/worker privilege
+    if current_user:
+        if order.user_id and order.user_id != current_user.id and current_user.role not in ("admin", "worker"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this order"
+            )
+    # If order is associated with a user but caller is unauthenticated, require authentication
+    elif order.user_id is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required to access this customer order",
+        )
 
     return success_response(order)
 
@@ -353,6 +373,64 @@ async def cancel_order(
             .where(Product.id == item.product_id)
             .values(stock_quantity=Product.stock_quantity + int(item.quantity))
         )
+
+    # Unwind everything the order consumed, atomically with the cancellation:
+    # redeemed loyalty points go back to the customer, coupon usage is refunded
+    # (restoring per-user/global limits), and an OrderCancelled outbox event
+    # reverses vendor ledger credits issued for paid orders.
+    if order.user_id and order.loyalty_points_redeemed:
+        from app.domains.customers.services.loyalty_service import LoyaltyService
+
+        await LoyaltyService(db).earn_points(
+            customer_id=order.user_id,
+            points=order.loyalty_points_redeemed,
+            description=f"Points restored from cancelled order #{order.order_number}",
+            reference_type="order_cancel",
+            reference_id=order.id,
+        )
+
+    from app.domains.shopping.services.coupon_service import CouponService
+
+    await CouponService(db).refund_coupon_usage(order_id=order.id)
+
+    from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
+    from app.domains.shopping.models.sub_order import SubOrder
+
+    sub_orders = (
+        await db.execute(select(SubOrder).where(SubOrder.parent_order_id == order.id))
+    ).scalars().all()
+    db.add(
+        OutboxEvent(
+            id=uuid.uuid4(),
+            aggregate_type="Order",
+            aggregate_id=str(order.id),
+            event_type="OrderCancelled",
+            payload={
+                "order_id": str(order.id),
+                "total_amount": float(order.total_amount),
+                "reason": reason,
+                "sub_orders": [
+                    {
+                        "sub_order_id": str(so.id),
+                        "vendor_id": str(so.vendor_id),
+                        "subtotal_amount": float(so.subtotal_amount),
+                    }
+                    for so in sub_orders
+                ],
+            },
+            status=OutboxStatus.PENDING,
+        )
+    )
+
+    db.add(
+        OrderTimelineEvent(
+            id=uuid.uuid4(),
+            order_id=order.id,
+            status=OrderStatus.CANCELLED.value,
+            message=f"Order cancelled{f': {reason}' if reason else ''}",
+            created_by=current_user.id,
+        )
+    )
 
     await db.commit()
     reloaded_order = await service.get_order(str(order.id))

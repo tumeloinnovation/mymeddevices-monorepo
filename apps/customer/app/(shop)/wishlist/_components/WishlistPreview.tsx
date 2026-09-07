@@ -7,6 +7,7 @@ import { Trash2, ExternalLink } from "lucide-react";
 import { useWishlistStore } from "@/lib/store/useWishlistStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { formatCurrency } from "@/lib/utils/utils";
+import { getValidImageUrl } from "@/lib/utils/image";
 
 type WishlistItem = {
   id: string | number;
@@ -24,7 +25,8 @@ const rowVariants = {
 const ItemRow: React.FC<{ item: any; onRemove: (id: string | number) => void }> = ({ item, onRemove }) => {
   const id = item?.id ?? item?.sku ?? item?.slug;
   const name = item?.name ?? String(id ?? "");
-  const image = item?.image ?? (item?.images ? (Array.isArray(item.images) ? (item.images[0]?.src ?? item.images[0]?.url ?? item.images[0]) : undefined) : undefined);
+  const rawImage = item?.image ?? (item?.images ? (Array.isArray(item.images) ? (item.images[0]?.src ?? item.images[0]?.url ?? item.images[0]) : item?.image_url) : item?.image_url);
+  const image = getValidImageUrl(rawImage, "/logos/logo-portrait.png");
   const price = Number(item?.price ?? item?.regular_price ?? 0);
   return (
     <motion.div
@@ -37,7 +39,7 @@ const ItemRow: React.FC<{ item: any; onRemove: (id: string | number) => void }> 
     >
       <div className="relative w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-muted">
         <Image
-          src={image || "/logos/logo-portrait.png"}
+          src={image}
           alt={name}
           fill
           className="object-cover"

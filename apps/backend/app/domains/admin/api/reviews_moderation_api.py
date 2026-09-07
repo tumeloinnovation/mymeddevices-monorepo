@@ -236,3 +236,21 @@ async def get_flagged_reviews(
     formatted_reviews = [format_admin_review(r) for r in reviews]
 
     return success_response({"reviews": formatted_reviews, "total": total, "page": page, "limit": limit})
+
+
+@router.delete("/reviews/{review_id}", response_model=ApiSuccessResponse[dict])
+async def delete_review_admin(
+    review_id: uuid.UUID,
+    current_user: Annotated[User, Depends(require_role("admin"))],
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Delete a review permanently from the platform (Admin only).
+    """
+    review_repo = ReviewRepository(db)
+    review = await review_repo.get_by_id(review_id)
+    if not review:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Review not found")
+
+    await review_repo.delete(review_id)
+    return success_response({"message": "Review deleted successfully"})

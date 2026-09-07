@@ -6,7 +6,6 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 
-from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.domains.auth.models.user import User
 from app.domains.logistics.dependencies import DeliveryServiceDep, DriverAssignmentServiceDep

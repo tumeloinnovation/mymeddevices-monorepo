@@ -1,5 +1,5 @@
 from app.domains.shopping.models.sub_order import SubOrderStatus
-from app.domains.shopping.models.vendor_ledger import LedgerTransactionType
+from app.domains.payments.models.vendor_ledger import LedgerTransactionType
 from app.domains.shopping.schemas.cart_schemas import (
     CartItemCreate,
     CartItemResponse,
@@ -58,7 +58,7 @@ from app.domains.shopping.schemas.sub_order_schemas import (
     SubOrderStatusUpdate,
     SubOrderUpdate,
 )
-from app.domains.shopping.schemas.vendor_ledger_schemas import (
+from app.domains.payments.schemas.vendor_ledger_schemas import (
     LedgerTransactionListResponse,
     LedgerTransactionResponse,
     PayoutRequest,

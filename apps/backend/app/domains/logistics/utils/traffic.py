@@ -6,7 +6,6 @@ Provides traffic coefficient lookups and time estimation for delivery routing.
 import dataclasses
 import datetime as dt
 from enum import StrEnum
-from typing import Literal
 
 
 class TimeSlot(StrEnum):

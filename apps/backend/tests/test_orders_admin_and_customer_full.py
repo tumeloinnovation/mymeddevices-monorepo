@@ -3,13 +3,11 @@ from decimal import Decimal
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
 
 from app.core.security import get_password_hash
 from app.domains.auth.models.user import User
 from app.domains.auth.services.auth_service import AuthService
 from app.domains.catalog.models.product import Product
-from app.domains.shopping.models.cart import Cart, CartItem
 from app.domains.shopping.models.order import Order, OrderItem, OrderStatus
 from app.domains.vendor.models.vendor_profile import VendorProfile
 

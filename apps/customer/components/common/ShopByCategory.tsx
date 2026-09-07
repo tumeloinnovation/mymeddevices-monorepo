@@ -3,6 +3,7 @@ import Image from 'next/image';
 import SectionHeader from './SectionHeader';
 import Link from 'next/link';
 import { useCategories } from '@/lib/hooks/useCategories';
+import { getValidImageUrl } from '@/lib/utils/image';
 import { FolderOpen } from 'lucide-react';
 
 export const ShopByCategories: React.FC = () => {
@@ -48,7 +49,7 @@ export const ShopByCategories: React.FC = () => {
             >
               <div className="w-20 h-20 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted flex items-center justify-center mb-3">
                 <Image
-                  src={category.image?.src || '/logos/logo-portrait.png'}
+                  src={getValidImageUrl(category.image?.src || (category as any).image_url, '/logos/logo-portrait.png')}
                   alt={category.name}
                   width={80}
                   height={80}

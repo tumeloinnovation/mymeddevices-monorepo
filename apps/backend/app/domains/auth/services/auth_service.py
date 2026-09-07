@@ -163,6 +163,7 @@ class AuthService:
                     place_id=data.place_id,
                 )
 
+        await self.db.commit()
         logger.info(f"Registration completed for user: {user.email}")
         return user
 
@@ -173,6 +174,11 @@ class AuthService:
             raise BusinessRuleError(
                 f"Role '{user_in.role}' is not allowed for public registration. Allowed roles: {', '.join(sorted(allowed_roles))}"
             )
+
+        # Check if user already exists
+        existing = await self.user_repo.get_by_email(user_in.email)
+        if existing:
+            raise ConflictError("A user with this email already exists")
 
         # Validate password strength
         user_info = {"email": user_in.email, "first_name": user_in.firstName, "last_name": user_in.lastName}
@@ -189,7 +195,9 @@ class AuthService:
             last_name=user_in.lastName,
         )
         user = await self.user_repo.create(user)
+        await self.db.commit()
         logger.info(f"User registered: {user.email}")
+
 
         # Send welcome email
         try:
@@ -628,6 +636,7 @@ class AuthService:
 
         # Update password
         await self.user_repo.update(user, {"password_hash": await get_password_hash_async(password_data.new_password)})
+        await self.db.commit()
 
         logger.info(f"Password changed successfully for user: {user.email}")
         return True
@@ -794,6 +803,21 @@ class AuthService:
 
         # Update password
         await self.user_repo.update(user, {"password_hash": await get_password_hash_async(new_password)})
+
+        # Revoke existing refresh tokens
+        from sqlalchemy import update
+        await self.db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user.id)
+            .values(revoked=True)
+        )
+
+        # Commit password update and token revocation
+        await self.db.commit()
+
+        # Clear any failed login attempts and lockout state for this user
+        lockout_service = AccountLockoutService(self.db)
+        await lockout_service.reset_attempts(user.email)
 
         logger.info(f"Password reset successfully for user: {user.email}")
         return True

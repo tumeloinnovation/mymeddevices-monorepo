@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { getValidImageUrl } from "@/lib/utils/image";
 import { 
   Heart, 
   ShoppingCart, 
@@ -287,7 +288,8 @@ export default function WishlistPage() {
                         {filteredItems.map((item: any) => {
                           const id = item.id ?? item.slug ?? item.sku;
                           const name = item.name ?? "Medical Product";
-                          const image = item.image ?? (Array.isArray(item.images) ? (item.images[0]?.src ?? item.images[0]) : "/logos/logo-portrait.png");
+                          const rawImage = item.image ?? (Array.isArray(item.images) ? (item.images[0]?.src ?? item.images[0]?.url ?? item.images[0]) : item.image_url);
+                          const image = getValidImageUrl(rawImage, "/logos/logo-portrait.png");
                           const price = Number(item.price ?? item.regular_price ?? 0);
                           const inCart = isInCart(id);
 
@@ -304,7 +306,7 @@ export default function WishlistPage() {
                                 <div className="flex items-center gap-4">
                                   <div className="relative w-16 h-16 rounded-lg overflow-hidden bg-muted flex-shrink-0 border">
                                     <Image
-                                      src={image || "/logos/logo-portrait.png"}
+                                      src={image}
                                       alt={name}
                                       fill
                                       className="object-cover"

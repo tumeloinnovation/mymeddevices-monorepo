@@ -12,7 +12,7 @@ from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
 from app.domains.shared.services.outbox_relay import OutboxRelay
 from app.domains.shopping.models.order import Order, OrderStatus
 from app.domains.shopping.models.sub_order import SubOrder
-from app.domains.shopping.models.vendor_ledger import LedgerTransaction, LedgerTransactionType, VendorLedger
+from app.domains.payments.models.vendor_ledger import LedgerTransaction, LedgerTransactionType, VendorLedger
 from app.domains.vendor.models.vendor_profile import VendorProfile
 
 

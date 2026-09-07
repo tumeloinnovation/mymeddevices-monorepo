@@ -5,44 +5,33 @@ Tests concurrency races, multi-transaction execution paths, payment webhooks,
 inventory mutations, coupon locking, outbox retry idempotency, and tenant isolation.
 """
 
-import asyncio
 import io
 import uuid
-from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import AsyncSessionLocal
 from app.domains.auth.models.user import User
 from app.domains.auth.services.auth_service import AuthService
-from app.domains.catalog.models.brand import Brand
 from app.domains.catalog.models.category import Category
 from app.domains.catalog.models.product import Product
-from app.domains.catalog.models.product_variant import ProductVariant
 from app.domains.customers.models.customer_profile import CustomerProfile
 from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
 from app.domains.shared.services.outbox_relay import OutboxRelay
-from app.domains.shopping.models.cart import Cart, CartItem
-from app.domains.shopping.models.coupon import Coupon, CouponUsage
-from app.domains.shopping.models.mobile_money_payment import (
+from app.domains.payments.models.mobile_money_payment import (
     MobileMoneyPayment,
     MobileMoneyPaymentStatus,
 )
 from app.domains.shopping.models.order import Order, OrderItem, OrderStatus
 from app.domains.shopping.models.sub_order import SubOrder
-from app.domains.shopping.models.vendor_ledger import (
-    LedgerTransaction,
-    LedgerTransactionType,
+from app.domains.payments.models.vendor_ledger import (
     VendorLedger,
 )
-from app.domains.shopping.services.daraja_service import DarajaService
+from app.domains.payments.services.daraja_service import DarajaService
 from app.domains.vendor.models.vendor_profile import VendorProfile
-from app.main import app
 
 
 @pytest.fixture

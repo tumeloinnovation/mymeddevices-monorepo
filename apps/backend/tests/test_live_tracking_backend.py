@@ -30,6 +30,7 @@ async def test_location_history_and_tracking_snapshot(client, db_session):
         id=uuid.uuid4(), user_id=driver_user.id, status=DriverStatus.AVAILABLE, max_concurrent_deliveries=2
     )
     from decimal import Decimal
+
     from app.domains.shopping.models.order import Order, OrderStatus
 
     order = Order(

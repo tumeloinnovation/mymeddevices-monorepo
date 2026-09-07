@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import Image from "next/image";
 import { formatCurrency } from "@/lib/utils/utils";
+import { getValidImageUrl } from "@/lib/utils/image";
 import { motion, AnimatePresence } from "framer-motion";
 
 const MAX_COMPARE = 4;
@@ -42,7 +43,8 @@ const CompareProducts: FC = () => {
   const normalize = (p: any) => {
     const id = p?.id ?? p?.sku ?? p?.slug;
     const name = p?.name ?? "Medical Equipment";
-    const image = p?.image ?? (Array.isArray(p?.images) ? (p.images[0]?.src ?? p.images[0]?.url ?? p.images[0]) : p?.images);
+    const rawImage = p?.image ?? (Array.isArray(p?.images) ? (p.images[0]?.src ?? p.images[0]?.url ?? p.images[0]) : p?.images ?? p?.image_url);
+    const image = getValidImageUrl(rawImage, "/logos/logo-portrait.png");
     const price = Number(p?.price ?? p?.regular_price ?? 0);
     return { id, name, image, price, raw: p };
   };

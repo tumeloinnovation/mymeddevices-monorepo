@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import ROUND_HALF_UP, Decimal
 
 
 @dataclass(frozen=True)
@@ -26,7 +26,7 @@ class PricingBreakdown:
 class PricingEngine:
     """
     Authoritative stateless progressive pricing calculation engine for MyMedDevices.
-    
+
     Principles:
     - Pure Decimal arithmetic with 2 decimal place financial precision (ROUND_HALF_UP).
     - Continuous progressive marginal markup brackets (zero cliff inversions).
@@ -53,7 +53,7 @@ class PricingEngine:
     def calculate_markup(cls, vendor_price: Decimal) -> Decimal:
         """
         Calculate continuous progressive marginal markup.
-        
+
         Formula:
         - If Pv <= 10,000: Pv * 0.05
         - If 10,000 < Pv <= 50,000: 500 + (Pv - 10,000) * 0.03

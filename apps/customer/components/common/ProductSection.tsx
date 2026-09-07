@@ -58,7 +58,7 @@ export const ProductSection: FC<ProductSectionProps> = ({
   };
 
   return (
-    <div className="relative container mx-auto px-6 py-4">
+    <div className="relative w-full py-2">
       {/* Header */}
       <div className="mb-4">
         <SectionHeader

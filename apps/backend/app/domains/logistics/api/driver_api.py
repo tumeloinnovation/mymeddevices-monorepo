@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.domains.auth.models.user import User
 from app.domains.logistics.dependencies import DriverAssignmentServiceDep
-from app.domains.logistics.models.driver_profile import DriverStatus
+from app.domains.logistics.models.driver_profile import DriverProfile, DriverStatus
 from app.domains.logistics.schemas.driver_schemas import DriverProfileResponse, DriverStatusUpdate
 
 router = APIRouter(prefix="/drivers", tags=["Drivers"])
@@ -51,12 +51,14 @@ async def get_driver_profile(
 ) -> DriverProfileResponse:
     """Get a driver's profile (self-service or staff)."""
     _require_driver_or_staff(driver_id, current_user)
-    profile = await service.get_driver_profile(uuid.UUID(driver_id))
+    driver_uuid = uuid.UUID(driver_id)
+    profile = await service.get_driver_profile(driver_uuid)
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Driver profile not found",
-        )
+        # Lazy provision profile for the driver
+        profile = DriverProfile(user_id=driver_uuid, status=DriverStatus.OFFLINE.value)
+        service.db.add(profile)
+        await service.db.commit()
+        await service.db.refresh(profile)
     return DriverProfileResponse.model_validate(profile)
 
 
@@ -87,12 +89,13 @@ async def update_driver_profile(
 ) -> DriverProfileResponse:
     """Update driver profile / vehicle information (self-service or staff)."""
     _require_driver_or_staff(driver_id, current_user)
-    profile = await service.get_driver_profile(uuid.UUID(driver_id))
+    driver_uuid = uuid.UUID(driver_id)
+    profile = await service.get_driver_profile(driver_uuid)
     if not profile:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Driver profile not found",
-        )
+        profile = DriverProfile(user_id=driver_uuid, status=DriverStatus.OFFLINE.value)
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
 
     updates: dict[str, Any] = {}
     if body.vehicle_type is not None:

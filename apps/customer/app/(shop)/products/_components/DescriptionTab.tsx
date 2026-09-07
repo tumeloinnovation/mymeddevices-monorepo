@@ -7,14 +7,14 @@ type Props = {
 
 export default function DescriptionTab({ description }: Props) {
   return (
-    <div className="p-4 rounded-md bg-white dark:bg-card text-gray-800 dark:text-foreground transition-colors duration-300">
-      <h3 className="text-xl font-bold mb-2 text-gray-900 dark:text-primary">
+    <div className="py-2 text-foreground transition-colors duration-300">
+      <h3 className="text-lg font-bold mb-4 text-foreground">
         Product Description
       </h3>
       <SafeHtml
-        className="prose dark:prose-invert max-w-none text-gray-700 dark:text-muted-foreground"
+        className="prose dark:prose-invert max-w-none text-muted-foreground prose-headings:text-foreground prose-p:leading-relaxed prose-strong:text-foreground prose-li:text-muted-foreground"
         html={description}
-        fallback={<p className="text-muted-foreground">No description available.</p>}
+        fallback={<p className="text-muted-foreground italic text-sm">No description available for this product.</p>}
       />
     </div>
   )

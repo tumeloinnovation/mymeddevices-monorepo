@@ -3,7 +3,6 @@
 import dataclasses
 import datetime as dt
 import uuid
-from typing import Any
 
 
 @dataclasses.dataclass(frozen=True)

@@ -6,6 +6,7 @@ import useCartStore from "@/lib/store/useCartStore";
 import { Button } from "@/components/ui/button";
 import Image from 'next/image';
 import { formatCurrency } from "@/lib/utils/utils";
+import { getValidImageUrl } from "@/lib/utils/image";
 
 type CartItemProps = {
   item: {
@@ -13,16 +14,18 @@ type CartItemProps = {
     name: string;
     price: string;
     images?: { src: string }[];
+    image_url?: string;
     quantity: number;
   };
 };
 
 export default function CartItemRow({ item }: CartItemProps) {
   const { updateQuantity, removeItem } = useCartStore();
+  const imageSrc = getValidImageUrl(item.images?.[0]?.src || item.image_url, '/logos/logo-portrait.png');
 
   return (
     <div className="flex items-center gap-4 p-4 border-b last:border-b-0">
-      <Image src={item.images?.[0]?.src || '/logos/logo-portrait.png'} alt={item.name} width={80} height={80} className="object-cover rounded" />
+      <Image src={imageSrc} alt={item.name} width={80} height={80} className="object-cover rounded" />
       <div className="flex-1">
         <div className="font-semibold">{item.name}</div>
         <div className="text-sm text-muted-foreground">Ksh. {formatCurrency(Number(item.price))}</div>

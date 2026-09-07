@@ -9,7 +9,6 @@ from app.domains.auth.models.user import User
 from app.domains.auth.services.auth_service import AuthService
 from app.domains.catalog.models.product import Product
 from app.domains.customers.models.customer_profile import CustomerProfile
-from app.domains.customers.services.loyalty_service import LoyaltyService
 from app.domains.vendor.models.vendor_profile import VendorProfile
 
 

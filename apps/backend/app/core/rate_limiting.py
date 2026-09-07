@@ -1,10 +1,5 @@
-"""
-Rate limiting middleware for API endpoints.
-
-Uses sliding window algorithm with Redis-based storage in production,
-and falls back to in-memory storage for development/testing/offline mode.
-"""
-
+import asyncio
+import ipaddress
 import sys
 import time
 import uuid
@@ -20,17 +15,52 @@ from app.core.logging import logger
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
+# Atomic sliding-window rate limit Lua script for Redis
+# KEYS[1]: Rate limit zset key (e.g. rate_limit:login:ip:1.2.3.4)
+# ARGV[1]: Current timestamp (float as string)
+# ARGV[2]: Window size in seconds (int as string)
+# ARGV[3]: Max requests allowed (int as string)
+# ARGV[4]: Unique member identifier (e.g. timestamp:uuid)
+# Returns: table [allowed (1 or 0), remaining_count, reset_timestamp]
+SLIDING_WINDOW_LUA_SCRIPT = """
+local key = KEYS[1]
+local now = tonumber(ARGV[1])
+local window = tonumber(ARGV[2])
+local max_requests = tonumber(ARGV[3])
+local member = ARGV[4]
+
+local cutoff = now - window
+redis.call('ZREMRANGEBYSCORE', key, 0, cutoff)
+local current_count = redis.call('ZCARD', key)
+
+if current_count >= max_requests then
+    local oldest = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    local reset_ts = now + window
+    if oldest and #oldest >= 2 then
+        reset_ts = tonumber(oldest[2]) + window
+    end
+    return {0, 0, math.floor(reset_ts)}
+else
+    redis.call('ZADD', key, now, member)
+    redis.call('EXPIRE', key, math.ceil(window))
+    local remaining = max_requests - (current_count + 1)
+    local reset_ts = now + window
+    return {1, remaining, math.floor(reset_ts)}
+end
+"""
+
 
 class RateLimiter:
     """
     Sliding window rate limiter supporting both Redis and In-Memory.
 
-    Tracks requests per identifier (IP, device_id, etc.) within a time window.
+    Tracks requests per identifier (IP, device_id, etc.) within a time window atomically.
     """
 
     def __init__(self):
         # Store for in-memory fallback: {identifier: deque of (timestamp, count)}
         self._requests: defaultdict[str, deque[tuple[float, int]]] = defaultdict(deque)
+        self._lock = asyncio.Lock()
         # Configuration: {endpoint_key: (max_requests, window_seconds)}
         self._default_limits: dict[str, tuple[int, int]] = {
             "login": (10, 300),  # 10 requests per 5 minutes
@@ -42,11 +72,13 @@ class RateLimiter:
             "mpesa_callback": (120, 60),  # 120 callback requests per minute
             "mpesa_status": (60, 60),  # 60 status checks per minute
             "stk_push": (15, 60),  # 15 STK pushes per minute
+            "checkout": (20, 300),  # 20 checkouts per 5 minutes (order-spam protection)
         }
         self._limits: dict[str, tuple[int, int]] = self._default_limits.copy()
         self._last_refresh: float = 0
         self._refresh_interval = 60  # Refresh limits from DB every 60 seconds
         self.redis_client = None
+        self._lua_script = None
 
         # Check if running under test
         is_testing = "pytest" in sys.modules or "unittest" in sys.modules
@@ -59,6 +91,7 @@ class RateLimiter:
                 import redis.asyncio as aioredis
 
                 self.redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+                self._lua_script = self.redis_client.register_script(SLIDING_WINDOW_LUA_SCRIPT)
                 logger.info("Redis rate limiting storage initialized for production.")
             except Exception as e:
                 logger.error(f"Failed to initialize Redis for rate limiting in production: {e}")
@@ -68,6 +101,7 @@ class RateLimiter:
                 import redis.asyncio as aioredis
 
                 self.redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+                self._lua_script = self.redis_client.register_script(SLIDING_WINDOW_LUA_SCRIPT)
                 logger.info("Redis rate limiting storage initialized.")
             except Exception as e:
                 logger.warning(f"Failed to initialize Redis for rate limiting: {e}. Falling back to in-memory.")
@@ -116,11 +150,11 @@ class RateLimiter:
         self._clean_old_requests(identifier, window_seconds, current_time)
         return sum(count for _, count in self._requests[identifier])
 
-    async def is_allowed(
+    async def check_and_record(
         self, identifier: str, endpoint_type: str, current_time: float | None = None
     ) -> tuple[bool, dict[str, int]]:
         """
-        Check if request is allowed under rate limit.
+        Atomically check and record a request under rate limits.
 
         Returns:
             (allowed, info_dict) where info_dict contains:
@@ -136,7 +170,60 @@ class RateLimiter:
             (10, 60),  # Default: 10 requests per minute
         )
 
-        # 1. Redis Sliding Window implementation
+        # 1. Atomic Redis sliding-window via Lua script
+        if self.redis_client:
+            key = f"rate_limit:{endpoint_type}:{identifier}"
+            member = f"{current_time}:{uuid.uuid4()}"
+            try:
+                if self._lua_script is None:
+                    self._lua_script = self.redis_client.register_script(SLIDING_WINDOW_LUA_SCRIPT)
+                res = await self._lua_script(
+                    keys=[key],
+                    args=[str(current_time), str(window_seconds), str(max_requests), member],
+                )
+                allowed_num, remaining, reset_ts = res
+                is_allowed = bool(allowed_num == 1)
+                return is_allowed, {
+                    "limit": max_requests,
+                    "remaining": int(remaining),
+                    "reset": int(reset_ts),
+                }
+            except Exception as e:
+                logger.error(f"Redis rate limiter error: {e}. Falling back to in-memory storage.")
+
+        # 2. In-Memory fallback implementation protected by asyncio.Lock
+        async with self._lock:
+            count = self._get_count(identifier, window_seconds, current_time)
+            if count >= max_requests:
+                if self._requests[identifier]:
+                    reset_timestamp = self._requests[identifier][0][0] + window_seconds
+                else:
+                    reset_timestamp = current_time + window_seconds
+
+                return False, {"limit": max_requests, "remaining": 0, "reset": int(reset_timestamp)}
+
+            # Record request atomically within lock
+            self._requests[identifier].append((current_time, 1))
+            return True, {
+                "limit": max_requests,
+                "remaining": max_requests - (count + 1),
+                "reset": int(current_time + window_seconds),
+            }
+
+    async def is_allowed(
+        self, identifier: str, endpoint_type: str, current_time: float | None = None
+    ) -> tuple[bool, dict[str, int]]:
+        """
+        Check if request is allowed under rate limit without recording (read-only inspection).
+        """
+        if current_time is None:
+            current_time = time.time()
+
+        max_requests, window_seconds = self._limits.get(
+            endpoint_type,
+            (10, 60),
+        )
+
         if self.redis_client:
             key = f"rate_limit:{endpoint_type}:{identifier}"
             try:
@@ -147,15 +234,10 @@ class RateLimiter:
                     pipe.zrange(key, 0, 0, withscores=True)
                     res = await pipe.execute()
 
-                removed_count, count, oldest_items = res
+                _, count, oldest_items = res
 
                 if count >= max_requests:
-                    if oldest_items:
-                        # oldest_items is a list of (member, score)
-                        reset_timestamp = oldest_items[0][1] + window_seconds
-                    else:
-                        reset_timestamp = current_time + window_seconds
-
+                    reset_timestamp = oldest_items[0][1] + window_seconds if oldest_items else current_time + window_seconds
                     return False, {"limit": max_requests, "remaining": 0, "reset": int(reset_timestamp)}
 
                 return True, {
@@ -164,31 +246,29 @@ class RateLimiter:
                     "reset": int(current_time + window_seconds),
                 }
             except Exception as e:
-                logger.error(f"Redis rate limiter error: {e}. Falling back to in-memory storage.")
+                logger.error(f"Redis rate limiter read error: {e}. Falling back to in-memory storage.")
 
-        # 2. In-Memory fallback implementation
-        count = self._get_count(identifier, window_seconds, current_time)
+        async with self._lock:
+            count = self._get_count(identifier, window_seconds, current_time)
+            if count >= max_requests:
+                reset_timestamp = (
+                    self._requests[identifier][0][0] + window_seconds
+                    if self._requests[identifier]
+                    else current_time + window_seconds
+                )
+                return False, {"limit": max_requests, "remaining": 0, "reset": int(reset_timestamp)}
 
-        if count >= max_requests:
-            if self._requests[identifier]:
-                reset_timestamp = self._requests[identifier][0][0] + window_seconds
-            else:
-                reset_timestamp = current_time + window_seconds
-
-            return False, {"limit": max_requests, "remaining": 0, "reset": int(reset_timestamp)}
-
-        return True, {
-            "limit": max_requests,
-            "remaining": max_requests - count,
-            "reset": int(current_time + window_seconds),
-        }
+            return True, {
+                "limit": max_requests,
+                "remaining": max_requests - count,
+                "reset": int(current_time + window_seconds),
+            }
 
     async def record_request(self, identifier: str, endpoint_type: str) -> None:
-        """Record a request for rate limiting"""
+        """Record a request for rate limiting."""
         current_time = time.time()
-        max_requests, window_seconds = self._limits.get(endpoint_type, (10, 60))
+        _, window_seconds = self._limits.get(endpoint_type, (10, 60))
 
-        # 1. Redis Sliding Window implementation
         if self.redis_client:
             key = f"rate_limit:{endpoint_type}:{identifier}"
             try:
@@ -201,9 +281,9 @@ class RateLimiter:
             except Exception as e:
                 logger.error(f"Redis rate limiter record error: {e}. Falling back to in-memory storage.")
 
-        # 2. In-Memory fallback implementation
-        self._clean_old_requests(identifier, window_seconds, current_time)
-        self._requests[identifier].append((current_time, 1))
+        async with self._lock:
+            self._clean_old_requests(identifier, window_seconds, current_time)
+            self._requests[identifier].append((current_time, 1))
 
     def clear(self, identifier: str | None = None) -> None:
         """Clear rate limit data (synchronous for compatibility with testing frameworks)"""
@@ -212,9 +292,6 @@ class RateLimiter:
                 del self._requests[identifier]
         else:
             self._requests.clear()
-
-
-import ipaddress
 
 
 def is_trusted_proxy(peer_ip: str) -> bool:
@@ -296,7 +373,7 @@ async def check_rate_limit(
     request: Request, endpoint_type: str, identifier: str | None = None, db: Optional["AsyncSession"] = None
 ) -> None:
     """
-    Check rate limit and raise exception if exceeded.
+    Check rate limit and raise exception if exceeded (atomic check-and-record).
 
     Args:
         request: FastAPI request
@@ -310,7 +387,8 @@ async def check_rate_limit(
     # Refresh limits if needed
     await rate_limiter.refresh_if_needed(db)
 
-    allowed, info = await rate_limiter.is_allowed(identifier, endpoint_type)
+    # Atomically check and record the request
+    allowed, info = await rate_limiter.check_and_record(identifier, endpoint_type)
 
     if not allowed:
         logger.warning(f"Rate limit exceeded for {identifier} on {endpoint_type}")
@@ -330,9 +408,6 @@ async def check_rate_limit(
             },
         )
 
-    # Record the request
-    await rate_limiter.record_request(identifier, endpoint_type)
-
 
 class RateLimiterDependency:
     """FastAPI dependency to apply rate limiting to endpoints"""
@@ -342,3 +417,4 @@ class RateLimiterDependency:
 
     async def __call__(self, request: Request, db: "AsyncSession" = Depends(get_db)) -> None:
         await check_rate_limit(request, self.endpoint_type, db=db)
+

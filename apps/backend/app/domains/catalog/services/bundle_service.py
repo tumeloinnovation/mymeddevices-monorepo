@@ -1,7 +1,6 @@
-from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
 import uuid
-from typing import Optional
+from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +10,6 @@ from app.domains.catalog.models.bundle import Bundle, BundleComponent, BundleDis
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.product_variant import ProductVariant
 from app.domains.catalog.services.buy_box_service import BuyBoxOfferCandidate, buy_box_service
-from app.domains.catalog.services.pricing_engine import pricing_engine
 from app.domains.vendor.models.vendor_offer import SellingUnitEnum
 
 
@@ -26,7 +24,7 @@ class ResolvedBundleComponent:
     product: Product
     variant: ProductVariant
     quantity: int
-    winning_offer: Optional[BuyBoxOfferCandidate]
+    winning_offer: BuyBoxOfferCandidate | None
     gross_unit_customer_price: Decimal
     gross_line_customer_price: Decimal
     allocated_line_discount: Decimal
@@ -39,7 +37,7 @@ class ResolvedBundleComponent:
 class ResolvedBundle:
     bundle: Bundle
     is_available: bool
-    unavailability_reason: Optional[str]
+    unavailability_reason: str | None
     components: list[ResolvedBundleComponent]
     gross_customer_price: Decimal
     discount_amount: Decimal
@@ -51,7 +49,7 @@ class ResolvedBundle:
 class BundleService:
     """
     Authoritative Merchandising Bundle Resolution & Discount Allocation Engine.
-    
+
     Principles:
     - V1 Invariant: All component Products MUST have exactly ONE active variant. Multi-variant products are strictly rejected.
     - Components independently resolve to the lowest eligible vendor offer via the Buy-Box.

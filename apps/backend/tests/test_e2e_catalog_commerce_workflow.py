@@ -1,5 +1,5 @@
-from decimal import Decimal
 import uuid
+
 import pytest
 from httpx import AsyncClient
 
@@ -7,31 +7,11 @@ from app.core.security import get_password_hash
 from app.domains.auth.models.user import User
 from app.domains.auth.services.auth_service import AuthService
 from app.domains.catalog.models.brand import Brand
-from app.domains.catalog.models.bundle import Bundle, BundleComponent, BundleDiscountType
 from app.domains.catalog.models.category import Category
-from app.domains.catalog.models.category_attribute import (
-    AttributeAllowedValue,
-    AttributeDataType,
-    CategoryAttributeDefinition,
-    VariantAttributeValue,
-)
 from app.domains.catalog.models.manufacturer import Manufacturer
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.product_variant import ProductVariant
 from app.domains.catalog.services.ai_assist_service import ai_assist_service
-from app.domains.catalog.services.bundle_service import BundleIneligibleException, bundle_service
-from app.domains.catalog.services.buy_box_service import buy_box_service
-from app.domains.catalog.services.pricing_engine import pricing_engine
-from app.domains.shopping.services.inventory_reservation_service import (
-    InsufficientStockException,
-    inventory_reservation_service,
-)
-from app.domains.vendor.models.vendor_offer import (
-    OfferInventory,
-    OfferStatusEnum,
-    SellingUnitEnum,
-    VendorOffer,
-)
 from app.domains.vendor.models.vendor_profile import VendorProfile
 
 
@@ -136,7 +116,7 @@ async def test_e2e_complete_catalog_and_buy_box_lifecycle(client: AsyncClient, e
     d = e2e_marketplace_setup
     v1_headers = {"Authorization": f"Bearer {d['tokens_v1'].access_token}"}
     v2_headers = {"Authorization": f"Bearer {d['tokens_v2'].access_token}"}
-    admin_headers = {"Authorization": f"Bearer {d['tokens_admin'].access_token}"}
+    {"Authorization": f"Bearer {d['tokens_admin'].access_token}"}
 
     # 1. Setup Taxonomy (Manufacturer, Brand, Category)
     mfg = Manufacturer(

@@ -5,6 +5,7 @@ import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useCategories } from '@/lib/hooks/useCategories';
+import { getValidImageUrl } from '@/lib/utils/image';
 import SectionHeader from '@/components/common/SectionHeader';
 
 const CategoriesPage: React.FC = () => {
@@ -27,7 +28,7 @@ const CategoriesPage: React.FC = () => {
           >
             <div className="w-24 h-24 rounded-lg overflow-hidden bg-muted flex items-center justify-center mb-4">
               <Image
-                src={category.image?.src || '/logos/logo-portrait.png'}
+                src={getValidImageUrl(category.image?.src || (category as any).image_url, '/logos/logo-portrait.png')}
                 alt={category.name}
                 width={96}
                 height={96}

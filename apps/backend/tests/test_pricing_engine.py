@@ -1,12 +1,11 @@
 from decimal import Decimal
-import pytest
 
-from app.domains.catalog.services.pricing_engine import PricingEngine, pricing_engine
+from app.domains.catalog.services.pricing_engine import pricing_engine
 
 
 def test_pricing_engine_exact_boundaries():
     """Verify exact boundary values, marginal markups, and zero cliff discontinuities."""
-    
+
     # 1. Zero price
     p0 = pricing_engine.calculate_customer_price(Decimal("0.00"))
     assert p0.markup_amount == Decimal("0.00")
@@ -78,7 +77,7 @@ def test_pricing_engine_exact_boundaries():
 def test_pricing_engine_strict_monotonicity():
     """Verify that customer price is strictly monotonically increasing for all vendor prices."""
     prev_customer_price = Decimal("-1.00")
-    
+
     # Test across dense price steps including boundary regions
     test_points = (
         [Decimal(str(i)) for i in range(1, 100)] +

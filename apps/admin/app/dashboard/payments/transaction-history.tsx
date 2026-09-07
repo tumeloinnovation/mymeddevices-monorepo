@@ -110,7 +110,7 @@ export default function TransactionHistory() {
 
       if (filters.status) params.append("status", filters.status);
 
-      const data = await apiClient.get<any>(`/shopping/mobile-money?${params}`).catch(() => ({ payments: [], total: 0, page: 1, limit: pagination.page_size }));
+      const data = await apiClient.get<any>(`/admin/payments/mobile-money?${params}`).catch(() => ({ payments: [], total: 0, page: 1, limit: pagination.page_size }));
       const payments = data?.payments || [];
 
       setTransactions(

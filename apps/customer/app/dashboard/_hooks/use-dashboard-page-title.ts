@@ -10,7 +10,6 @@ const ROUTE_TITLES: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/dashboard/profile': 'Profile',
   '/dashboard/addresses': 'Addresses',
-  '/dashboard/payment-methods': 'Payment Methods',
   '/dashboard/communication': 'Communication',
   '/dashboard/orders': 'Orders',
   '/dashboard/returns': 'Returns',

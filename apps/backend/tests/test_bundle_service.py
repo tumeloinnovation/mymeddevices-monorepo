@@ -1,5 +1,6 @@
-from decimal import Decimal
 import uuid
+from decimal import Decimal
+
 import pytest
 
 from app.domains.auth.models.user import User
@@ -11,7 +12,6 @@ from app.domains.catalog.services.bundle_service import BundleIneligibleExceptio
 from app.domains.vendor.models.vendor_offer import (
     OfferInventory,
     OfferStatusEnum,
-    SellingUnitEnum,
     VendorOffer,
 )
 from app.domains.vendor.models.vendor_profile import VendorProfile
@@ -20,7 +20,7 @@ from app.domains.vendor.models.vendor_profile import VendorProfile
 @pytest.mark.asyncio
 async def test_cross_vendor_bundle_resolution_and_proportional_discount(db_session):
     """Verify cross-vendor bundle resolution, proportional line discount, and zero residual leakage."""
-    
+
     # 1. Taxonomy
     cat = Category(id=uuid.uuid4(), name="Clinic Packages", slug="clinic-pkg")
     db_session.add(cat)
@@ -104,7 +104,7 @@ async def test_cross_vendor_bundle_resolution_and_proportional_discount(db_sessi
 @pytest.mark.asyncio
 async def test_bundle_rejects_multi_variant_product(db_session):
     """Verify V1 rule: A bundle component Product with multiple variants is strictly rejected."""
-    
+
     cat = Category(id=uuid.uuid4(), name="Diagnostic", slug="diag-bundle-reject")
     db_session.add(cat)
 

@@ -1,3 +1,6 @@
+from app.domains.auth.models.user import User  # noqa: F401
+from app.domains.vendor.models.vendor_profile import VendorProfile  # noqa: F401
+
 from .brand import Brand
 from .bundle import Bundle, BundleComponent, BundleDiscountType
 from .bundle_item import BundleItem

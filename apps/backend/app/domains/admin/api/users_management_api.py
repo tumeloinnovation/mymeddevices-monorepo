@@ -681,7 +681,7 @@ async def get_staff_member(
     user_override = saved_overrides.get(str(user.id), {})
     granted = set(user_override.get("granted", []))
     revoked = set(user_override.get("revoked", []))
-    effective_perms = sorted(list((base_perms | granted) - revoked))
+    effective_perms = sorted((base_perms | granted) - revoked)
 
     return success_response(
         {
@@ -701,8 +701,8 @@ async def get_staff_member(
             "permissions": effective_perms,
             "permissions_count": len(effective_perms),
             "is_customized": bool(granted or revoked),
-            "granted_overrides": sorted(list(granted)),
-            "revoked_overrides": sorted(list(revoked)),
+            "granted_overrides": sorted(granted),
+            "revoked_overrides": sorted(revoked),
         }
     )
 
@@ -757,7 +757,7 @@ async def get_staff_permissions(
     user_override = saved_overrides.get(user_id_str, {})
     granted = set(user_override.get("granted", []))
     revoked = set(user_override.get("revoked", []))
-    effective_perms = sorted(list((base_perms | granted) - revoked))
+    effective_perms = sorted((base_perms | granted) - revoked)
 
     name = " ".join(filter(None, [user.first_name, user.last_name])) or user.company_name or "Staff Member"
 
@@ -769,9 +769,9 @@ async def get_staff_permissions(
             "role": user.role,
             "categories": DEFAULT_PERMISSION_CATEGORIES,
             "available_roles": all_roles,
-            "base_permissions": sorted(list(base_perms)),
-            "granted_overrides": sorted(list(granted)),
-            "revoked_overrides": sorted(list(revoked)),
+            "base_permissions": sorted(base_perms),
+            "granted_overrides": sorted(granted),
+            "revoked_overrides": sorted(revoked),
             "effective_permissions": effective_perms,
             "is_customized": bool(granted or revoked),
         }
@@ -814,8 +814,8 @@ async def update_staff_permissions(
     user_id_str = str(user.id)
 
     # Clean granted and revoked lists
-    granted = sorted(list(set(payload.granted)))
-    revoked = sorted(list(set(payload.revoked)))
+    granted = sorted(set(payload.granted))
+    revoked = sorted(set(payload.revoked))
 
     if granted or revoked:
         saved_overrides[user_id_str] = {
@@ -840,7 +840,7 @@ async def update_staff_permissions(
         role_matrix.update(saved_matrix)
 
     base_perms = set(role_matrix.get(user.role, []))
-    effective_perms = sorted(list((base_perms | set(granted)) - set(revoked)))
+    effective_perms = sorted((base_perms | set(granted)) - set(revoked))
 
     logger.info(f"Permissions updated for staff member {user_id_str} by {current_user.email}")
 
@@ -1063,8 +1063,8 @@ async def set_staff_password(
         try:
             from app.domains.auth.services.email_service import EmailService
 
-            email_service = EmailService()
-            user_name = f"{user.first_name} {user.last_name}".strip() or user.email.split("@")[0]
+            EmailService()
+            f"{user.first_name} {user.last_name}".strip() or user.email.split("@")[0]
             # TODO: Create staff password reset email template
             # For now, just log it
             logger.info(f"Password reset notification queued for {user.email}")
@@ -1100,15 +1100,9 @@ async def delete_staff(
     if not user:
         raise HTTPException(status_code=404, detail="Staff member not found")
 
-    try:
-        await db.delete(user)
-        await db.commit()
-        logger.info(f"User {staff_id} deleted by {current_user.email}")
-    except Exception as e:
-        await db.rollback()
-        user.is_active = False
-        await db.commit()
-        logger.info(f"User {staff_id} deactivated due to dependent records: {e}")
+    user.is_active = False
+    await db.commit()
+    logger.info(f"User {staff_id} deactivated by {current_user.email}")
 
     return success_response({"message": "Staff member deleted successfully"})
 

@@ -13,6 +13,8 @@ class CategoryCreate(BaseModel):
     description: str | None = None
     permalink: str | None = Field(None, max_length=500)
     icon_url: str | None = None
+    tax_category_code: str = "STANDARD_VAT_16"
+    min_warranty_months: int = 0
     parent_id: uuid.UUID | None = None
     sort_order: int = 0
     is_active: bool = True
@@ -34,6 +36,8 @@ class CategoryUpdate(BaseModel):
     description: str | None = None
     permalink: str | None = Field(None, max_length=500)
     icon_url: str | None = None
+    tax_category_code: str | None = None
+    min_warranty_months: int | None = None
     parent_id: uuid.UUID | None = None
     sort_order: int | None = None
     is_active: bool | None = None
@@ -48,6 +52,8 @@ class CategoryResponse(BaseModel):
     description: str | None = None
     permalink: str | None = None
     icon_url: str | None = None
+    tax_category_code: str = "STANDARD_VAT_16"
+    min_warranty_months: int = 0
     parent_id: uuid.UUID | None = None
     sort_order: int
     is_active: bool
@@ -67,6 +73,8 @@ class CategoryTreeResponse(BaseModel):
     description: str | None = None
     permalink: str | None = None
     icon_url: str | None = None
+    tax_category_code: str = "STANDARD_VAT_16"
+    min_warranty_months: int = 0
     parent_id: uuid.UUID | None = None
     sort_order: int
     is_active: bool

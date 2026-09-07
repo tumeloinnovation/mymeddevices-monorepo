@@ -198,17 +198,10 @@ class ReturnService:
 
     async def _mark_order_refunded(self, return_request: ReturnRequest) -> None:
         """Mark the associated order and its mobile money payment as refunded, and debit vendor ledgers."""
-        from app.domains.shopping.models.mobile_money_payment import (
-            MobileMoneyPayment,
-            MobileMoneyPaymentStatus,
-        )
+        from app.domains.payments.services.ledger_service import LedgerService
+        from app.domains.payments.services.payment_service import PaymentService
         from app.domains.shopping.models.order import Order, OrderStatus, OrderTimelineEvent
         from app.domains.shopping.models.sub_order import SubOrder
-        from app.domains.shopping.models.vendor_ledger import (
-            LedgerTransaction,
-            LedgerTransactionType,
-            VendorLedger,
-        )
 
         order_stmt = select(Order).where(Order.id == return_request.order_id)
         order_result = await self.db.execute(order_stmt)
@@ -225,64 +218,24 @@ class ReturnService:
             self.db.add(timeline)
 
         # Flag any verified mobile money payment as refunded for reconciliation
-        payment_stmt = select(MobileMoneyPayment).where(
-            and_(
-                MobileMoneyPayment.order_id == return_request.order_id,
-                MobileMoneyPayment.status == MobileMoneyPaymentStatus.VERIFIED,
-            )
+        payment_service = PaymentService(self.db)
+        await payment_service.mark_payment_refunded(
+            order_id=return_request.order_id,
+            refund_transaction_id=str(return_request.refund_transaction_id) if return_request.refund_transaction_id else None,
+            refund_reason=return_request.reason,
         )
-        payment_result = await self.db.execute(payment_stmt)
-        payment = payment_result.scalar_one_or_none()
-        if payment:
-            payment.status = MobileMoneyPaymentStatus.REFUNDED
-            payment.refunded_at = datetime.now(UTC)
-            if return_request.refund_transaction_id:
-                payment.refund_transaction_id = str(return_request.refund_transaction_id)
-            payment.refund_reason = return_request.reason
 
         # Debit vendor ledger for refunded sub-orders if previously credited
+        ledger_service = LedgerService(self.db)
         sub_orders_stmt = select(SubOrder).where(SubOrder.parent_order_id == return_request.order_id)
         sub_orders = (await self.db.execute(sub_orders_stmt)).scalars().all()
         for so in sub_orders:
-            credit_txn = (
-                await self.db.execute(
-                    select(LedgerTransaction).where(
-                        LedgerTransaction.sub_order_id == so.id,
-                        LedgerTransaction.transaction_type == LedgerTransactionType.CREDIT,
-                    )
-                )
-            ).scalar_one_or_none()
-            if credit_txn:
-                refund_txn = (
-                    await self.db.execute(
-                        select(LedgerTransaction).where(
-                            LedgerTransaction.sub_order_id == so.id,
-                            LedgerTransaction.transaction_type == LedgerTransactionType.DEBIT_REFUND,
-                        )
-                    )
-                ).scalar_one_or_none()
-                if not refund_txn:
-                    ledger = (
-                        await self.db.execute(select(VendorLedger).where(VendorLedger.vendor_id == so.vendor_id))
-                    ).scalar_one_or_none()
-                    if ledger:
-                        ledger.balance -= credit_txn.net_amount
-                        ledger.last_updated_at = datetime.now(UTC)
-                    self.db.add(
-                        LedgerTransaction(
-                            id=uuid.uuid4(),
-                            vendor_id=so.vendor_id,
-                            sub_order_id=so.id,
-                            gross_amount=credit_txn.gross_amount,
-                            platform_fee_rate=credit_txn.platform_fee_rate,
-                            platform_fee_amount=credit_txn.platform_fee_amount,
-                            net_amount=credit_txn.net_amount,
-                            transaction_type=LedgerTransactionType.DEBIT_REFUND,
-                            reference_id=str(return_request.id),
-                            reference_type="return",
-                            notes=f"Refund deduction for return {return_request.return_number}",
-                        )
-                    )
+            await ledger_service.debit_vendor_for_refund(
+                vendor_id=so.vendor_id,
+                sub_order_id=so.id,
+                reference_id=str(return_request.id),
+                notes=f"Refund deduction for return {return_request.return_number}",
+            )
 
     async def add_shipping_label(self, return_id: uuid.UUID, shipping_label: str) -> ReturnRequest | None:
         """Add shipping label to return request."""

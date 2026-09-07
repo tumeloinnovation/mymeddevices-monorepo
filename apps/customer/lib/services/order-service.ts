@@ -13,6 +13,14 @@ export interface Order {
   guest_token?: string;
   status: 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
   total_amount: number;
+  subtotal?: number;
+  shipping_amount?: number;
+  packaging_fee?: number;
+  services_fee?: number;
+  tax_amount?: number;
+  discount_amount?: number;
+  payment_method?: string;
+  payment_method_title?: string;
   currency: string;
   shipping_address?: Address | Record<string, any>;
   notes?: string;

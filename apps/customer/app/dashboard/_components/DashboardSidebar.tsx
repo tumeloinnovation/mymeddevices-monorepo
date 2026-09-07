@@ -52,7 +52,6 @@ import {
     Shield,
     Eye,
     Bell,
-    MessageSquare,
     Clock,
 } from 'lucide-react';
 import type { NavigationItem } from '@/types/dashboard';
@@ -118,12 +117,6 @@ export function DashboardSidebar() {
                     isActive: pathname?.startsWith('/dashboard/loyalty'),
                 },
                 {
-                    label: 'Payment Methods',
-                    href: '/dashboard/payment-methods',
-                    icon: CreditCard,
-                    isActive: pathname?.startsWith('/dashboard/payment-methods'),
-                },
-                {
                     label: 'Addresses',
                     href: '/dashboard/addresses',
                     icon: MapPin,
@@ -163,12 +156,6 @@ export function DashboardSidebar() {
                     icon: Heart,
                     badge: wishlistItems.length,
                     isActive: pathname?.startsWith('/dashboard/wishlist'),
-                },
-                {
-                    label: 'Product Reviews',
-                    href: '/dashboard/reviews',
-                    icon: MessageSquare,
-                    isActive: pathname?.startsWith('/dashboard/reviews'),
                 },
                 {
                     label: 'Recently Viewed',
@@ -325,12 +312,6 @@ export function DashboardSidebar() {
                                             <Link href="/dashboard/orders" className="flex items-center w-full cursor-pointer text-xs">
                                                 <Package className="mr-2 h-3.5 w-3.5 text-blue-500" />
                                                 My Orders
-                                            </Link>
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem asChild>
-                                            <Link href="/dashboard/reviews" className="flex items-center w-full cursor-pointer text-xs">
-                                                <MessageSquare className="mr-2 h-3.5 w-3.5 text-amber-400" />
-                                                My Reviews
                                             </Link>
                                         </DropdownMenuItem>
                                         <DropdownMenuItem asChild>

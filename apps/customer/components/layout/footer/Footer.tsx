@@ -122,8 +122,7 @@ export const Footer: FC = () => {
                     />
                   </div>
                   <p className="text-slate-300 leading-relaxed mb-4">
-                    Your trusted pharmaceutical partner, providing quality health solutions for
-                    everyone.
+                    Kenya&apos;s trusted online store for genuine home medical devices, healthcare equipment, and wellness essentials.
                   </p>
                   <div className="flex items-center gap-3">
                     {socialIcons.map((social, index) => {

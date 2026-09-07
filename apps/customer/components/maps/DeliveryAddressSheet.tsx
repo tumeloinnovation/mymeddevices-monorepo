@@ -76,6 +76,7 @@ export default function DeliveryAddressSheet({
 
   const {
     addAddress,
+    updateAddress,
     customTags,
     addCustomTag,
   } = useAddressStore();
@@ -84,6 +85,7 @@ export default function DeliveryAddressSheet({
 
   const handlePlaceSelected = (place: any) => {
     const address: Address = {
+      id: delivery?.id,
       address: place.address_1 || place.formatted_address || place.name || "Unknown location",
       lat: place.lat,
       lon: place.lng,
@@ -108,17 +110,31 @@ export default function DeliveryAddressSheet({
 
   const handleConfirm = () => {
     if (selectedAddress) {
-      addAddress({
-        address: selectedAddress.address,
-        lat: selectedAddress.lat.toString(),
-        lon: selectedAddress.lon.toString(),
-        region: selectedAddress.region || "Kenya",
-        city: selectedAddress.city,
-        country: selectedAddress.country,
-        postcode: selectedAddress.postcode,
-        address_2: selectedAddress.address_2,
-        tag: selectedTag || undefined,
-      });
+      if (delivery?.id) {
+        updateAddress(delivery.id, {
+          address: selectedAddress.address,
+          lat: selectedAddress.lat?.toString(),
+          lon: selectedAddress.lon?.toString(),
+          region: selectedAddress.region || "Kenya",
+          city: selectedAddress.city,
+          country: selectedAddress.country,
+          postcode: selectedAddress.postcode,
+          address_2: selectedAddress.address_2,
+          tag: selectedTag || undefined,
+        });
+      } else {
+        addAddress({
+          address: selectedAddress.address,
+          lat: selectedAddress.lat?.toString(),
+          lon: selectedAddress.lon?.toString(),
+          region: selectedAddress.region || "Kenya",
+          city: selectedAddress.city,
+          country: selectedAddress.country,
+          postcode: selectedAddress.postcode,
+          address_2: selectedAddress.address_2,
+          tag: selectedTag || undefined,
+        });
+      }
 
       onSelect(selectedAddress);
       setOpen(false);
@@ -128,7 +144,7 @@ export default function DeliveryAddressSheet({
   useEffect(() => {
     if (open) {
       setSelectedAddress(delivery || null);
-      setSelectedTag("");
+      setSelectedTag((delivery?.tag as AddressTag) || "");
     }
   }, [open, delivery]);
 

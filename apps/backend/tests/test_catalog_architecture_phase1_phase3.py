@@ -1,6 +1,6 @@
-import asyncio
-from decimal import Decimal
 import uuid
+from decimal import Decimal
+
 import pytest
 from sqlalchemy import select
 
@@ -17,7 +17,6 @@ from app.domains.catalog.models.manufacturer import Manufacturer
 from app.domains.catalog.models.product import Product
 from app.domains.catalog.models.product_variant import ProductVariant
 from app.domains.catalog.services.buy_box_service import buy_box_service
-from app.domains.catalog.services.pricing_engine import pricing_engine
 from app.domains.shopping.services.inventory_reservation_service import (
     InsufficientStockException,
     inventory_reservation_service,
@@ -34,7 +33,7 @@ from app.domains.vendor.models.vendor_profile import VendorProfile
 @pytest.mark.asyncio
 async def test_canonical_product_and_variant_attribute_definitions(db_session):
     """Verify category attribute definitions, allowed values, and variant configuration."""
-    
+
     # 1. Create Manufacturer & Brand
     mfg = Manufacturer(
         id=uuid.uuid4(),
@@ -145,7 +144,7 @@ async def test_canonical_product_and_variant_attribute_definitions(db_session):
 @pytest.mark.asyncio
 async def test_buy_box_package_isolation_and_price_resolution(db_session):
     """Verify Buy-Box selects lowest customer price with strict packaging isolation."""
-    
+
     # 1. Setup Taxonomy & Product
     cat = Category(
         id=uuid.uuid4(),
@@ -293,7 +292,7 @@ async def test_buy_box_package_isolation_and_price_resolution(db_session):
 @pytest.mark.asyncio
 async def test_inventory_reservation_and_concurrency(db_session):
     """Verify concurrency safety, stock reservation, and atomic rollback."""
-    
+
     # 1. Setup User, Vendor, Product, Variant, Offer
     u = User(
         id=uuid.uuid4(),

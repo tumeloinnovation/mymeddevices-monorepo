@@ -86,7 +86,7 @@ class VendorOffer(Base, IDMixin, AuditMixin):
 
     # Packaging Specifications
     selling_unit: Mapped[SellingUnitEnum] = mapped_column(
-        Enum(SellingUnitEnum), default=SellingUnitEnum.PIECE, nullable=False, index=True
+        Enum(SellingUnitEnum, native_enum=False), default=SellingUnitEnum.PIECE, nullable=False, index=True
     )
     package_quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
@@ -96,7 +96,7 @@ class VendorOffer(Base, IDMixin, AuditMixin):
     lead_time_days: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     warranty_months: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     status: Mapped[OfferStatusEnum] = mapped_column(
-        Enum(OfferStatusEnum), default=OfferStatusEnum.ACTIVE, nullable=False, index=True
+        Enum(OfferStatusEnum, native_enum=False), default=OfferStatusEnum.ACTIVE, nullable=False, index=True
     )
 
     # Clean Extension Points for Future ERP/CSV Sync

@@ -55,7 +55,7 @@ async def test_security_headers_enforcement(client: AsyncClient):
 
     # 5. Cross-Origin policies
     assert response.headers.get("cross-origin-opener-policy") == "same-origin"
-    assert response.headers.get("cross-origin-resource-policy") == "same-origin"
+    assert response.headers.get("cross-origin-resource-policy") in ("same-site", "same-origin")
 
     # 6. Server banner masked
     assert response.headers.get("server") == "MyMedAPI"

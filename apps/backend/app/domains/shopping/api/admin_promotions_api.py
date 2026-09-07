@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated, Optional
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +21,7 @@ router = APIRouter(prefix="/admin/promotions", tags=["Admin Promotions Managemen
 @router.get("", response_model=ApiSuccessResponse[list[PromotionResponse]])
 async def admin_list_promotions(
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    promotion_type: Optional[str] = Query(None),
+    promotion_type: str | None = Query(None),
     only_active: bool = Query(False),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
