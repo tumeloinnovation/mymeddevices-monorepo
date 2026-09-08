@@ -1,38 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from pydantic import BaseModel, EmailStr
-from typing import Optional, Literal
 
-from app.core.database import get_db
-from app.core.responses import success_response
-from app.domains.auth.services.otp_service import OTPService
-from app.domains.auth.models.user import User
+from app.core.dependencies import DbDep
 from app.core.logging import logger
 from app.core.rate_limiting import RateLimiterDependency
-
+from app.core.responses import success_response
+from app.domains.auth.dependencies import OTPServiceDep
+from app.domains.auth.models.user import User
+from app.domains.auth.schemas.auth_schemas import SendOTPRequest, VerifyOTPRequest
 
 router = APIRouter(prefix="/otp", tags=["OTP Verification"])
 
 
-class SendOTPRequest(BaseModel):
-    """Request to send OTP code"""
-    email: EmailStr
-    purpose: Literal["verification", "reset_password", "login", "email_change"] = "verification"
-
-
-class VerifyOTPRequest(BaseModel):
-    """Request to verify OTP code"""
-    email: EmailStr
-    code: str
-    purpose: Literal["verification", "reset_password", "login", "email_change"] = "verification"
-
-
 @router.post("/send", dependencies=[Depends(RateLimiterDependency("otp"))])
-async def send_otp(
-    request: SendOTPRequest,
-    db: AsyncSession = Depends(get_db)
-):
+async def send_otp(request: SendOTPRequest, db: DbDep, otp_service: OTPServiceDep):
     """
     Generate OTP code for user. (Email sending is disabled)
 
@@ -47,27 +28,19 @@ async def send_otp(
     if not user:
         # For security, don't reveal if email exists
         logger.info(f"OTP generation attempted for non-existent email: {request.email}")
-        return success_response({
-            "message": "If the email exists, a verification code has been generated.",
-            "expires_in_minutes": 15
-        })
+        return success_response(
+            {"message": "If the email exists, a verification code has been generated.", "expires_in_minutes": 15}
+        )
 
     # Generate OTP and send email
-    otp_service = OTPService(db)
     code = await otp_service.generate_otp(str(user.id), request.purpose)
     await otp_service.send_otp_email(user.email, code, request.purpose)
 
-    return success_response({
-        "message": "Verification code sent to your email!",
-        "expires_in_minutes": 15
-    })
+    return success_response({"message": "Verification code sent to your email!", "expires_in_minutes": 15})
 
 
 @router.post("/verify", dependencies=[Depends(RateLimiterDependency("otp"))])
-async def verify_otp(
-    request: VerifyOTPRequest,
-    db: AsyncSession = Depends(get_db)
-):
+async def verify_otp(request: VerifyOTPRequest, db: DbDep, otp_service: OTPServiceDep):
     """
     Verify OTP code.
 
@@ -79,20 +52,16 @@ async def verify_otp(
     user = result.scalar_one_or_none()
 
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User not found"
-        )
-
-    # Verify OTP
-    otp_service = OTPService(db)
-    is_valid = await otp_service.verify_otp(str(user.id), request.code, request.purpose)
+        # Same response as an invalid code: revealing whether the email exists
+        # would let attackers enumerate registered accounts.
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
+    
+    # For reset_password, do not consume the OTP yet so that /auth/reset-password can consume it upon setting password
+    consume = request.purpose != "reset_password"
+    is_valid = await otp_service.verify_otp(str(user.id), request.code, request.purpose, consume=consume)
 
     if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid or expired verification code"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification code")
 
     # If email verification, mark user as verified
     if request.purpose == "verification":
@@ -100,17 +69,12 @@ async def verify_otp(
         await db.commit()
         logger.info(f"User {user.email} verified successfully")
 
-    return success_response({
-        "message": "Email verified successfully!",
-        "is_verified": user.is_verified
-    })
+    message = "Email verified successfully!" if request.purpose == "verification" else "Verification code is valid"
+    return success_response({"message": message, "is_verified": user.is_verified})
 
 
 @router.post("/resend", dependencies=[Depends(RateLimiterDependency("otp"))])
-async def resend_otp(
-    request: SendOTPRequest,
-    db: AsyncSession = Depends(get_db)
-):
+async def resend_otp(request: SendOTPRequest, db: DbDep, otp_service: OTPServiceDep):
     """
     Resend OTP code.
     This invalidates any previously sent codes.
@@ -121,17 +85,14 @@ async def resend_otp(
 
     if not user:
         # For security, don't reveal if email exists
-        return success_response({
-            "message": "If the email exists, a new verification code has been generated.",
-            "expires_in_minutes": 15
-        })
+        return success_response(
+            {"message": "If the email exists, a new verification code has been generated.", "expires_in_minutes": 15}
+        )
 
     # Generate new OTP and send email
-    otp_service = OTPService(db)
     code = await otp_service.generate_otp(str(user.id), request.purpose)
     await otp_service.send_otp_email(user.email, code, request.purpose)
 
-    return success_response({
-        "message": "New verification code generated. Please check your email inbox.",
-        "expires_in_minutes": 15
-    })
+    return success_response(
+        {"message": "New verification code generated. Please check your email inbox.", "expires_in_minutes": 15}
+    )

@@ -38,8 +38,9 @@ import {
 } from "lucide-react";
 
 import { useGoogleMaps } from "./useGoogleMaps";
-import AddressAutocomplete from "./AddressAutocomplete";
-import { useAddressStore, PREDEFINED_TAGS, type AddressTag } from "@/lib/store/useAddressStore";
+import { AddressAutocomplete } from "./AddressAutocomplete";
+import { useAddressStore, PREDEFINED_TAGS, type AddressTag } from "@mymeddevices/shared-core";
+import { capitalizeTag } from "@mymeddevices/shared-core";
 
 interface Address {
   id?: string;
@@ -241,9 +242,9 @@ export default function DeliveryAddressSheet({
               </div>
             ) : (
               <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                {savedAddresses.map((addr) => {
+                {savedAddresses.map((addr: any) => {
                   const isSelected = selectedAddress?.address === addr.address;
-                  const TagIcon = addr.tag ? TAG_ICONS[addr.tag] || MapPin : MapPin;
+                  const TagIcon = addr.tag ? (TAG_ICONS as Record<string, any>)[addr.tag] || MapPin : MapPin;
 
                   return (
                     <div
@@ -261,8 +262,8 @@ export default function DeliveryAddressSheet({
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 mb-1">
                             {addr.tag && (
-                              <Badge variant="secondary" className="text-xs capitalize">
-                                {addr.tag}
+                              <Badge variant="secondary" className="text-xs">
+                                {capitalizeTag(addr.tag)}
                               </Badge>
                             )}
                             {addr.isDefault && (
@@ -330,8 +331,8 @@ export default function DeliveryAddressSheet({
                       </SelectTrigger>
                       <SelectContent>
                         {allTags.map((tag) => (
-                          <SelectItem key={tag} value={tag} className="capitalize">
-                            {tag}
+                          <SelectItem key={tag} value={tag}>
+                            {capitalizeTag(tag)}
                           </SelectItem>
                         ))}
                         <SelectItem value="custom">

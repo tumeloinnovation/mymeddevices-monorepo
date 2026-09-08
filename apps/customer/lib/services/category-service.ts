@@ -1,3 +1,4 @@
+import { isValidImageUrl } from '@/lib/utils/image';
 import { apiClient } from '@mymeddevices/core/lib/services/api-client';
 import { productService, type Product } from './product-service';
 
@@ -12,10 +13,11 @@ interface Category {
   description: string;
   parent_id: string;
   image_url: string | null;
+  icon_url?: string | null;
   product_count: number;
   parent: number;
   display: string;
-  image: null;
+  image?: { src: string } | null;
   count: number;
   children?: Category[];
 }
@@ -66,7 +68,17 @@ export const categoryService = {
         const response = await apiClient.get<any>('/catalog/categories');
         const categoriesList = response?.data || response;
         if (categoriesList && Array.isArray(categoriesList)) {
-          return categoriesList;
+          return categoriesList.map((c: any) => {
+            const rawImg = c.image_url || (isValidImageUrl(c.icon_url) ? c.icon_url : null);
+            const validImg = isValidImageUrl(rawImg) ? rawImg : null;
+            return {
+              ...c,
+              product_count: c.product_count ?? c.count ?? 0,
+              count: c.product_count ?? c.count ?? 0,
+              image_url: validImg,
+              image: validImg ? { src: validImg } : null,
+            };
+          });
         }
       } catch {
         // Endpoint doesn't exist, fall back to extracting from products

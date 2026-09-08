@@ -243,7 +243,7 @@ class ShoppingService {
     return apiClient.get<CartTotals>(`/shopping/cart/totals`, { params: { cart_id: cartId } });
   }
 
-  async checkout(data: { cart_id: string; shipping_address: any; notes?: string }): Promise<Order> {
+  async checkout(data: { cart_id: string; shipping_address: any; notes?: string; guest_token?: string }): Promise<Order> {
     return apiClient.post<Order>("/shopping/checkout", data);
   }
 

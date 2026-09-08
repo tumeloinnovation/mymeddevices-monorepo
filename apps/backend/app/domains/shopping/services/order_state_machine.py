@@ -6,78 +6,54 @@ ensuring consistent status transitions across the entire system.
 """
 
 from dataclasses import dataclass
-from typing import Dict, List, Set, Optional
 
-from app.domains.shopping.models.order import OrderStatus, OrderItemFulfillmentStatus
+from app.domains.shopping.models.order import OrderItemFulfillmentStatus, OrderStatus
 from app.domains.shopping.models.sub_order import SubOrderStatus
 
 
 class InvalidStateTransitionError(ValueError):
     """Raised when an invalid state transition is attempted."""
+
     def __init__(self, from_state: str, to_state: str, entity_type: str):
         self.from_state = from_state
         self.to_state = to_state
         self.entity_type = entity_type
-        super().__init__(
-            f"Cannot transition {entity_type} from {from_state} to {to_state}"
-        )
+        super().__init__(f"Cannot transition {entity_type} from {from_state} to {to_state}")
 
 
 # Canonical transition matrices
 # These define all valid state transitions for each entity type
-ORDER_TRANSITIONS: Dict[OrderStatus, List[OrderStatus]] = {
-    OrderStatus.PENDING: [OrderStatus.PAID, OrderStatus.CANCELLED],
-    OrderStatus.PAID: [OrderStatus.PROCESSING, OrderStatus.REFUNDED, OrderStatus.CANCELLED],
+ORDER_TRANSITIONS: dict[OrderStatus, list[OrderStatus]] = {
+    OrderStatus.PENDING: [OrderStatus.PAID, OrderStatus.PROCESSING, OrderStatus.CANCELLED],
+    OrderStatus.PAID: [OrderStatus.PROCESSING, OrderStatus.SHIPPED, OrderStatus.CANCELLED, OrderStatus.REFUNDED],
     OrderStatus.PROCESSING: [OrderStatus.SHIPPED, OrderStatus.CANCELLED, OrderStatus.REFUNDED],
     OrderStatus.SHIPPED: [OrderStatus.DELIVERED, OrderStatus.REFUNDED],
     OrderStatus.DELIVERED: [OrderStatus.REFUNDED],
     OrderStatus.CANCELLED: [],
-    OrderStatus.REFUNDED: []
+    OrderStatus.REFUNDED: [],
 }
 
-ORDER_ITEM_TRANSITIONS: Dict[OrderItemFulfillmentStatus, List[OrderItemFulfillmentStatus]] = {
+ORDER_ITEM_TRANSITIONS: dict[OrderItemFulfillmentStatus, list[OrderItemFulfillmentStatus]] = {
     OrderItemFulfillmentStatus.PENDING: [
         OrderItemFulfillmentStatus.PROCESSING,
         OrderItemFulfillmentStatus.PACKED,
-        OrderItemFulfillmentStatus.CANCELLED
+        OrderItemFulfillmentStatus.CANCELLED,
     ],
-    OrderItemFulfillmentStatus.PROCESSING: [
-        OrderItemFulfillmentStatus.PACKED,
-        OrderItemFulfillmentStatus.CANCELLED
-    ],
-    OrderItemFulfillmentStatus.PACKED: [
-        OrderItemFulfillmentStatus.SHIPPED,
-        OrderItemFulfillmentStatus.CANCELLED
-    ],
-    OrderItemFulfillmentStatus.SHIPPED: [
-        OrderItemFulfillmentStatus.DELIVERED,
-        OrderItemFulfillmentStatus.REFUNDED
-    ],
-    OrderItemFulfillmentStatus.DELIVERED: [
-        OrderItemFulfillmentStatus.REFUNDED
-    ],
+    OrderItemFulfillmentStatus.PROCESSING: [OrderItemFulfillmentStatus.PACKED, OrderItemFulfillmentStatus.CANCELLED],
+    OrderItemFulfillmentStatus.PACKED: [OrderItemFulfillmentStatus.SHIPPED, OrderItemFulfillmentStatus.CANCELLED],
+    OrderItemFulfillmentStatus.SHIPPED: [OrderItemFulfillmentStatus.DELIVERED, OrderItemFulfillmentStatus.REFUNDED],
+    OrderItemFulfillmentStatus.DELIVERED: [OrderItemFulfillmentStatus.REFUNDED],
     OrderItemFulfillmentStatus.CANCELLED: [],
-    OrderItemFulfillmentStatus.REFUNDED: []
+    OrderItemFulfillmentStatus.REFUNDED: [],
 }
 
-SUB_ORDER_TRANSITIONS: Dict[SubOrderStatus, List[SubOrderStatus]] = {
-    SubOrderStatus.PENDING: [
-        SubOrderStatus.PROCESSING,
-        SubOrderStatus.CANCELLED
-    ],
-    SubOrderStatus.PROCESSING: [
-        SubOrderStatus.SHIPPED,
-        SubOrderStatus.CANCELLED
-    ],
-    SubOrderStatus.SHIPPED: [
-        SubOrderStatus.DELIVERED,
-        SubOrderStatus.REFUNDED
-    ],
-    SubOrderStatus.DELIVERED: [
-        SubOrderStatus.REFUNDED
-    ],
+SUB_ORDER_TRANSITIONS: dict[SubOrderStatus, list[SubOrderStatus]] = {
+    SubOrderStatus.PENDING: [SubOrderStatus.PROCESSING, SubOrderStatus.CANCELLED],
+    SubOrderStatus.PROCESSING: [SubOrderStatus.SHIPPED, SubOrderStatus.CANCELLED],
+    SubOrderStatus.SHIPPED: [SubOrderStatus.DELIVERED, SubOrderStatus.REFUNDED],
+    SubOrderStatus.DELIVERED: [SubOrderStatus.REFUNDED],
     SubOrderStatus.CANCELLED: [],
-    SubOrderStatus.REFUNDED: []
+    SubOrderStatus.REFUNDED: [],
 }
 
 
@@ -86,68 +62,69 @@ SUB_ORDER_TRANSITIONS: Dict[SubOrderStatus, List[SubOrderStatus]] = {
 @dataclass
 class RollupRule:
     """Defines how child statuses determine parent status."""
+
     parent_status: str
-    required_child_statuses: Set[str]
+    required_child_statuses: set[str]
     min_percentage: float = 1.0  # Percentage of items that must have the status
 
 
-ORDER_ROLLUP_RULES: List[RollupRule] = [
+ORDER_ROLLUP_RULES: list[RollupRule] = [
     # Processing: at least 50% of items in processing
     RollupRule(
         parent_status=OrderStatus.PROCESSING.value,
         required_child_statuses={OrderItemFulfillmentStatus.PROCESSING.value, OrderItemFulfillmentStatus.PACKED.value},
-        min_percentage=0.5
+        min_percentage=0.5,
     ),
     # Shipped: at least 50% of items shipped
     RollupRule(
         parent_status=OrderStatus.SHIPPED.value,
         required_child_statuses={OrderItemFulfillmentStatus.SHIPPED.value},
-        min_percentage=0.5
+        min_percentage=0.5,
     ),
     # Delivered: 100% of items delivered
     RollupRule(
         parent_status=OrderStatus.DELIVERED.value,
         required_child_statuses={OrderItemFulfillmentStatus.DELIVERED.value},
-        min_percentage=1.0
+        min_percentage=1.0,
     ),
     # Cancelled: 100% of items cancelled
     RollupRule(
         parent_status=OrderStatus.CANCELLED.value,
         required_child_statuses={OrderItemFulfillmentStatus.CANCELLED.value},
-        min_percentage=1.0
+        min_percentage=1.0,
     ),
     # Refunded: 100% of items refunded
     RollupRule(
         parent_status=OrderStatus.REFUNDED.value,
         required_child_statuses={OrderItemFulfillmentStatus.REFUNDED.value},
-        min_percentage=1.0
+        min_percentage=1.0,
     ),
 ]
 
-SUB_ORDER_ROLLUP_RULES: List[RollupRule] = [
+SUB_ORDER_ROLLUP_RULES: list[RollupRule] = [
     # Processing: at least 50% of items in processing/packed
     RollupRule(
         parent_status=SubOrderStatus.PROCESSING.value,
         required_child_statuses={OrderItemFulfillmentStatus.PROCESSING.value, OrderItemFulfillmentStatus.PACKED.value},
-        min_percentage=0.5
+        min_percentage=0.5,
     ),
     # Shipped: at least 50% of items shipped
     RollupRule(
         parent_status=SubOrderStatus.SHIPPED.value,
         required_child_statuses={OrderItemFulfillmentStatus.SHIPPED.value},
-        min_percentage=0.5
+        min_percentage=0.5,
     ),
     # Delivered: 100% of items delivered
     RollupRule(
         parent_status=SubOrderStatus.DELIVERED.value,
         required_child_statuses={OrderItemFulfillmentStatus.DELIVERED.value},
-        min_percentage=1.0
+        min_percentage=1.0,
     ),
     # Cancelled: 100% of items cancelled
     RollupRule(
         parent_status=SubOrderStatus.CANCELLED.value,
         required_child_statuses={OrderItemFulfillmentStatus.CANCELLED.value},
-        min_percentage=1.0
+        min_percentage=1.0,
     ),
 ]
 
@@ -216,7 +193,7 @@ class OrderStateMachine:
         return to_enum in SUB_ORDER_TRANSITIONS.get(from_enum, [])
 
     @staticmethod
-    def calculate_order_status(item_statuses: List[str], strict_lifecycle: bool = True) -> Optional[str]:
+    def calculate_order_status(item_statuses: list[str], strict_lifecycle: bool = True) -> str | None:
         """
         Calculate Order status from OrderItem statuses.
 
@@ -243,33 +220,42 @@ class OrderStateMachine:
                 return OrderStatus.DELIVERED.value
 
             # Parent order is shipped ONLY when ALL active items are shipped or delivered
-            if all(s in (OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value) for s in active_statuses):
+            if all(
+                s in (OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value)
+                for s in active_statuses
+            ):
                 return OrderStatus.SHIPPED.value
 
             # Parent order is processing if AT LEAST ONE active item is in processing, packed, shipped, or delivered
-            if any(s in (OrderItemFulfillmentStatus.PROCESSING.value, OrderItemFulfillmentStatus.PACKED.value, OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value) for s in active_statuses):
+            if any(
+                s
+                in (
+                    OrderItemFulfillmentStatus.PROCESSING.value,
+                    OrderItemFulfillmentStatus.PACKED.value,
+                    OrderItemFulfillmentStatus.SHIPPED.value,
+                    OrderItemFulfillmentStatus.DELIVERED.value,
+                )
+                for s in active_statuses
+            ):
                 return OrderStatus.PROCESSING.value
 
             return None
 
         # Threshold-based evaluation
         total_items = len(item_statuses)
-        status_counts: Dict[str, int] = {}
+        status_counts: dict[str, int] = {}
         for status in item_statuses:
             status_counts[status] = status_counts.get(status, 0) + 1
 
         for rule in ORDER_ROLLUP_RULES:
-            matching_count = sum(
-                status_counts.get(s, 0)
-                for s in rule.required_child_statuses
-            )
+            matching_count = sum(status_counts.get(s, 0) for s in rule.required_child_statuses)
             if matching_count / total_items >= rule.min_percentage:
                 return rule.parent_status
 
         return None
 
     @staticmethod
-    def calculate_sub_order_status(item_statuses: List[str], strict_lifecycle: bool = True) -> Optional[str]:
+    def calculate_sub_order_status(item_statuses: list[str], strict_lifecycle: bool = True) -> str | None:
         """
         Calculate SubOrder status from OrderItem statuses.
 
@@ -295,33 +281,42 @@ class OrderStateMachine:
                 return SubOrderStatus.DELIVERED.value
 
             # Sub-order is shipped ONLY when ALL active items are shipped or delivered
-            if all(s in (OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value) for s in active_statuses):
+            if all(
+                s in (OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value)
+                for s in active_statuses
+            ):
                 return SubOrderStatus.SHIPPED.value
 
             # Sub-order is processing if AT LEAST ONE active item is in processing, packed, shipped, or delivered
-            if any(s in (OrderItemFulfillmentStatus.PROCESSING.value, OrderItemFulfillmentStatus.PACKED.value, OrderItemFulfillmentStatus.SHIPPED.value, OrderItemFulfillmentStatus.DELIVERED.value) for s in active_statuses):
+            if any(
+                s
+                in (
+                    OrderItemFulfillmentStatus.PROCESSING.value,
+                    OrderItemFulfillmentStatus.PACKED.value,
+                    OrderItemFulfillmentStatus.SHIPPED.value,
+                    OrderItemFulfillmentStatus.DELIVERED.value,
+                )
+                for s in active_statuses
+            ):
                 return SubOrderStatus.PROCESSING.value
 
             return SubOrderStatus.PENDING.value
 
         # Threshold-based evaluation
         total_items = len(item_statuses)
-        status_counts: Dict[str, int] = {}
+        status_counts: dict[str, int] = {}
         for status in item_statuses:
             status_counts[status] = status_counts.get(status, 0) + 1
 
         for rule in SUB_ORDER_ROLLUP_RULES:
-            matching_count = sum(
-                status_counts.get(s, 0)
-                for s in rule.required_child_statuses
-            )
+            matching_count = sum(status_counts.get(s, 0) for s in rule.required_child_statuses)
             if matching_count / total_items >= rule.min_percentage:
                 return rule.parent_status
 
         return None
 
     @staticmethod
-    def get_next_valid_statuses(entity_type: str, current_status: str) -> List[str]:
+    def get_next_valid_statuses(entity_type: str, current_status: str) -> list[str]:
         """
         Get list of valid next statuses for a given current status.
 
@@ -336,20 +331,20 @@ class OrderStateMachine:
         """
         if entity_type == "order":
             try:
-                current_enum = OrderStatus(current_status)
-                return [s.value for s in ORDER_TRANSITIONS.get(current_enum, [])]
+                current_order_enum = OrderStatus(current_status)
+                return [s.value for s in ORDER_TRANSITIONS.get(current_order_enum, [])]
             except ValueError:
                 return []
         elif entity_type == "order_item":
             try:
-                current_enum = OrderItemFulfillmentStatus(current_status)
-                return [s.value for s in ORDER_ITEM_TRANSITIONS.get(current_enum, [])]
+                current_item_enum = OrderItemFulfillmentStatus(current_status)
+                return [s.value for s in ORDER_ITEM_TRANSITIONS.get(current_item_enum, [])]
             except ValueError:
                 return []
         elif entity_type == "sub_order":
             try:
-                current_enum = SubOrderStatus(current_status)
-                return [s.value for s in SUB_ORDER_TRANSITIONS.get(current_enum, [])]
+                current_sub_enum = SubOrderStatus(current_status)
+                return [s.value for s in SUB_ORDER_TRANSITIONS.get(current_sub_enum, [])]
             except ValueError:
                 return []
         return []

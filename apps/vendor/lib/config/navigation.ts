@@ -51,11 +51,10 @@ export const vendorNavSections: NavSection[] = [
     ]
   },
   {
-    section: "Catalog",
+    section: "Catalog & Operations",
     items: [
-      { href: "/vendor/products", icon: Package, label: "Products" },
-      { href: "/vendor/media", icon: Image, label: "Media Library" },
-      { href: "/vendor/inventory", icon: Warehouse, label: "Inventory" },
+      { href: "/vendor/products", icon: Package, label: "Products & Inventory" },
+      { href: "/vendor/analytics/products", icon: BarChart3, label: "Product Performance" },
     ]
   },
   {

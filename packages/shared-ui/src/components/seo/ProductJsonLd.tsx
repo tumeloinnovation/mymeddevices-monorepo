@@ -1,8 +1,8 @@
-import type { Product } from '@/lib/data/types'
+import type { Product } from '@mymeddevices/shared-core';
 
 interface ProductJsonLdProps {
-    product: Product
-    url: string
+    product: any;
+    url: string;
 }
 
 /**
@@ -15,17 +15,17 @@ export function ProductJsonLd({ product, url }: ProductJsonLdProps) {
         '@type': ['Product', 'MedicalDevice'],
         name: product.name,
         description: product.short_description?.replace(/<[^>]*>/g, '') || product.description?.replace(/<[^>]*>/g, '') || '',
-        image: product.images?.map((img) => img.src) || [],
+        image: product.images?.map((img: { url?: string; src?: string }) => img.url || img.src || '') || [],
         sku: product.sku || undefined,
         brand: {
             '@type': 'Brand',
-            name: product.brands?.[0]?.name || 'MyMedDevices',
+            name: product.brand || 'MyMedDevices',
         },
         offers: {
             '@type': 'Offer',
             url: url,
-            priceCurrency: 'KES',
-            price: product.price || product.regular_price || '0',
+            priceCurrency: product.currency || 'KES',
+            price: String(product.price ?? product.base_price ?? 0),
             availability: product.stock_status === 'instock'
                 ? 'https://schema.org/InStock'
                 : product.stock_status === 'outofstock'
@@ -46,22 +46,15 @@ export function ProductJsonLd({ product, url }: ProductJsonLdProps) {
                 name: 'MyMedDevices',
             },
         },
-        ...(product.average_rating && parseFloat(product.average_rating) > 0 && {
-            aggregateRating: {
-                '@type': 'AggregateRating',
-                ratingValue: product.average_rating,
-                reviewCount: product.rating_count || 1,
-            },
-        }),
-        category: product.categories?.map((cat) => cat.name).join(', ') || 'Medical Devices',
-    }
+        category: product.category_name || 'Medical Devices',
+    };
 
     return (
         <script
             type="application/ld+json"
             dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
         />
-    )
+    );
 }
 
-export default ProductJsonLd
+export default ProductJsonLd;

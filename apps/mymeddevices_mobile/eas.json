@@ -1,0 +1,56 @@
+{
+  "cli": {
+    "version": ">= 9.1.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "channel": "development",
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:8000/api/v1",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDZ3gBSxth49CJj5F4-LZ_NQnA5hX0trx0",
+        "EXPO_PUBLIC_MMD_API_URL": "http://10.0.2.2:8000/api/v1"
+      }
+    },
+    "staging": {
+      "distribution": "internal",
+      "channel": "staging",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:8000/api/v1",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDZ3gBSxth49CJj5F4-LZ_NQnA5hX0trx0",
+        "EXPO_PUBLIC_MMD_API_URL": "http://10.0.2.2:8000/api/v1"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "channel": "preview",
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://10.0.2.2:8000/api/v1",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDZ3gBSxth49CJj5F4-LZ_NQnA5hX0trx0",
+        "EXPO_PUBLIC_MMD_API_URL": "http://10.0.2.2:8000/api/v1"
+      }
+    },
+    "production": {
+      "channel": "production",
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://api.mymeddevices.com/api/v1",
+        "EXPO_PUBLIC_GOOGLE_MAPS_API_KEY": "AIzaSyDZ3gBSxth49CJj5F4-LZ_NQnA5hX0trx0",
+        "EXPO_PUBLIC_GOOGLE_MAP_ID": "67fb901f254e61cfa73cf0b4",
+        "EXPO_PUBLIC_MMD_API_URL": "https://api.mymeddevices.com/api/v1",
+        "SENTRY_AUTH_TOKEN": "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"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

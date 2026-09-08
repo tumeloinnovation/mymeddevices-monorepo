@@ -6,42 +6,73 @@ from credential stuffing, brute force, and dictionary attacks.
 """
 
 import re
-from typing import Tuple, List
 from dataclasses import dataclass
 
 # Top 1000 most common passwords (sample set - expand as needed)
 COMMON_PASSWORDS = {
     # Simple sequences
-    "password", "password123", "12345678", "123456789", "qwerty",
-    "abc123", "letmein", "monkey", "dragon", "master",
-
+    "password",
+    "password123",
+    "12345678",
+    "123456789",
+    "qwerty",
+    "abc123",
+    "letmein",
+    "monkey",
+    "dragon",
+    "master",
     # Common patterns
-    "password1", "iloveyou", "princess", "admin", "welcome",
-    "football", "123123", "batman", "trustno1", "superman",
-
+    "password1",
+    "iloveyou",
+    "princess",
+    "admin",
+    "welcome",
+    "football",
+    "123123",
+    "batman",
+    "trustno1",
+    "superman",
     # Year-based
-    "password2024", "password2025", "password2026",
-    "20242024", "20252025",
-
+    "password2024",
+    "password2025",
+    "password2026",
+    "20242024",
+    "20252025",
     # Personal info patterns
-    "mypassword", "mypassword123", "password1234",
-    "mypass", "passw0rd", "pass123",
-
+    "mypassword",
+    "mypassword123",
+    "password1234",
+    "mypass",
+    "passw0rd",
+    "pass123",
     # Keyboard patterns
-    "qwertyuiop", "asdfghjkl", "zxcvbnm", "1q2w3e4r",
-
+    "qwertyuiop",
+    "asdfghjkl",
+    "zxcvbnm",
+    "1q2w3e4r",
     # Common names/words
-    "charlie", "andrew", "michael", "jordan", "matthew",
-    "ashley", "jennifer", "amanda", "joshua", "daniel",
-
+    "charlie",
+    "andrew",
+    "michael",
+    "jordan",
+    "matthew",
+    "ashley",
+    "jennifer",
+    "amanda",
+    "joshua",
+    "daniel",
     # Context-specific
-    "mymed", "mymed123", "medical", "devices123",
+    "mymed",
+    "mymed123",
+    "medical",
+    "devices123",
 }
 
 
 @dataclass
 class PasswordPolicy:
     """Configurable password policy settings."""
+
     min_length: int = 8
     max_length: int = 128
     require_uppercase: bool = True
@@ -56,7 +87,7 @@ class PasswordPolicy:
 class PasswordValidationError(Exception):
     """Raised when password validation fails."""
 
-    def __init__(self, errors: List[str]):
+    def __init__(self, errors: list[str]):
         self.errors = errors
         super().__init__("; ".join(errors))
 
@@ -72,11 +103,7 @@ class PasswordValidator:
     def __init__(self, policy: PasswordPolicy | None = None):
         self.policy = policy or PasswordPolicy()
 
-    def validate(
-        self,
-        password: str,
-        user_info: dict | None = None
-    ) -> Tuple[bool, List[str]]:
+    def validate(self, password: str, user_info: dict | None = None) -> tuple[bool, list[str]]:
         """
         Validate password against security policy.
 
@@ -98,32 +125,26 @@ class PasswordValidator:
             errors.append(f"Password must not exceed {self.policy.max_length} characters")
 
         # Complexity checks
-        if self.policy.require_uppercase and not re.search(r'[A-Z]', password):
+        if self.policy.require_uppercase and not re.search(r"[A-Z]", password):
             errors.append("Password must contain at least one uppercase letter (A-Z)")
 
-        if self.policy.require_lowercase and not re.search(r'[a-z]', password):
+        if self.policy.require_lowercase and not re.search(r"[a-z]", password):
             errors.append("Password must contain at least one lowercase letter (a-z)")
 
-        if self.policy.require_digit and not re.search(r'\d', password):
+        if self.policy.require_digit and not re.search(r"\d", password):
             errors.append("Password must contain at least one number (0-9)")
 
         if self.policy.require_special:
             # Define special characters that are commonly allowed
             special_chars = r'[!@#$%^&*(),.?":{}|<>~`_+\-=\[\]\\]'
             if not re.search(special_chars, password):
-                errors.append(
-                    "Password must contain at least one special character "
-                    "(!@#$%^&*(),.?\":{}|<>~`_+-=[]\\)"
-                )
+                errors.append('Password must contain at least one special character (!@#$%^&*(),.?":{}|<>~`_+-=[]\\)')
 
         # Unique character count (prevents aaaaabbbbbcccc type patterns)
         if self.policy.min_unique_characters:
             unique_chars = len(set(password))
             if unique_chars < self.policy.min_unique_characters:
-                errors.append(
-                    f"Password must contain at least {self.policy.min_unique_characters} "
-                    "unique characters"
-                )
+                errors.append(f"Password must contain at least {self.policy.min_unique_characters} unique characters")
 
         # Common password check
         if self.policy.forbidden_common_passwords:
@@ -143,7 +164,7 @@ class PasswordValidator:
 
         return len(errors) == 0, errors
 
-    def _check_sequences(self, password: str, errors: List[str]) -> None:
+    def _check_sequences(self, password: str, errors: list[str]) -> None:
         """Check for common keyboard/character sequences."""
         password_lower = password.lower()
 
@@ -166,23 +187,17 @@ class PasswordValidator:
         for seq in sequences:
             # Check for 4+ consecutive characters
             for i in range(len(seq) - 3):
-                fragment = seq[i:i+4]
+                fragment = seq[i : i + 4]
                 if fragment in password_lower:
-                    errors.append(
-                        f"Password contains a common sequence ('{fragment}'). "
-                        "Avoid sequential characters."
-                    )
+                    errors.append(f"Password contains a common sequence ('{fragment}'). Avoid sequential characters.")
                     return  # Only report one sequence error
 
-    def _check_repetitions(self, password: str, errors: List[str]) -> None:
+    def _check_repetitions(self, password: str, errors: list[str]) -> None:
         """Check for excessive character repetition."""
-        if re.search(r'(.)\1{3,}', password):
-            errors.append(
-                "Password contains repeated characters. "
-                "Avoid using the same character 4+ times in a row."
-            )
+        if re.search(r"(.)\1{3,}", password):
+            errors.append("Password contains repeated characters. Avoid using the same character 4+ times in a row.")
 
-    def _check_user_info(self, password: str, user_info: dict, errors: List[str]) -> None:
+    def _check_user_info(self, password: str, user_info: dict, errors: list[str]) -> None:
         """Check if password contains user's personal information."""
         password_lower = password.lower()
 
@@ -202,11 +217,13 @@ class PasswordValidator:
             ("last name", last_name),
             ("company name", company_name),
         ]:
-            if info_value and len(info_value) >= 3 and info_value not in ("test", "guest", "admin", "demo") and info_value in password_lower:
-                errors.append(
-                    f"Password cannot contain your {info_name}. "
-                    f"Found '{info_value}' in password."
-                )
+            if (
+                info_value
+                and len(info_value) >= 3
+                and info_value not in ("test", "guest", "admin", "demo")
+                and info_value in password_lower
+            ):
+                errors.append(f"Password cannot contain your {info_name}. Found '{info_value}' in password.")
 
     def get_strength_score(self, password: str) -> int:
         """
@@ -219,16 +236,16 @@ class PasswordValidator:
         - Complexity: up to 20 points
         - Unpredictability: up to 20 points
         """
-        score = 0
+        score: float = 0
 
         # Length score (0-30)
         length_score = min(len(password) / 16 * 30, 30)
         score += length_score
 
         # Character variety (0-30)
-        has_upper = bool(re.search(r'[A-Z]', password))
-        has_lower = bool(re.search(r'[a-z]', password))
-        has_digit = bool(re.search(r'\d', password))
+        has_upper = bool(re.search(r"[A-Z]", password))
+        has_lower = bool(re.search(r"[a-z]", password))
+        has_digit = bool(re.search(r"\d", password))
         has_special = bool(re.search(r'[!@#$%^&*(),.?":{}|<>~`_+\-=\[\]\\]', password))
 
         variety_score = sum([has_upper, has_lower, has_digit, has_special]) * 7.5
@@ -246,9 +263,9 @@ class PasswordValidator:
             score += 10
 
         # Deduct for patterns
-        if re.search(r'(.)\1{2,}', password):
+        if re.search(r"(.)\1{2,}", password):
             score -= 5
-        if re.search(r'0123|1234|2345|3456|4567|5678|6789|abcd|bcde|cdef', password_lower):
+        if re.search(r"0123|1234|2345|3456|4567|5678|6789|abcd|bcde|cdef", password_lower):
             score -= 5
 
         return max(0, min(100, int(score)))
@@ -259,10 +276,8 @@ password_validator = PasswordValidator()
 
 
 def validate_password(
-    password: str,
-    user_info: dict | None = None,
-    policy: PasswordPolicy | None = None
-) -> Tuple[bool, List[str]]:
+    password: str, user_info: dict | None = None, policy: PasswordPolicy | None = None
+) -> tuple[bool, list[str]]:
     """
     Convenience function to validate a password.
 
@@ -314,8 +329,4 @@ def get_password_strength(password: str) -> dict:
         label = "Very Strong"
         color = "#16a34a"  # Dark Green
 
-    return {
-        "score": score,
-        "label": label,
-        "color": color
-    }
+    return {"score": score, "label": label, "color": color}

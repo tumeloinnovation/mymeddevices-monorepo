@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import {
   Search,
   Plus,
@@ -9,30 +10,33 @@ import {
   Loader2,
   ChevronDown,
   ChevronUp,
-  Check,
   X,
-  MoreVertical,
+  ExternalLink,
+  ShieldCheck,
+  Eye,
+  Trash2,
+  Edit3,
+  Package,
   Filter,
-  Upload,
-  Link as LinkIcon,
-  Image as ImageIcon,
+  RefreshCw,
+  ImageIcon,
+  AlertTriangle,
 } from "lucide-react";
 import { catalogService, Brand } from "@mymeddevices/shared-core";
 import DashboardLayout from "@/components/dashboard-layout";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableHeader,
@@ -42,12 +46,23 @@ import {
   TableCell,
 } from "@/components/ui/table";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-  DropdownMenuSeparator,
-} from "@/components/ui/dropdown-menu";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useForm } from "react-hook-form";
 import { standardSchemaResolver } from "@hookform/resolvers/standard-schema";
@@ -55,12 +70,14 @@ import * as z from "zod";
 
 const brandFormSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
-  slug: z.string()
+  slug: z
+    .string()
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug must contain only lowercase letters, numbers, and hyphens")
-    .optional(),
-  description: z.string().optional(),
+    .optional()
+    .or(z.literal("")),
+  description: z.string().optional().or(z.literal("")),
   logo_url: z.string().max(200000).optional().or(z.literal("")),
-  website_url: z.string().url("Invalid URL").optional().or(z.literal("")),
+  website_url: z.string().url("Invalid URL (e.g. https://example.com)").optional().or(z.literal("")),
   is_active: z.boolean().optional(),
 });
 
@@ -68,24 +85,38 @@ type BrandFormData = z.infer<typeof brandFormSchema>;
 type SortField = "name" | "slug" | "product_count" | "created_at";
 type SortOrder = "asc" | "desc";
 type FilterStatus = "all" | "active" | "inactive";
+type FilterProducts = "all" | "has_products" | "empty";
+type FilterWebsite = "all" | "with_website" | "without_website";
 
 export default function BrandsPage() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [sheetOpen, setSheetOpen] = useState(false);
-  const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
-  const [submitting, setSubmitting] = useState(false);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const pageSize = 50;
+
+  // Modals state
+  const [formDialogOpen, setFormDialogOpen] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [selectedBrandDetails, setSelectedBrandDetails] = useState<Brand | null>(null);
+  const [editingBrand, setEditingBrand] = useState<Brand | null>(null);
+
+  // Delete confirmation modal state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [brandToDelete, setBrandToDelete] = useState<Brand | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Filters & sorting
+  const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<SortField>("name");
   const [sortOrder, setSortOrder] = useState<SortOrder>("asc");
   const [statusFilter, setStatusFilter] = useState<FilterStatus>("all");
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [logoInputMode, setLogoInputMode] = useState<"url" | "upload">("url");
-  const [uploadedLogoUrl, setUploadedLogoUrl] = useState<string>("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [productsFilter, setProductsFilter] = useState<FilterProducts>("all");
+  const [websiteFilter, setWebsiteFilter] = useState<FilterWebsite>("all");
+
+  const [userEditedSlug, setUserEditedSlug] = useState(false);
+  const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
 
   const form = useForm<BrandFormData>({
     resolver: standardSchemaResolver(brandFormSchema),
@@ -99,24 +130,20 @@ export default function BrandsPage() {
     },
   });
 
-  // Auto-generate slug from name
   const nameValue = form.watch("name");
-  const slugValue = form.watch("slug");
-  const [userEditedSlug, setUserEditedSlug] = useState(false);
-  const [apiErrors, setApiErrors] = useState<Record<string, string>>({});
+  const logoUrlValue = form.watch("logo_url");
 
+  // Auto-generate slug from name
   useEffect(() => {
     if (!editingBrand && !userEditedSlug && nameValue) {
-      // Generate slug matching backend pattern: only lowercase letters, numbers, and hyphens
       const generatedSlug = nameValue
         .toLowerCase()
         .trim()
-        .replace(/[^a-z0-9\s-]/g, "")  // Remove invalid characters
-        .replace(/\s+/g, "-")           // Convert spaces to hyphens
-        .replace(/-+/g, "-")            // Remove consecutive hyphens
-        .replace(/^-+|-+$/g, "");       // Remove leading/trailing hyphens
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .replace(/^-+|-+$/g, "");
       form.setValue("slug", generatedSlug);
-      // Clear slug error if it exists
       if (apiErrors.slug) {
         setApiErrors((prev) => {
           const newErrors = { ...prev };
@@ -152,19 +179,31 @@ export default function BrandsPage() {
     fetchBrands();
   }, [page]);
 
-  // Filter and sort brands
+  // Filter & sort brands
   const filteredBrands = useMemo(() => {
     let filtered = brands.filter((brand) => {
       const matchesSearch =
+        !search ||
         brand.name.toLowerCase().includes(search.toLowerCase()) ||
-        brand.slug.toLowerCase().includes(search.toLowerCase());
+        brand.slug.toLowerCase().includes(search.toLowerCase()) ||
+        (brand.description && brand.description.toLowerCase().includes(search.toLowerCase()));
 
       const matchesStatus =
         statusFilter === "all" ||
         (statusFilter === "active" && brand.is_active) ||
         (statusFilter === "inactive" && !brand.is_active);
 
-      return matchesSearch && matchesStatus;
+      const matchesProducts =
+        productsFilter === "all" ||
+        (productsFilter === "has_products" && (brand.product_count ?? 0) > 0) ||
+        (productsFilter === "empty" && (brand.product_count ?? 0) === 0);
+
+      const matchesWebsite =
+        websiteFilter === "all" ||
+        (websiteFilter === "with_website" && !!brand.website_url) ||
+        (websiteFilter === "without_website" && !brand.website_url);
+
+      return matchesSearch && matchesStatus && matchesProducts && matchesWebsite;
     });
 
     // Sort
@@ -182,8 +221,8 @@ export default function BrandsPage() {
           bVal = b.slug.toLowerCase();
           break;
         case "product_count":
-          aVal = a.product_count;
-          bVal = b.product_count;
+          aVal = a.product_count ?? 0;
+          bVal = b.product_count ?? 0;
           break;
         case "created_at":
           aVal = new Date(a.created_at).getTime();
@@ -199,20 +238,22 @@ export default function BrandsPage() {
     });
 
     return filtered;
-  }, [brands, search, statusFilter, sortField, sortOrder]);
+  }, [brands, search, statusFilter, productsFilter, websiteFilter, sortField, sortOrder]);
 
   // Stats
   const stats = useMemo(() => {
     const activeCount = brands.filter((b) => b.is_active).length;
     const inactiveCount = brands.filter((b) => !b.is_active).length;
     const withWebsite = brands.filter((b) => b.website_url).length;
-    const totalProducts = brands.reduce((sum, b) => sum + b.product_count, 0);
+    const emptyCount = brands.filter((b) => (b.product_count ?? 0) === 0).length;
+    const totalProducts = brands.reduce((sum, b) => sum + (b.product_count ?? 0), 0);
 
     return {
       total: brands.length,
       active: activeCount,
       inactive: inactiveCount,
       withWebsite,
+      emptyCount,
       totalProducts,
     };
   }, [brands]);
@@ -226,114 +267,133 @@ export default function BrandsPage() {
     }
   };
 
-  const toggleSelectAll = () => {
-    if (selectedIds.size === filteredBrands.length) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(filteredBrands.map((b) => b.id)));
-    }
-  };
-
-  const toggleSelect = (id: string) => {
-    const newSet = new Set(selectedIds);
-    if (newSet.has(id)) {
-      newSet.delete(id);
-    } else {
-      newSet.add(id);
-    }
-    setSelectedIds(newSet);
-  };
-
   const clearFilters = () => {
     setSearch("");
     setStatusFilter("all");
+    setProductsFilter("all");
+    setWebsiteFilter("all");
   };
 
-  // File upload handler - converts image to base64
-  const handleFileUpload = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file');
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) { // 5MB limit
-      toast.error('Image must be smaller than 5MB');
-      return;
-    }
+  const hasActiveFilters =
+    !!search ||
+    statusFilter !== "all" ||
+    productsFilter !== "all" ||
+    websiteFilter !== "all";
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const result = e.target?.result as string;
-      if (result) {
-        setUploadedLogoUrl(result);
-        form.setValue('logo_url', result);
-      }
-    };
-    reader.onerror = () => {
-      toast.error('Failed to read image file');
-    };
-    reader.readAsDataURL(file);
-  };
+  const handleToggleActiveStatus = async (brand: Brand, newStatus: boolean) => {
+    setBrands((prev) =>
+      prev.map((b) => (b.id === brand.id ? { ...b, is_active: newStatus } : b))
+    );
 
-  const clearUploadedLogo = () => {
-    setUploadedLogoUrl("");
-    form.setValue("logo_url", "");
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
+    try {
+      await catalogService.updateBrand(brand.id, {
+        is_active: newStatus,
+      });
+      toast.success(`Brand marked ${newStatus ? "active" : "draft"}`);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update brand status");
+      fetchBrands();
     }
   };
 
-  const hasActiveFilters = !!search || statusFilter !== "all";
+  const openCreateDialog = () => {
+    setEditingBrand(null);
+    setUserEditedSlug(false);
+    setApiErrors({});
+    form.reset({
+      name: "",
+      slug: "",
+      description: "",
+      logo_url: "",
+      website_url: "",
+      is_active: true,
+    });
+    setFormDialogOpen(true);
+  };
+
+  const openEditDialog = (brand: Brand) => {
+    setEditingBrand(brand);
+    setUserEditedSlug(true);
+    setApiErrors({});
+    form.reset({
+      name: brand.name,
+      slug: brand.slug,
+      description: brand.description || "",
+      logo_url: brand.logo_url || "",
+      website_url: brand.website_url || "",
+      is_active: brand.is_active,
+    });
+    setFormDialogOpen(true);
+  };
+
+  const openDetailsDialog = (brand: Brand) => {
+    setSelectedBrandDetails(brand);
+    setDetailsDialogOpen(true);
+  };
+
+  const promptDeleteBrand = (brand: Brand) => {
+    setBrandToDelete(brand);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!brandToDelete) return;
+    setDeleting(true);
+    try {
+      await catalogService.deleteBrand(brandToDelete.id);
+      toast.success(`Brand "${brandToDelete.name}" removed from catalog`);
+      setDeleteDialogOpen(false);
+      setBrandToDelete(null);
+      fetchBrands();
+    } catch (error: any) {
+      toast.error(error.message || "Deletion failed. Ensure no products are linked to this brand.");
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const onSubmit = async (data: BrandFormData) => {
     setSubmitting(true);
-    setApiErrors({}); // Clear previous API errors
+    setApiErrors({});
     try {
       const payload = {
-        ...data,
+        name: data.name,
         slug: data.slug || undefined,
         description: data.description || undefined,
         logo_url: data.logo_url || undefined,
         website_url: data.website_url || undefined,
+        is_active: data.is_active ?? true,
       };
 
       if (editingBrand) {
         await catalogService.updateBrand(editingBrand.id, payload);
-        toast.success("Manufacturer profile updated");
+        toast.success("Brand profile updated");
       } else {
         await catalogService.createBrand(payload);
         toast.success("New brand added to catalog");
       }
 
-      setSheetOpen(false);
+      setFormDialogOpen(false);
       setEditingBrand(null);
       form.reset();
       fetchBrands();
     } catch (error: any) {
       console.error("Failed to save brand:", error);
-
-      // Try to extract field-level errors from the error message
       const errorMsg = error?.message || String(error);
       const fieldErrors: Record<string, string> = {};
 
-      // Parse common error patterns from backend
       if (errorMsg.includes("slug")) {
-        if (errorMsg.includes("already exists") || errorMsg.includes("duplicate")) {
-          fieldErrors.slug = "This slug is already in use. Please choose a different one.";
-        } else if (errorMsg.includes("pattern") || errorMsg.includes("invalid")) {
-          fieldErrors.slug = "Invalid slug format. Use only lowercase letters, numbers, and hyphens.";
-        } else {
-          fieldErrors.slug = "Slug validation failed";
-        }
+        fieldErrors.slug = errorMsg.includes("already exists")
+          ? "This slug is already in use. Please choose a different one."
+          : "Invalid slug format. Use only lowercase letters, numbers, and hyphens.";
       }
       if (errorMsg.includes("name")) {
-        if (errorMsg.includes("already exists")) {
-          fieldErrors.name = "A brand with this name already exists.";
-        } else {
-          fieldErrors.name = "Name validation failed";
-        }
+        fieldErrors.name = errorMsg.includes("already exists")
+          ? "A brand with this name already exists."
+          : "Name validation failed";
       }
       if (errorMsg.includes("logo_url") || errorMsg.includes("logo")) {
-        fieldErrors.logo_url = "Invalid logo URL or image too large";
+        fieldErrors.logo_url = "Invalid logo URL";
       }
       if (errorMsg.includes("website_url") || errorMsg.includes("website")) {
         fieldErrors.website_url = "Invalid website URL";
@@ -343,180 +403,184 @@ export default function BrandsPage() {
         setApiErrors(fieldErrors);
         toast.error("Please fix the form errors");
       } else {
-        // Generic error - apiClient already shows toast, so just log it
-        console.error("Brand creation error:", errorMsg);
+        toast.error(errorMsg || "Failed to save brand");
       }
     } finally {
       setSubmitting(false);
     }
   };
 
-  const handleEdit = (brand: Brand) => {
-    setEditingBrand(brand);
-    setUserEditedSlug(true);
-    setLogoInputMode("url");
-    setUploadedLogoUrl("");
-    setApiErrors({}); // Clear API errors
-    form.reset({
-      name: brand.name,
-      slug: brand.slug,
-      description: brand.description || "",
-      logo_url: brand.logo_url || "",
-      website_url: brand.website_url || "",
-      is_active: brand.is_active,
-    });
-    // Detect if existing logo is a base64 data URI
-    if (brand.logo_url?.startsWith('data:image/')) {
-      setLogoInputMode("upload");
-      setUploadedLogoUrl(brand.logo_url);
-    }
-    setSheetOpen(true);
-  };
-
-  const handleDelete = async (brand: Brand) => {
-    try {
-      await catalogService.deleteBrand(brand.id);
-      toast.success("Brand removed from catalog");
-      fetchBrands();
-    } catch (error) {
-      console.error("Failed to delete brand:", error);
-      toast.error("Deletion failed. Ensure no products are linked to this brand.");
-    }
-  };
-
-  const openCreateSheet = () => {
-    setEditingBrand(null);
-    setUserEditedSlug(false);
-    setLogoInputMode("url");
-    setUploadedLogoUrl("");
-    setApiErrors({}); // Clear API errors
-    form.reset({
-      name: "",
-      slug: "",
-      description: "",
-      logo_url: "",
-      website_url: "",
-      is_active: true,
-    });
-    setSheetOpen(true);
-  };
-
   return (
     <DashboardLayout>
       {/* Page Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
         <div>
-          <h1 className="text-[20px]/[28px] font-semibold tracking-tight">
-            Brands
-          </h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {total} total · {stats.active} active · {stats.inactive} inactive
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">
+              Medical Device Brands
+            </h1>
+            <Badge variant="outline" className="text-xs font-medium">
+              Manufacturers & OEM
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">
+            Manage certified medical device manufacturers, official logos, and OEM product catalogs.
           </p>
         </div>
-        <Button size="default" onClick={openCreateSheet}>
+        <Button size="default" onClick={openCreateDialog} className="h-9">
           <Plus className="h-4 w-4 mr-1.5" />
           Add Brand
         </Button>
       </div>
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-4 gap-4 mb-6">
+      {/* Metric Stat Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatCard
           label="Total Brands"
           value={stats.total}
-          trend={null}
+          subtext={`${stats.withWebsite} verified websites`}
+          icon={<Building2 className="h-4 w-4 text-primary" />}
         />
         <StatCard
-          label="Active"
+          label="Active Brands"
           value={stats.active}
-          trend={{ value: "+8", positive: true }}
-          trendLabel="vs last month"
+          subtext={
+            stats.total > 0
+              ? `${Math.round((stats.active / stats.total) * 100)}% active in catalog`
+              : "0% active"
+          }
+          icon={<ShieldCheck className="h-4 w-4 text-emerald-600" />}
+          highlight="active"
         />
         <StatCard
-          label="Inactive"
-          value={stats.inactive}
-          trend={null}
-        />
-        <StatCard
-          label="Brand Products"
+          label="Total Products"
           value={stats.totalProducts}
-          trend={{ value: "+12.4%", positive: true }}
-          trendLabel="vs last month"
+          subtext="Manufactured items in catalog"
+          icon={<Package className="h-4 w-4 text-blue-600" />}
+        />
+        <StatCard
+          label="Unassigned Brands"
+          value={stats.emptyCount}
+          subtext="Brands with 0 items"
+          icon={<AlertTriangle className="h-4 w-4 text-amber-500" />}
+          highlight={stats.emptyCount > 0 ? "warning" : undefined}
         />
       </div>
 
-      {/* Filter Bar */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Filter brands..."
-            className="h-8 pl-8 text-sm"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+      {/* Enhanced Search & Filter Bar */}
+      <div className="bg-card p-3.5 rounded-xl border space-y-3 mb-4 shadow-2xs">
+        <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+          {/* Search Input */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search by brand name, slug, keywords..."
+              className="h-9 pl-9 pr-8 text-sm bg-background"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            {search && (
+              <button
+                onClick={() => setSearch("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
 
-        {/* Status Filter */}
-        <div className="flex items-center gap-1">
-          <FilterChip
-            active={statusFilter === "all"}
-            onClick={() => setStatusFilter("all")}
-          >
-            All
-          </FilterChip>
-          <FilterChip
-            active={statusFilter === "active"}
-            onClick={() => setStatusFilter("active")}
-          >
-            Active
-          </FilterChip>
-          <FilterChip
-            active={statusFilter === "inactive"}
-            onClick={() => setStatusFilter("inactive")}
-          >
-            Inactive
-          </FilterChip>
-        </div>
-
-        {hasActiveFilters && (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 ml-auto"
-            onClick={clearFilters}
-          >
-            <X className="h-3 w-3 mr-1" />
-            Clear filters
-          </Button>
-        )}
-      </div>
-
-      {/* Bulk Actions Bar */}
-      {selectedIds.size > 0 && (
-        <div className="flex items-center justify-between px-4 py-2 mb-2 bg-secondary/30 border border-border rounded-lg">
-          <span className="text-sm text-foreground">
-            {selectedIds.size} brand{selectedIds.size !== 1 ? "s" : ""} selected
-          </span>
+          {/* Select Filters */}
           <div className="flex items-center gap-2">
-            <Button size="sm" variant="secondary">
-              Activate
-            </Button>
-            <Button size="sm" variant="destructive">
-              Deactivate
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => setSelectedIds(new Set())}
+            {/* Inventory Status Selector */}
+            <Select
+              value={productsFilter}
+              onValueChange={(val) => setProductsFilter(val as FilterProducts)}
             >
-              Done
-            </Button>
+              <SelectTrigger className="h-9 text-xs w-[150px] bg-background">
+                <SelectValue placeholder="All Inventory" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">
+                  All Products
+                </SelectItem>
+                <SelectItem value="has_products" className="text-xs">
+                  Has Products (&gt;0)
+                </SelectItem>
+                <SelectItem value="empty" className="text-xs">
+                  Unassigned (0)
+                </SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Website Status Selector */}
+            <Select
+              value={websiteFilter}
+              onValueChange={(val) => setWebsiteFilter(val as FilterWebsite)}
+            >
+              <SelectTrigger className="h-9 text-xs w-[150px] bg-background">
+                <SelectValue placeholder="All Websites" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" className="text-xs">
+                  All Websites
+                </SelectItem>
+                <SelectItem value="with_website" className="text-xs">
+                  Has Website Link
+                </SelectItem>
+                <SelectItem value="without_website" className="text-xs">
+                  No Website
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
-      )}
 
-      {/* Data Table */}
+        {/* Secondary Filter Chips Row */}
+        <div className="flex items-center justify-between pt-2 border-t text-xs">
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground font-medium flex items-center gap-1">
+              <Filter className="h-3.5 w-3.5" /> Status:
+            </span>
+            <FilterChip
+              active={statusFilter === "all"}
+              onClick={() => setStatusFilter("all")}
+            >
+              All ({stats.total})
+            </FilterChip>
+            <FilterChip
+              active={statusFilter === "active"}
+              onClick={() => setStatusFilter("active")}
+            >
+              Active ({stats.active})
+            </FilterChip>
+            <FilterChip
+              active={statusFilter === "inactive"}
+              onClick={() => setStatusFilter("inactive")}
+            >
+              Drafts ({stats.inactive})
+            </FilterChip>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {hasActiveFilters && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs text-muted-foreground hover:text-foreground px-2"
+                onClick={clearFilters}
+              >
+                <RefreshCw className="h-3 w-3 mr-1" />
+                Reset filters
+              </Button>
+            )}
+            <span className="text-muted-foreground font-medium">
+              Showing {filteredBrands.length} of {total} brands
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Brands Table */}
       {loading ? (
         <TableSkeleton />
       ) : filteredBrands.length === 0 ? (
@@ -527,155 +591,229 @@ export default function BrandsPage() {
           noun="brands"
         />
       ) : (
-        <>
-          <div className="border rounded-lg overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="h-[34px] bg-muted/30">
-                  <TableHead className="h-[34px] w-10">
-                    <Checkbox
-                      checked={selectedIds.size === filteredBrands.length && filteredBrands.length > 0}
-                      onCheckedChange={toggleSelectAll}
-                      aria-label="Select all"
-                    />
-                  </TableHead>
-                  <TableHead className="h-[34px]">
-                    <SortButton
-                      field="name"
-                      label="Name"
-                      active={sortField === "name"}
-                      order={sortOrder}
-                      onSort={handleSort}
-                    />
-                  </TableHead>
-                  <TableHead className="h-[34px]">
-                    <SortButton
-                      field="slug"
-                      label="Slug"
-                      active={sortField === "slug"}
-                      order={sortOrder}
-                      onSort={handleSort}
-                    />
-                  </TableHead>
-                  <TableHead className="h-[34px] text-right">
-                    <SortButton
-                      field="product_count"
-                      label="Products"
-                      active={sortField === "product_count"}
-                      order={sortOrder}
-                      onSort={handleSort}
-                    />
-                  </TableHead>
-                  <TableHead className="h-[34px] text-center">
-                    Status
-                  </TableHead>
-                  <TableHead className="h-[34px] w-10" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredBrands.map((brand) => (
-                  <TableRow
-                    key={brand.id}
-                    className="h-[36px] hover:bg-muted/30 data-[state=selected]:bg-primary/10"
-                    data-state={selectedIds.has(brand.id) ? "selected" : undefined}
-                  >
-                    <TableCell className="p-2">
-                      <Checkbox
-                        checked={selectedIds.has(brand.id)}
-                        onCheckedChange={() => toggleSelect(brand.id)}
-                        aria-label={`Select ${brand.name}`}
-                      />
-                    </TableCell>
-                    <TableCell className="p-2">
-                      <div className="flex items-center gap-2">
-                        <BrandLogo brand={brand} />
-                        <span className="text-sm font-medium text-foreground">
+        <div className="border rounded-xl overflow-hidden bg-card shadow-2xs">
+          <Table>
+            <TableHeader>
+              <TableRow className="h-10 bg-muted/40 border-b">
+                <TableHead className="h-10">
+                  <SortButton
+                    field="name"
+                    label="Manufacturer & Route"
+                    active={sortField === "name"}
+                    order={sortOrder}
+                    onSort={handleSort}
+                  />
+                </TableHead>
+                <TableHead className="h-10 text-center w-36">
+                  Official Website
+                </TableHead>
+                <TableHead className="h-10 text-center w-28">
+                  <SortButton
+                    field="product_count"
+                    label="Products"
+                    active={sortField === "product_count"}
+                    order={sortOrder}
+                    onSort={handleSort}
+                  />
+                </TableHead>
+                <TableHead className="h-10 text-center w-24">
+                  Status
+                </TableHead>
+                <TableHead className="h-10 text-right w-36 pr-3">
+                  Quick Actions
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody className="divide-y divide-border">
+              {filteredBrands.map((brand) => (
+                <TableRow
+                  key={brand.id}
+                  className={`min-h-[56px] hover:bg-muted/40 transition-colors group ${
+                    !brand.is_active ? "opacity-60 bg-muted/10" : ""
+                  }`}
+                >
+                  {/* Brand Logo & Name (Top: Title, Bottom: Route) */}
+                  <TableCell className="py-2.5 px-4">
+                    <div className="flex items-center gap-3">
+                      {/* Logo Thumbnail */}
+                      <BrandLogoRenderer logoUrl={brand.logo_url} brandName={brand.name} />
+
+                      {/* Title (Top) & Route (Bottom) */}
+                      <div className="flex flex-col justify-center min-w-0">
+                        <button
+                          onClick={() => openDetailsDialog(brand)}
+                          className="text-sm font-semibold text-foreground hover:text-primary transition-colors truncate text-left"
+                        >
                           {brand.name}
+                        </button>
+                        <span className="text-xs text-muted-foreground font-mono leading-tight truncate mt-0.5 opacity-80">
+                          /brand/{brand.slug}
                         </span>
                       </div>
-                    </TableCell>
-                    <TableCell className="p-2">
-                      <span className="text-sm text-muted-foreground font-mono">
-                        {brand.slug}
-                      </span>
-                    </TableCell>
-                    <TableCell className="p-2 text-right">
-                      <span className="text-sm text-foreground tabular-nums">
-                        {brand.product_count.toLocaleString()}
-                      </span>
-                    </TableCell>
-                    <TableCell className="p-2 text-center">
-                      <StatusBadge isActive={brand.is_active} />
-                    </TableCell>
-                    <TableCell className="p-2">
-                      <RowActions brand={brand} onEdit={handleEdit} onDelete={handleDelete} />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                    </div>
+                  </TableCell>
+
+                  {/* Official Website */}
+                  <TableCell className="py-2.5 px-4 text-center">
+                    {brand.website_url ? (
+                      <a
+                        href={brand.website_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium text-muted-foreground hover:text-primary hover:bg-muted transition-colors max-w-[140px] truncate"
+                        title={brand.website_url}
+                      >
+                        <Globe className="h-3.5 w-3.5 shrink-0" />
+                        <span className="truncate">
+                          {brand.website_url.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}
+                        </span>
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground/60">—</span>
+                    )}
+                  </TableCell>
+
+                  {/* Products Count & Direct Link */}
+                  <TableCell className="py-2.5 px-4 text-center">
+                    <Link
+                      href={`/dashboard/catalog/products?search=${encodeURIComponent(brand.name)}`}
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold transition-colors ${
+                        brand.product_count > 0
+                          ? "bg-primary/10 text-primary hover:bg-primary/20"
+                          : "bg-muted text-muted-foreground hover:bg-muted/80"
+                      }`}
+                      title={`View ${brand.product_count} products for ${brand.name}`}
+                    >
+                      <Package className="h-3 w-3" />
+                      <span className="tabular-nums">{brand.product_count ?? 0}</span>
+                      <ExternalLink className="h-2.5 w-2.5 opacity-60" />
+                    </Link>
+                  </TableCell>
+
+                  {/* Inline Status Toggle */}
+                  <TableCell className="py-2.5 px-4 text-center">
+                    <div className="flex items-center justify-center">
+                      <Switch
+                        size="sm"
+                        checked={brand.is_active}
+                        onCheckedChange={(checked) => handleToggleActiveStatus(brand, checked)}
+                        title={`Click to mark ${brand.is_active ? "inactive" : "active"}`}
+                      />
+                    </div>
+                  </TableCell>
+
+                  {/* Direct Visible Action Icons */}
+                  <TableCell className="py-2.5 px-3 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {/* View Details */}
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
+                        title="View Details"
+                        onClick={() => openDetailsDialog(brand)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+
+                      {/* Edit */}
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground hover:bg-muted"
+                        title="Edit Brand"
+                        onClick={() => openEditDialog(brand)}
+                      >
+                        <Edit3 className="h-4 w-4" />
+                      </Button>
+
+                      {/* Delete */}
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                        title="Delete Brand"
+                        onClick={() => promptDeleteBrand(brand)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
 
           {/* Pagination */}
           {total > pageSize && (
-            <div className="flex items-center justify-center gap-2 mt-4">
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page === 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="h-8"
-              >
-                Previous
-              </Button>
-              <span className="text-sm text-muted-foreground tabular-nums">
-                Page {page} of {Math.ceil(total / pageSize)}
+            <div className="flex items-center justify-between px-6 py-3 border-t bg-muted/20 text-xs">
+              <span className="text-muted-foreground tabular-nums">
+                Showing {(page - 1) * pageSize + 1} to{" "}
+                {Math.min(page * pageSize, total)} of {total} brands
               </span>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={page >= Math.ceil(total / pageSize)}
-                onClick={() => setPage((p) => p + 1)}
-                className="h-8"
-              >
-                Next
-              </Button>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* Create/Edit Sheet */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent className="w-full sm:max-w-[480px] p-0 gap-0">
-          <form onSubmit={form.handleSubmit(onSubmit)} className="h-full flex flex-col">
-            {/* Header */}
-            <div className="p-6 border-b">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                  <Building2 className="h-5 w-5" />
-                </div>
-                <div>
-                  <SheetTitle className="text-lg font-semibold">
-                    {editingBrand ? "Edit Brand" : "Add Brand"}
-                  </SheetTitle>
-                  <SheetDescription className="text-xs">
-                    {editingBrand ? "Update brand details" : "Add a new brand to your catalog"}
-                  </SheetDescription>
-                </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page === 1}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  className="h-8"
+                >
+                  Previous
+                </Button>
+                <span className="text-muted-foreground tabular-nums">
+                  Page {page} of {Math.ceil(total / pageSize)}
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={page >= Math.ceil(total / pageSize)}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="h-8"
+                >
+                  Next
+                </Button>
               </div>
             </div>
+          )}
+        </div>
+      )}
 
-            {/* Form */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Name */}
+      {/* Create / Edit Brand Modal Dialog */}
+      <Dialog open={formDialogOpen} onOpenChange={setFormDialogOpen}>
+        <DialogContent className="sm:max-w-[560px] p-0 overflow-hidden flex flex-col max-h-[85vh] shadow-xl">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col h-full max-h-[85vh]">
+            {/* Header */}
+            <DialogHeader className="p-6 pb-4 border-b bg-muted/20 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0">
+                  {editingBrand ? <Edit3 className="h-5 w-5" /> : <Building2 className="h-5 w-5" />}
+                </div>
+                <div>
+                  <DialogTitle className="text-lg font-semibold text-foreground">
+                    {editingBrand ? "Edit Brand Profile" : "Add Brand Manufacturer"}
+                  </DialogTitle>
+                  <DialogDescription className="text-xs mt-0.5 text-muted-foreground">
+                    {editingBrand
+                      ? `Update manufacturer profile and logo for ${editingBrand.name}`
+                      : "Register a certified medical device OEM manufacturer"}
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            {/* Scrollable Form Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {/* Brand Name */}
               <div className="space-y-1.5">
-                <Label htmlFor="name" className="text-sm">Name <span className="text-destructive">*</span></Label>
+                <Label htmlFor="name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Manufacturer Name <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   id="name"
                   {...form.register("name")}
-                  placeholder="e.g. Medtronic"
-                  className={form.formState.errors.name || apiErrors.name ? "border-destructive" : ""}
+                  placeholder="e.g. Medtronic, Philips Healthcare, GE Healthcare"
+                  className={`h-10 text-sm ${form.formState.errors.name || apiErrors.name ? "border-destructive" : ""}`}
                 />
                 {form.formState.errors.name && (
                   <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
@@ -687,25 +825,30 @@ export default function BrandsPage() {
 
               {/* Slug */}
               <div className="space-y-1.5">
-                <Label htmlFor="slug" className="text-sm">Slug</Label>
-                <Input
-                  id="slug"
-                  {...form.register("slug")}
-                  placeholder="medtronic"
-                  className={`font-mono text-sm ${form.formState.errors.slug || apiErrors.slug ? "border-destructive" : ""}`}
-                  onChange={() => {
-                    setUserEditedSlug(true);
-                    // Clear slug API error when user edits it
-                    if (apiErrors.slug) {
-                      setApiErrors((prev) => {
-                        const newErrors = { ...prev };
-                        delete newErrors.slug;
-                        return newErrors;
-                      });
-                    }
-                  }}
-                />
-                <p className="text-xs text-muted-foreground">Auto-generated from name (edit to customize)</p>
+                <Label htmlFor="slug" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  URL Slug <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground font-mono">
+                    /brand/
+                  </span>
+                  <Input
+                    id="slug"
+                    {...form.register("slug")}
+                    placeholder="medtronic"
+                    className={`h-10 pl-20 font-mono text-sm ${form.formState.errors.slug || apiErrors.slug ? "border-destructive" : ""}`}
+                    onChange={() => {
+                      setUserEditedSlug(true);
+                      if (apiErrors.slug) {
+                        setApiErrors((prev) => {
+                          const newErrors = { ...prev };
+                          delete newErrors.slug;
+                          return newErrors;
+                        });
+                      }
+                    }}
+                  />
+                </div>
                 {form.formState.errors.slug && (
                   <p className="text-xs text-destructive">{form.formState.errors.slug.message}</p>
                 )}
@@ -714,206 +857,293 @@ export default function BrandsPage() {
                 )}
               </div>
 
+              {/* Logo URL */}
+              <div className="space-y-1.5">
+                <Label htmlFor="logo_url" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Brand Logo URL
+                </Label>
+                <div className="flex items-center gap-2.5">
+                  <div className="h-10 w-10 rounded-lg border bg-muted/40 flex items-center justify-center overflow-hidden shrink-0">
+                    <BrandLogoRenderer
+                      logoUrl={logoUrlValue}
+                      brandName={nameValue || "B"}
+                      className="h-8 w-8"
+                    />
+                  </div>
+                  <Input
+                    id="logo_url"
+                    {...form.register("logo_url")}
+                    placeholder="https://example.com/logo.png"
+                    className={`h-10 text-xs font-mono flex-1 ${apiErrors.logo_url ? "border-destructive" : ""}`}
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Direct URL to official PNG or SVG manufacturer logo.
+                </p>
+                {apiErrors.logo_url && (
+                  <p className="text-xs text-destructive">{apiErrors.logo_url}</p>
+                )}
+              </div>
+
+              {/* Official Website */}
+              <div className="space-y-1.5">
+                <Label htmlFor="website_url" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Official Website
+                </Label>
+                <div className="relative">
+                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="website_url"
+                    {...form.register("website_url")}
+                    placeholder="https://www.medtronic.com"
+                    className={`h-10 pl-9 text-sm font-mono ${form.formState.errors.website_url || apiErrors.website_url ? "border-destructive" : ""}`}
+                  />
+                </div>
+                {form.formState.errors.website_url && (
+                  <p className="text-xs text-destructive">{form.formState.errors.website_url.message}</p>
+                )}
+                {apiErrors.website_url && !form.formState.errors.website_url && (
+                  <p className="text-xs text-destructive">{apiErrors.website_url}</p>
+                )}
+              </div>
+
               {/* Description */}
               <div className="space-y-1.5">
-                <Label htmlFor="description" className="text-sm">Description</Label>
+                <Label htmlFor="description" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Description & Specialties
+                </Label>
                 <Textarea
                   id="description"
                   {...form.register("description")}
-                  placeholder="Brief overview of the brand..."
+                  placeholder="Overview of manufacturer certifications, clinical specialties, and warranties..."
                   rows={3}
-                  className="resize-none"
+                  className="resize-none text-sm"
                 />
               </div>
 
-              {/* URLs */}
-              <div className="space-y-1.5">
-                <Label className="text-sm text-muted-foreground font-medium">Brand Logo</Label>
+              {/* Active Status Toggle */}
+              <div className="flex items-center justify-between p-3.5 bg-muted/20 border rounded-xl">
+                <div>
+                  <Label htmlFor="is_active" className="text-sm font-medium cursor-pointer">
+                    Active Catalog Status
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Active brands are selectable in vendor product forms and visible on storefront.
+                  </p>
+                </div>
+                <Switch
+                  id="is_active"
+                  checked={form.watch("is_active")}
+                  onCheckedChange={(checked) => form.setValue("is_active", checked as boolean)}
+                />
+              </div>
+            </div>
 
-                {/* Logo Input Mode Toggle */}
-                <div className="flex items-center gap-2 mb-3">
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={logoInputMode === "url" ? "default" : "outline"}
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      setLogoInputMode("url");
-                      setUploadedLogoUrl("");
-                    }}
-                  >
-                    <LinkIcon className="h-3 w-3 mr-1" />
-                    From URL
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={logoInputMode === "upload" ? "default" : "outline"}
-                    className="h-7 text-xs"
-                    onClick={() => {
-                      setLogoInputMode("upload");
-                      form.setValue("logo_url", uploadedLogoUrl || "");
-                    }}
-                  >
-                    <Upload className="h-3 w-3 mr-1" />
-                    Upload Image
-                  </Button>
+            {/* Modal Footer with generous padding */}
+            <DialogFooter className="p-4 sm:p-5 border-t bg-muted/15 shrink-0 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="h-2 w-2 rounded-full bg-primary inline-block" />
+                <span>{editingBrand ? "Editing brand" : "New manufacturer"}</span>
+              </div>
+              <div className="flex items-center gap-2.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setFormDialogOpen(false)}
+                  disabled={submitting}
+                  className="h-9 px-4"
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={submitting} className="h-9 px-5">
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {editingBrand ? "Save Changes" : "Create Brand"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Details Inspection Modal Dialog */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="sm:max-w-[520px] p-0 flex flex-col overflow-hidden max-h-[85vh] shadow-xl">
+          {selectedBrandDetails && (
+            <div className="h-full flex flex-col max-h-[85vh]">
+              <DialogHeader className="p-6 pb-4 border-b bg-muted/20 shrink-0">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <BrandLogoRenderer
+                      logoUrl={selectedBrandDetails.logo_url}
+                      brandName={selectedBrandDetails.name}
+                      className="h-12 w-12 text-lg"
+                    />
+                    <div>
+                      <DialogTitle className="text-lg font-bold text-foreground">
+                        {selectedBrandDetails.name}
+                      </DialogTitle>
+                      <p className="text-xs font-mono text-muted-foreground mt-0.5">
+                        /brand/{selectedBrandDetails.slug}
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant={selectedBrandDetails.is_active ? "default" : "secondary"}>
+                    {selectedBrandDetails.is_active ? "Active" : "Draft"}
+                  </Badge>
+                </div>
+              </DialogHeader>
+
+              <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                {/* Description */}
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1.5">
+                    Manufacturer Overview
+                  </h4>
+                  <p className="text-sm text-foreground bg-muted/20 p-3.5 rounded-xl border">
+                    {selectedBrandDetails.description || "No description provided for this brand."}
+                  </p>
                 </div>
 
-                <div className="space-y-3">
-                  {/* URL Input Mode */}
-                  {logoInputMode === "url" && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="logo_url" className="text-xs text-muted-foreground">Logo URL</Label>
-                      <Input
-                        id="logo_url"
-                        {...form.register("logo_url")}
-                        placeholder="https://example.com/logo.png"
-                        className={`text-sm font-mono ${apiErrors.logo_url ? "border-destructive" : ""}`}
-                        onChange={(e) => {
-                          form.setValue("logo_url", e.target.value);
-                          setUploadedLogoUrl("");
-                          // Clear logo API error when user edits it
-                          if (apiErrors.logo_url) {
-                            setApiErrors((prev) => {
-                              const newErrors = { ...prev };
-                              delete newErrors.logo_url;
-                              return newErrors;
-                            });
-                          }
-                        }}
-                      />
-                      {apiErrors.logo_url && (
-                        <p className="text-xs text-destructive">{apiErrors.logo_url}</p>
-                      )}
-                    </div>
-                  )}
+                {/* Quick Info Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 bg-card border rounded-xl">
+                    <span className="text-[11px] font-medium text-muted-foreground block">
+                      Total Products
+                    </span>
+                    <span className="text-xl font-bold text-foreground mt-0.5 block">
+                      {selectedBrandDetails.product_count ?? 0}
+                    </span>
+                    <Link
+                      href={`/dashboard/catalog/products?search=${encodeURIComponent(selectedBrandDetails.name)}`}
+                      className="text-[11px] text-primary hover:underline inline-flex items-center gap-1 mt-1 font-medium"
+                    >
+                      View brand products <ExternalLink className="h-3 w-3" />
+                    </Link>
+                  </div>
 
-                  {/* File Upload Mode */}
-                  {logoInputMode === "upload" && (
-                    <div className="space-y-1.5">
-                      <Label htmlFor="logo_upload" className="text-xs text-muted-foreground">Upload Image</Label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          ref={fileInputRef}
-                          id="logo_upload"
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleFileUpload(file);
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          className="h-8"
-                          onClick={() => fileInputRef.current?.click()}
-                        >
-                          <ImageIcon className="h-3.5 w-3.5 mr-1.5" />
-                          Choose Image
-                        </Button>
-                        <span className="text-xs text-muted-foreground">
-                          {uploadedLogoUrl ? "Image selected" : "PNG, JPG, GIF, WebP up to 5MB"}
-                        </span>
-                        {uploadedLogoUrl && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="h-8 text-xs"
-                            onClick={clearUploadedLogo}
-                          >
-                            Clear
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Logo Preview */}
-                  {(form.watch("logo_url") || uploadedLogoUrl) && (
-                    <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 border">
-                      <div className="h-12 w-12 rounded bg-background flex items-center justify-center overflow-hidden">
-                        <img
-                          src={form.watch("logo_url") || uploadedLogoUrl}
-                          alt="Logo preview"
-                          className="h-full w-full object-contain p-1"
-                          onError={(e) => {
-                            const target = e.target as HTMLImageElement;
-                            target.style.display = "none";
-                            target.parentElement!.innerHTML = `<span class="text-xs text-muted-foreground">Invalid</span>`;
-                          }}
-                        />
-                      </div>
-                      <span className="text-xs text-muted-foreground">Preview</span>
-                    </div>
-                  )}
-
-                  <div className="space-y-1.5">
-                    <Label htmlFor="website_url" className="text-xs text-muted-foreground">Website</Label>
-                    <Input
-                      id="website_url"
-                      {...form.register("website_url")}
-                      placeholder="https://example.com"
-                      className={`text-sm font-mono ${apiErrors.website_url ? "border-destructive" : ""}`}
-                      onChange={() => {
-                        // Clear website API error when user edits it
-                        if (apiErrors.website_url) {
-                          setApiErrors((prev) => {
-                            const newErrors = { ...prev };
-                            delete newErrors.website_url;
-                            return newErrors;
-                          });
-                        }
-                      }}
-                    />
-                    {apiErrors.website_url && (
-                      <p className="text-xs text-destructive">{apiErrors.website_url}</p>
+                  <div className="p-3 bg-card border rounded-xl">
+                    <span className="text-[11px] font-medium text-muted-foreground block">
+                      Official Website
+                    </span>
+                    {selectedBrandDetails.website_url ? (
+                      <a
+                        href={selectedBrandDetails.website_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-primary hover:underline inline-flex items-center gap-1 mt-1.5 font-medium truncate block"
+                      >
+                        Visit Website <Globe className="h-3 w-3 shrink-0" />
+                      </a>
+                    ) : (
+                      <span className="text-xs text-muted-foreground block mt-1.5">
+                        Not configured
+                      </span>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* Status */}
-              <div className="flex items-center gap-3 pt-2">
-                <Checkbox
-                  id="is_active"
-                  checked={form.watch("is_active")}
-                  onCheckedChange={(checked) => form.setValue("is_active", checked as boolean)}
-                />
-                <div>
-                  <Label htmlFor="is_active" className="text-sm cursor-pointer">Active Status</Label>
-                  <p className="text-xs text-muted-foreground">Visible in storefront filters</p>
-                </div>
-              </div>
+              {/* Modal Footer */}
+              <DialogFooter className="p-4 sm:p-5 border-t bg-muted/15 shrink-0 flex items-center justify-between gap-3">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setDetailsDialogOpen(false);
+                    openEditDialog(selectedBrandDetails);
+                  }}
+                  className="h-9"
+                >
+                  <Edit3 className="h-3.5 w-3.5 mr-1.5" />
+                  Edit Brand
+                </Button>
+                <Button variant="default" size="sm" asChild className="h-9">
+                  <Link href={`/dashboard/catalog/products?search=${encodeURIComponent(selectedBrandDetails.name)}`}>
+                    View in Products
+                    <ExternalLink className="h-3.5 w-3.5 ml-1.5" />
+                  </Link>
+                </Button>
+              </DialogFooter>
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
-            {/* Footer */}
-            <div className="p-5 border-t flex items-center justify-end gap-3 bg-muted/20">
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setSheetOpen(false);
-                  setEditingBrand(null);
-                  form.reset();
-                }}
-                className="h-9 px-4"
-              >
-                Cancel
-              </Button>
-              <Button type="submit" disabled={submitting} className="h-9 px-5">
-                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {editingBrand ? "Save Changes" : "Create Brand"}
-              </Button>
+      {/* Delete Confirmation Alert Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <div className="flex items-center gap-3 text-destructive mb-2">
+              <div className="h-10 w-10 rounded-full bg-destructive/10 flex items-center justify-center">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <AlertDialogTitle className="text-lg">
+                Delete Brand?
+              </AlertDialogTitle>
             </div>
-          </form>
-        </SheetContent>
-      </Sheet>
+            <AlertDialogDescription className="text-sm space-y-2">
+              <p>
+                Are you sure you want to delete brand{" "}
+                <strong className="text-foreground font-semibold">
+                  &ldquo;{brandToDelete?.name}&rdquo;
+                </strong>
+                ?
+              </p>
+              {brandToDelete && (brandToDelete.product_count ?? 0) > 0 && (
+                <div className="p-3 bg-destructive/10 text-destructive text-xs rounded-lg border border-destructive/20 font-medium">
+                  ⚠️ Warning: There are {brandToDelete.product_count} product(s) associated with this brand.
+                  You must reassign products before deleting.
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="mt-4">
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmDelete}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Delete Brand
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DashboardLayout>
+  );
+}
+
+// Brand Logo Renderer Component
+function BrandLogoRenderer({
+  logoUrl,
+  brandName,
+  className = "h-8 w-8 text-xs",
+}: {
+  logoUrl?: string | null;
+  brandName: string;
+  className?: string;
+}) {
+  if (logoUrl) {
+    return (
+      <div className={`${className} rounded-lg bg-muted/40 border flex items-center justify-center overflow-hidden shrink-0`}>
+        <img
+          src={logoUrl}
+          alt={brandName}
+          className="h-full w-full object-contain p-1"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+            e.currentTarget.parentElement!.innerHTML = `<span class="font-bold text-muted-foreground">${brandName.charAt(0).toUpperCase()}</span>`;
+          }}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`${className} rounded-lg bg-primary/10 text-primary border border-primary/20 flex items-center justify-center font-bold shrink-0`}>
+      {brandName ? brandName.charAt(0).toUpperCase() : "B"}
+    </div>
   );
 }
 
@@ -921,34 +1151,38 @@ export default function BrandsPage() {
 function StatCard({
   label,
   value,
-  trend,
-  trendLabel,
+  subtext,
+  icon,
+  highlight,
 }: {
   label: string;
   value: number;
-  trend?: { value: string; positive: boolean } | null;
-  trendLabel?: string;
+  subtext?: string;
+  icon?: React.ReactNode;
+  highlight?: "active" | "warning";
 }) {
   return (
-    <div className="px-4 py-3 bg-card border rounded-lg">
-      <div className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">
-        {label}
+    <div className="p-4 bg-card border rounded-xl shadow-2xs relative overflow-hidden">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+          {label}
+        </span>
+        {icon && <div className="p-1.5 rounded-lg bg-muted/50">{icon}</div>}
       </div>
-      <div className="text-[24px] font-semibold tabular-nums tracking-tight">
+      <div className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
         {value.toLocaleString()}
       </div>
-      {trend && (
-        <div className="flex items-center gap-1 mt-1">
-          <span
-            className={`text-xs font-medium tabular-nums ${
-              trend.positive ? "text-success" : "text-destructive"
-            }`}
-          >
-            {trend.value}
-          </span>
-          {trendLabel && (
-            <span className="text-xs text-muted-foreground">{trendLabel}</span>
-          )}
+      {subtext && (
+        <div
+          className={`text-xs mt-1 font-medium ${
+            highlight === "warning"
+              ? "text-amber-600 dark:text-amber-400"
+              : highlight === "active"
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-muted-foreground"
+          }`}
+        >
+          {subtext}
         </div>
       )}
     </div>
@@ -968,10 +1202,10 @@ function FilterChip({
   return (
     <button
       onClick={onClick}
-      className={`h-7 px-2.5 rounded-md text-xs font-medium transition-colors ${
+      className={`h-6 px-2.5 rounded-full text-xs font-medium transition-all ${
         active
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted/50 text-muted-foreground hover:bg-muted"
+          ? "bg-primary text-primary-foreground font-semibold shadow-xs"
+          : "border border-border/80 bg-background text-muted-foreground hover:bg-muted hover:text-foreground"
       }`}
     >
       {children}
@@ -996,15 +1230,15 @@ function SortButton({
   return (
     <button
       onClick={() => onSort(field)}
-      className="flex items-center gap-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
+      className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
     >
       {label}
       {active && (
         <span className="text-foreground">
           {order === "asc" ? (
-            <ChevronUp className="h-3 w-3" />
+            <ChevronUp className="h-3.5 w-3.5" />
           ) : (
-            <ChevronDown className="h-3 w-3" />
+            <ChevronDown className="h-3.5 w-3.5" />
           )}
         </span>
       )}
@@ -1012,105 +1246,23 @@ function SortButton({
   );
 }
 
-// Brand Logo Component
-function BrandLogo({ brand }: { brand: Brand }) {
-  return (
-    <div className="h-5 w-5 rounded bg-muted flex items-center justify-center overflow-hidden shrink-0">
-      {brand.logo_url ? (
-        <img
-          src={brand.logo_url}
-          alt={brand.name}
-          className="h-full w-full object-contain p-0.5"
-          onError={(e) => {
-            e.currentTarget.style.display = "none";
-            (e.currentTarget.parentElement!.innerHTML = `<span class="text-[10px] font-medium">${brand.name.charAt(0)}</span>`);
-          }}
-        />
-      ) : (
-        <span className="text-[10px] font-medium">{brand.name.charAt(0)}</span>
-      )}
-    </div>
-  );
-}
-
-// Status Badge Component
-function StatusBadge({ isActive }: { isActive: boolean }) {
-  return (
-    <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-        isActive
-          ? "bg-success/15 text-success border border-success/20"
-          : "bg-muted text-muted-foreground"
-      }`}
-    >
-      {isActive ? (
-        <>
-          <Check className="h-2.5 w-2.5" />
-          Active
-        </>
-      ) : (
-        <>
-          <X className="h-2.5 w-2.5" />
-          Inactive
-        </>
-      )}
-    </span>
-  );
-}
-
-// Row Actions Component
-function RowActions({
-  brand,
-  onEdit,
-  onDelete,
-}: {
-  brand: Brand;
-  onEdit: (brand: Brand) => void;
-  onDelete: (brand: Brand) => void;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button size="icon-sm" variant="ghost" className="h-7 w-7">
-          <MoreVertical className="h-3.5 w-3.5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
-        <DropdownMenuItem onClick={() => onEdit(brand)}>Edit brand</DropdownMenuItem>
-        {brand.website_url && (
-          <>
-            <DropdownMenuItem asChild>
-              <a
-                href={brand.website_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 cursor-pointer"
-              >
-                <Globe className="h-3.5 w-3.5" />
-                Visit website
-              </a>
-            </DropdownMenuItem>
-          </>
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-destructive" onClick={() => onDelete(brand)}>
-          Delete brand
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
 // Table Skeleton Component
 function TableSkeleton() {
   return (
-    <div className="border rounded-lg overflow-hidden">
-      <div className="h-[34px] bg-muted/30 border-b" />
-      {Array.from({ length: 10 }).map((_, i) => (
+    <div className="border rounded-xl overflow-hidden bg-card">
+      <div className="h-10 bg-muted/40 border-b" />
+      {Array.from({ length: 8 }).map((_, i) => (
         <div
           key={i}
-          className="h-[36px] border-b last:border-0 animate-pulse bg-muted/20"
-        />
+          className="h-14 border-b last:border-0 flex items-center px-4 animate-pulse gap-3"
+        >
+          <div className="h-8 w-8 rounded-lg bg-muted" />
+          <div className="space-y-1.5 flex-1">
+            <div className="h-3.5 w-40 bg-muted rounded" />
+            <div className="h-3 w-28 bg-muted rounded" />
+          </div>
+          <div className="h-6 w-24 bg-muted rounded ml-auto" />
+        </div>
       ))}
     </div>
   );
@@ -1129,20 +1281,20 @@ function EmptyState({
   noun: string;
 }) {
   return (
-    <div className="border rounded-lg p-12 text-center">
-      <div className="text-muted-foreground/30 mx-auto mb-3 flex justify-center">
+    <div className="border rounded-xl p-12 text-center bg-card">
+      <div className="text-muted-foreground/40 mx-auto mb-3 flex justify-center">
         {icon}
       </div>
-      <h3 className="text-sm font-medium text-foreground mb-1">
-        {hasFilters ? `No ${noun} found` : `No ${noun} yet`}
+      <h3 className="text-base font-semibold text-foreground mb-1">
+        {hasFilters ? `No ${noun} found` : `No ${noun} created yet`}
       </h3>
-      <p className="text-sm text-muted-foreground mb-4">
+      <p className="text-xs text-muted-foreground max-w-sm mx-auto mb-5">
         {hasFilters
-          ? "Try adjusting your filters to find what you're looking for."
-          : `${noun.charAt(0).toUpperCase() + noun.slice(1)} will appear here once created.`}
+          ? "No brands matched your search filters. Try adjusting your query or reset filters to view all."
+          : `Get started by adding certified medical device manufacturers to your catalog.`}
       </p>
       {hasFilters && (
-        <Button size="sm" variant="outline" onClick={onClearFilters}>
+        <Button size="sm" variant="outline" onClick={onClearFilters} className="h-8">
           Clear filters
         </Button>
       )}

@@ -1,15 +1,19 @@
-from datetime import datetime, timezone
-from typing import Optional, List
 import uuid
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+from typing import Any
+
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from app.domains.vendor.models.vendor_profile import VendorProfile
-from app.domains.auth.models.user import User
-from app.core.logging import logger
-from app.domains.vendor.repositories.vendor_repository import VendorProfileRepository
-from app.core.mail import send_email
+
 from app.core.config import settings
+from app.core.exceptions import BusinessRuleError, NotFoundError
+from app.core.logging import logger
+from app.core.mail import send_email
+from app.domains.auth.models.user import User
+from app.domains.vendor.models.vendor_profile import VendorProfile
+from app.domains.vendor.repositories.vendor_repository import VendorProfileRepository
 
 
 class VendorService:
@@ -19,92 +23,106 @@ class VendorService:
         self.db = db
         self.vendor_repo = VendorProfileRepository(db)
 
-    async def get_vendor_profile(self, identifier: str | uuid.UUID) -> Optional[VendorProfile]:
+    @asynccontextmanager
+    async def _transaction(self):
+        """Use begin_nested (SAVEPOINT) when already in a transaction."""
+        if self.db.in_transaction():
+            async with self.db.begin_nested():
+                yield
+        else:
+            async with self.db.begin():
+                yield
+
+    async def get_vendor_profile(self, identifier: str | uuid.UUID) -> VendorProfile | None:
         """Get vendor profile by user ID or profile ID"""
-        val_uuid = uuid.UUID(identifier) if isinstance(identifier, str) else identifier
-        
+        val_uuid = uuid.UUID(str(identifier)) if isinstance(identifier, str) else identifier
+
         # Try finding by user ID first
         profile = await self.vendor_repo.get_by_user_id(val_uuid)
         if profile:
             return profile
-            
+
         # Fall back to finding by profile ID
         return await self.vendor_repo.get(val_uuid)
 
     async def create_vendor_profile(
         self,
-        user_id: str,
-        company_name: Optional[str] = None,
-        vat_number: Optional[str] = None,
-        address_street: Optional[str] = None,
-        latitude: Optional[float] = None,
-        longitude: Optional[float] = None,
-        place_id: Optional[str] = None
+        user_id: str | uuid.UUID,
+        company_name: str | None = None,
+        vat_number: str | None = None,
+        address_street: str | None = None,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        place_id: str | None = None,
     ) -> VendorProfile:
         """Create initial vendor profile (called after registration)"""
-        # Check if profile exists
-        existing = await self.get_vendor_profile(user_id)
-        if existing:
-            if address_street:
-                existing.address_street = address_street
-            if latitude is not None:
-                existing.latitude = latitude
-            if longitude is not None:
-                existing.longitude = longitude
-            if place_id:
-                existing.place_id = place_id
-            await self.db.commit()
-            return existing
+        val_uuid = uuid.UUID(str(user_id)) if isinstance(user_id, str) else user_id
+        async with self._transaction():
+            # Check if profile exists
+            existing = await self.get_vendor_profile(val_uuid)
+            if existing:
+                if address_street:
+                    existing.address_street = address_street
+                if latitude is not None:
+                    existing.latitude = latitude
+                if longitude is not None:
+                    existing.longitude = longitude
+                if place_id:
+                    existing.place_id = place_id
+                await self.db.commit()
+                return existing
 
-        profile = VendorProfile(
-            user_id=user_id,
-            store_name=company_name or "New Store",
-            approval_status="pending",
-            company_name=company_name,
-            vat_number=vat_number,
-            address_street=address_street,
-            latitude=latitude,
-            longitude=longitude,
-            place_id=place_id
-        )
-        profile = await self.vendor_repo.create(profile)
-        logger.info(f"Created vendor profile for user {user_id}")
-        return profile
+            profile = VendorProfile(
+                id=uuid.uuid4(),
+                user_id=val_uuid,
+                store_name=company_name or "New Store",
+                approval_status="pending",
+                company_name=company_name,
+                vat_number=vat_number,
+                address_street=address_street,
+                latitude=latitude,
+                longitude=longitude,
+                place_id=place_id,
+            )
+            profile = await self.vendor_repo.create(profile)
+            await self.db.commit()
+            logger.info(f"Created vendor profile for user {val_uuid}")
+            return profile
 
     async def update_vendor_profile(
         self,
         user_id: str,
-        store_name: Optional[str] = None,
-        store_description: Optional[str] = None,
-        store_logo_url: Optional[str] = None,
-        business_email: Optional[str] = None,
-        business_phone: Optional[str] = None,
-        address_street: Optional[str] = None,
-        address_city: Optional[str] = None,
-        address_region: Optional[str] = None,
-        address_country: Optional[str] = None,
-        latitude: Optional[float] = None,
-        longitude: Optional[float] = None,
-        place_id: Optional[str] = None,
-        mpesa_phone: Optional[str] = None,
-        mpesa_business_name: Optional[str] = None,
-        mpesa_till_number: Optional[str] = None,
-        mpesa_paybill_number: Optional[str] = None,
-        bank_account_name: Optional[str] = None,
-        bank_account_number: Optional[str] = None,
-        bank_name: Optional[str] = None,
-        bank_branch: Optional[str] = None,
-        bank_swift_code: Optional[str] = None,
-        bank_iban: Optional[str] = None,
-        business_hours: Optional[dict] = None,
-        document_urls: Optional[List[str]] = None
+        store_name: str | None = None,
+        store_description: str | None = None,
+        store_logo_url: str | None = None,
+        business_email: str | None = None,
+        business_phone: str | None = None,
+        address_street: str | None = None,
+        address_city: str | None = None,
+        address_region: str | None = None,
+        address_country: str | None = None,
+        latitude: float | None = None,
+        longitude: float | None = None,
+        place_id: str | None = None,
+        mpesa_phone: str | None = None,
+        mpesa_business_name: str | None = None,
+        mpesa_till_number: str | None = None,
+        mpesa_paybill_number: str | None = None,
+        bank_account_name: str | None = None,
+        bank_account_number: str | None = None,
+        bank_name: str | None = None,
+        bank_branch: str | None = None,
+        bank_swift_code: str | None = None,
+        bank_iban: str | None = None,
+        business_hours: dict | None = None,
+        document_urls: list[str] | None = None,
     ) -> VendorProfile:
         """Update vendor profile"""
         profile = await self.get_vendor_profile(user_id)
         if not profile:
-            raise ValueError("Vendor profile not found")
+            raise NotFoundError("VendorProfile", user_id)
 
-        update_data = {}
+        update_data: dict[str, Any] = {}
         # Store Info
         if store_name is not None:
             update_data["store_name"] = store_name
@@ -168,22 +186,23 @@ class VendorService:
         return profile
 
     async def approve_vendor(
-        self,
-        user_id: str,
-        approved_by: str,
-        reject_reason: Optional[str] = None
+        self, user_id: str | uuid.UUID, approved_by: str | uuid.UUID, reject_reason: str | None = None
     ) -> VendorProfile:
         """Approve a vendor application"""
         profile = await self.get_vendor_profile(user_id)
         if not profile:
-            raise ValueError("Vendor profile not found")
+            raise NotFoundError("VendorProfile", user_id)
 
-        profile = await self.vendor_repo.update(profile, {
-            "approval_status": "approved",
-            "approved_at": datetime.now(timezone.utc),
-            "approved_by": approved_by,
-            "rejection_reason": None
-        })
+        val_approved_by = uuid.UUID(str(approved_by)) if approved_by else None
+        profile = await self.vendor_repo.update(
+            profile,
+            {
+                "approval_status": "approved",
+                "approved_at": datetime.now(UTC),
+                "approved_by": val_approved_by,
+                "rejection_reason": None,
+            },
+        )
 
         logger.info(f"Vendor {user_id} approved by {approved_by}")
 
@@ -192,8 +211,9 @@ class VendorService:
         user = result.scalar_one_or_none()
         if user:
             from app.core.email_templates import vendor_approved_html
+
             html = vendor_approved_html(
-                company_name=profile.company_name,
+                company_name=profile.company_name or profile.store_name or "Your Store",
             )
             await send_email(
                 user.email,
@@ -206,22 +226,16 @@ class VendorService:
 
         return profile
 
-    async def reject_vendor(
-        self,
-        user_id: str,
-        approved_by: str,
-        reason: str
-    ) -> VendorProfile:
+    async def reject_vendor(self, user_id: str | uuid.UUID, approved_by: str | uuid.UUID, reason: str) -> VendorProfile:
         """Reject a vendor application"""
         profile = await self.get_vendor_profile(user_id)
         if not profile:
-            raise ValueError("Vendor profile not found")
+            raise NotFoundError("VendorProfile", user_id)
 
-        profile = await self.vendor_repo.update(profile, {
-            "approval_status": "rejected",
-            "approved_by": approved_by,
-            "rejection_reason": reason
-        })
+        val_approved_by = uuid.UUID(str(approved_by)) if approved_by else None
+        profile = await self.vendor_repo.update(
+            profile, {"approval_status": "rejected", "approved_by": val_approved_by, "rejection_reason": reason}
+        )
 
         logger.info(f"Vendor {user_id} rejected by {approved_by}, reason: {reason}")
 
@@ -230,7 +244,12 @@ class VendorService:
         user = result.scalar_one_or_none()
         if user:
             from app.core.email_templates import vendor_rejected_html
-            user_name = f"{user.first_name} {user.last_name}".strip() if (user.first_name or user.last_name) else "Vendor Partner"
+
+            user_name = (
+                f"{user.first_name} {user.last_name}".strip()
+                if (user.first_name or user.last_name)
+                else "Vendor Partner"
+            )
             company = profile.company_name or profile.store_name or "your company"
             html = vendor_rejected_html(
                 company_name=company,
@@ -251,24 +270,25 @@ class VendorService:
         return profile
 
     async def suspend_vendor(
-        self,
-        user_id: str,
-        suspended_by: str,
-        reason: str
+        self, user_id: str | uuid.UUID, suspended_by: str | uuid.UUID, reason: str
     ) -> VendorProfile:
         """Suspend a vendor (for approved vendors only)"""
         profile = await self.get_vendor_profile(user_id)
         if not profile:
-            raise ValueError("Vendor profile not found")
+            raise NotFoundError("VendorProfile", user_id)
 
         if profile.approval_status != "approved":
-            raise ValueError("Only approved vendors can be suspended")
+            raise BusinessRuleError("Only approved vendors can be suspended")
 
-        profile = await self.vendor_repo.update(profile, {
-            "approval_status": "suspended",
-            "approved_by": suspended_by,
-            "rejection_reason": reason  # Using rejection_reason for suspension reason
-        })
+        val_suspended_by = uuid.UUID(str(suspended_by)) if suspended_by else None
+        profile = await self.vendor_repo.update(
+            profile,
+            {
+                "approval_status": "suspended",
+                "approved_by": val_suspended_by,
+                "rejection_reason": reason,  # Using rejection_reason for suspension reason
+            },
+        )
 
         logger.info(f"Vendor {user_id} suspended by {suspended_by}, reason: {reason}")
 
@@ -277,7 +297,12 @@ class VendorService:
         user = result.scalar_one_or_none()
         if user:
             from app.core.email_templates import vendor_suspended_html
-            user_name = f"{user.first_name} {user.last_name}".strip() if (user.first_name or user.last_name) else "Vendor Partner"
+
+            user_name = (
+                f"{user.first_name} {user.last_name}".strip()
+                if (user.first_name or user.last_name)
+                else "Vendor Partner"
+            )
             company = profile.company_name or profile.store_name or "your company"
             html = vendor_suspended_html(
                 company_name=company,
@@ -298,11 +323,8 @@ class VendorService:
         return profile
 
     async def list_vendors(
-        self,
-        status: Optional[str] = None,
-        page: int = 1,
-        page_size: int = 20
-    ) -> tuple[List[VendorProfile], int]:
+        self, status: str | None = None, page: int = 1, page_size: int = 20
+    ) -> tuple[list[VendorProfile], int]:
         """List vendors with optional status filter"""
         query = select(VendorProfile).options(selectinload(VendorProfile.user))
 
@@ -330,7 +352,7 @@ class VendorService:
         )
         row = result.first()
         if not row:
-            raise ValueError("User not found")
+            raise NotFoundError("User", user_id)
 
         user, profile = row
 
@@ -342,5 +364,5 @@ class VendorService:
             "store_name": profile.store_name if profile else None,
             "phone": user.phone,
             "is_verified": user.is_verified,
-            "created_at": profile.created_at if profile else user.created_at
+            "created_at": profile.created_at if profile else user.created_at,
         }

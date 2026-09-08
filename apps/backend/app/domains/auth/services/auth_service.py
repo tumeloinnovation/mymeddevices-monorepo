@@ -1,31 +1,50 @@
 import secrets
-from datetime import datetime, timedelta, timezone
 import uuid
 from dataclasses import dataclass
-from typing import Union, Literal, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import UTC, datetime, timedelta
+from typing import Literal, Union
+
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from app.core.security import get_password_hash, verify_password, create_access_token, settings as security_settings
-from app.core.password_security import validate_password, PasswordValidationError
-from app.core.password_placeholder import create_pending_password, create_guest_password, can_authenticate_with_password
-from app.core.security_logging import (
-    log_auth_success, log_auth_failure, log_account_lockout,
-    log_password_validation_failure, log_token_issued, log_token_refreshed,
-    log_token_revoked, log_token_reuse_detected, extract_request_context
-)
-from app.domains.auth.models.user import User
-from app.domains.auth.models.token_device import RefreshToken, UserDevice
-from app.domains.auth.schemas.auth_schemas import (
-    UserCreate, VendorUserCreate, LoginRequest, OTPLoginRequest, GuestLoginRequest,
-    ChangePasswordRequest, ChangeEmailRequest, DeleteAccountRequest,
-    RegisterInitiateRequest, RegisterCompleteRequest, Token, UserResponse
-)
+
+from app.core.config import settings as security_settings
+from app.core.exceptions import BusinessRuleError, ConflictError, NotFoundError
 from app.core.logging import logger
-from app.domains.auth.services.otp_service import OTPService
+from app.core.password_placeholder import can_authenticate_with_password, create_guest_password, create_pending_password
+from app.core.password_security import validate_password
+from app.core.security import (
+    create_access_token,
+    get_password_hash_async,
+    verify_password_async,
+)
+from app.core.security_logging import (
+    log_account_lockout,
+    log_auth_failure,
+    log_auth_success,
+    log_token_issued,
+)
+from app.domains.auth.models.token_device import RefreshToken, UserDevice
+from app.domains.auth.models.user import User
+from app.domains.auth.repositories.auth_repository import RefreshTokenRepository, UserDeviceRepository, UserRepository
+from app.domains.auth.schemas.auth_schemas import (
+    ChangeEmailRequest,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    GuestLoginRequest,
+    LoginRequest,
+    OTPLoginRequest,
+    RegisterCompleteRequest,
+    RegisterInitiateRequest,
+    Token,
+    UserCreate,
+    UserResponse,
+    VendorUserCreate,
+)
 from app.domains.auth.services.account_lockout_service import AccountLockoutService
-from app.domains.auth.repositories.auth_repository import UserRepository, RefreshTokenRepository, UserDeviceRepository
+from app.domains.auth.services.otp_service import OTPService
 from app.domains.vendor.services.vendor_service import VendorService
+
 
 @dataclass
 class AuthSuccess:
@@ -33,9 +52,13 @@ class AuthSuccess:
     device_id: str
     remember_me: bool
 
+
 @dataclass
 class AuthFailure:
-    reason: Literal["user_not_found", "invalid_password", "account_disabled", "vendor_pending_approval", "account_locked"]
+    reason: Literal[
+        "user_not_found", "invalid_password", "account_disabled", "vendor_pending_approval", "account_locked"
+    ]
+
 
 class AuthService:
     def __init__(self, db: AsyncSession):
@@ -44,12 +67,37 @@ class AuthService:
         self.token_repo = RefreshTokenRepository(db)
         self.device_repo = UserDeviceRepository(db)
 
+    async def _ensure_driver_profile(self, user: User) -> None:
+        """Create a DriverProfile for driver users if one doesn't exist.
+
+        Driver profiles are required by logistics services (capacity tracking,
+        matching, ETA estimation). Auto-provisioning here guarantees every
+        driver who logs in gets a profile, regardless of how they were created.
+        """
+        if user.role != "driver":
+            return
+
+        from app.domains.logistics.models.driver_profile import DriverProfile, DriverStatus
+
+        result = await self.db.execute(select(DriverProfile).where(DriverProfile.user_id == user.id))
+        if not result.scalar_one_or_none():
+            # Use .value to get the string value ("offline") instead of the enum name
+            self.db.add(DriverProfile(user_id=user.id, status=DriverStatus.OFFLINE.value))
+            await self.db.commit()
+
     async def initiate_registration(self, data: RegisterInitiateRequest) -> User:
+        # Server-side validation: enforce allowed registration roles
+        allowed_roles = {"customer", "vendor", "guest"}
+        if data.role not in allowed_roles:
+            raise BusinessRuleError(
+                f"Role '{data.role}' is not allowed for public registration. Allowed roles: {', '.join(sorted(allowed_roles))}"
+            )
+
         # Check if user already exists
         existing = await self.user_repo.get_by_email(data.email)
         if existing:
             if existing.is_verified:
-                raise ValueError("A verified user with this email already exists")
+                raise ConflictError("A verified user with this email already exists")
             # If exists but not verified, reuse it
             user = existing
         else:
@@ -59,49 +107,50 @@ class AuthService:
                 password_hash=create_pending_password(),
                 role=data.role,
                 is_active=True,
-                is_verified=False
+                is_verified=False,
             )
             user = await self.user_repo.create(user)
-            
+
         # Send OTP
         otp_service = OTPService(self.db)
         await otp_service.initiate_verification(user, method="email")
-        
+
         return user
 
     async def complete_registration(self, data: RegisterCompleteRequest) -> User:
         user = await self.user_repo.get_by_email(data.email)
         if not user:
-            raise ValueError("User not found")
+            raise NotFoundError("User", data.email)
         if not user.is_verified:
-            raise ValueError("Email must be verified first")
+            raise BusinessRuleError("Email must be verified first")
 
         # Validate password strength
         user_info = {
             "email": data.email,
             "first_name": data.first_name,
             "last_name": data.last_name,
-            "company_name": data.company_name
+            "company_name": data.company_name,
         }
         is_valid, errors = validate_password(data.password, user_info)
         if not is_valid:
-            raise ValueError(f"Password requirements not met: {'; '.join(errors)}")
+            raise BusinessRuleError(f"Password requirements not met: {'; '.join(errors)}")
 
         # Update user profile and password
         updates = {
-            "password_hash": get_password_hash(data.password),
+            "password_hash": await get_password_hash_async(data.password),
             "first_name": data.first_name,
             "last_name": data.last_name,
             "phone": data.phone,
-            "company_name": data.company_name
+            "company_name": data.company_name,
         }
         user = await self.user_repo.update(user, updates)
-        
+
         if user.role == "vendor":
             if not data.address_street or data.latitude is None or data.longitude is None:
-                raise ValueError("Address street, latitude, and longitude are required for vendor registration.")
-            
+                raise BusinessRuleError("Address street, latitude, and longitude are required for vendor registration.")
+
             from app.domains.vendor.services.vendor_service import VendorService
+
             vendor_service = VendorService(self.db)
             profile = await vendor_service.get_vendor_profile(str(user.id))
             if not profile:
@@ -111,39 +160,51 @@ class AuthService:
                     address_street=data.address_street,
                     latitude=data.latitude,
                     longitude=data.longitude,
-                    place_id=data.place_id
+                    place_id=data.place_id,
                 )
-                
+
+        await self.db.commit()
         logger.info(f"Registration completed for user: {user.email}")
         return user
 
     async def register_user(self, user_in: UserCreate) -> User:
+        # Server-side validation: enforce allowed registration roles
+        allowed_roles = {"customer", "vendor", "guest"}
+        if user_in.role not in allowed_roles:
+            raise BusinessRuleError(
+                f"Role '{user_in.role}' is not allowed for public registration. Allowed roles: {', '.join(sorted(allowed_roles))}"
+            )
+
+        # Check if user already exists
+        existing = await self.user_repo.get_by_email(user_in.email)
+        if existing:
+            raise ConflictError("A user with this email already exists")
+
         # Validate password strength
-        user_info = {
-            "email": user_in.email,
-            "first_name": user_in.firstName,
-            "last_name": user_in.lastName
-        }
+        user_info = {"email": user_in.email, "first_name": user_in.firstName, "last_name": user_in.lastName}
         is_valid, errors = validate_password(user_in.password, user_info)
         if not is_valid:
-            raise ValueError(f"Password requirements not met: {'; '.join(errors)}")
+            raise BusinessRuleError(f"Password requirements not met: {'; '.join(errors)}")
 
         user = User(
             email=user_in.email,
-            password_hash=get_password_hash(user_in.password),
+            password_hash=await get_password_hash_async(user_in.password),
             role=user_in.role,
             phone=user_in.phone,
             first_name=user_in.firstName,
-            last_name=user_in.lastName
+            last_name=user_in.lastName,
         )
         user = await self.user_repo.create(user)
+        await self.db.commit()
         logger.info(f"User registered: {user.email}")
+
 
         # Send welcome email
         try:
             from app.domains.shopping.services.email_notification_service import EmailNotificationService
+
             email_service = EmailNotificationService()
-            user_name = f"{user.first_name} {user.last_name}".strip() or user.email.split('@')[0]
+            user_name = f"{user.first_name} {user.last_name}".strip() or user.email.split("@")[0]
             await email_service.send_account_welcome(user.email, user_name, str(user.id))
         except Exception as e:
             logger.error(f"Failed to send welcome email: {e}")
@@ -158,23 +219,23 @@ class AuthService:
         # Check if vendor already exists
         existing = await self.user_repo.get_by_email(vendor_in.email)
         if existing:
-            raise ValueError("A user with this email already exists")
+            raise ConflictError("A user with this email already exists")
 
         # Validate password strength
         user_info = {
             "email": vendor_in.email,
             "first_name": vendor_in.first_name,
             "last_name": vendor_in.last_name,
-            "company_name": vendor_in.company_name
+            "company_name": vendor_in.company_name,
         }
         is_valid, errors = validate_password(vendor_in.password, user_info)
         if not is_valid:
-            raise ValueError(f"Password requirements not met: {'; '.join(errors)}")
+            raise BusinessRuleError(f"Password requirements not met: {'; '.join(errors)}")
 
         # Create vendor user
         vendor = User(
             email=vendor_in.email,
-            password_hash=get_password_hash(vendor_in.password),
+            password_hash=await get_password_hash_async(vendor_in.password),
             role="vendor",
             phone=vendor_in.phone,
             first_name=vendor_in.first_name,
@@ -182,7 +243,7 @@ class AuthService:
             company_name=vendor_in.company_name,
             vat_number=vendor_in.vat_number,
             is_active=True,
-            is_verified=False  # Requires OTP verification
+            is_verified=False,  # Requires OTP verification
         )
         vendor = await self.user_repo.create(vendor)
 
@@ -197,7 +258,7 @@ class AuthService:
             address_street=vendor_in.address_street,
             latitude=vendor_in.latitude,
             longitude=vendor_in.longitude,
-            place_id=vendor_in.place_id
+            place_id=vendor_in.place_id,
         )
 
         # Send OTP for email verification
@@ -209,9 +270,9 @@ class AuthService:
     async def authenticate(
         self,
         login_data: LoginRequest,
-        request_id: Optional[str] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
+        request_id: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> Union[AuthSuccess, AuthFailure]:
         """
         Authenticate user with email and password.
@@ -233,10 +294,10 @@ class AuthService:
         if lockout_status.is_locked:
             log_account_lockout(
                 email=login_data.email,
-                failed_attempts=lockout_status.failed_attempts,
-                lockout_duration_minutes=lockout_status.remaining_minutes,
+                failed_attempts=lockout_status.attempt_count,
+                lockout_duration_minutes=max(1, lockout_status.remaining_seconds // 60),
                 ip_address=ip_address,
-                request_id=request_id
+                request_id=request_id,
             )
             logger.warning(f"Login attempt on locked account: {login_data.email}")
             return AuthFailure(reason="account_locked")
@@ -249,7 +310,7 @@ class AuthService:
                 reason="user_not_found",
                 ip_address=ip_address,
                 user_agent=user_agent,
-                request_id=request_id
+                request_id=request_id,
             )
             await self.log_failed_login(login_data.email, login_data.device_id, "user_not_found")
             await lockout_service.record_failed_attempt(login_data.email, login_data.email)
@@ -262,20 +323,20 @@ class AuthService:
                 reason="placeholder_password",
                 ip_address=ip_address,
                 user_agent=user_agent,
-                request_id=request_id
+                request_id=request_id,
             )
             logger.warning(f"Password login attempt on account with placeholder password: {login_data.email}")
             await self.log_failed_login(login_data.email, login_data.device_id, "placeholder_password")
             await lockout_service.record_failed_attempt(login_data.email, user.email)
             return AuthFailure(reason="invalid_password")
 
-        if not verify_password(login_data.password, user.password_hash):
+        if not await verify_password_async(login_data.password, user.password_hash):
             log_auth_failure(
                 email=login_data.email,
                 reason="invalid_password",
                 ip_address=ip_address,
                 user_agent=user_agent,
-                request_id=request_id
+                request_id=request_id,
             )
             await self.log_failed_login(login_data.email, login_data.device_id, "invalid_password")
             # Record failed attempt with lockout service
@@ -289,7 +350,7 @@ class AuthService:
                 reason="account_disabled",
                 ip_address=ip_address,
                 user_agent=user_agent,
-                request_id=request_id
+                request_id=request_id,
             )
             await self.log_failed_login(login_data.email, login_data.device_id, "account_disabled")
             return AuthFailure(reason="account_disabled")
@@ -297,9 +358,8 @@ class AuthService:
         # Check vendor approval status
         if user.role == "vendor":
             from app.domains.vendor.models.vendor_profile import VendorProfile
-            result = await self.db.execute(
-                select(VendorProfile).where(VendorProfile.user_id == user.id)
-            )
+
+            result = await self.db.execute(select(VendorProfile).where(VendorProfile.user_id == user.id))
             profile = result.scalar_one_or_none()
             if not profile or profile.approval_status != "approved":
                 log_auth_failure(
@@ -307,7 +367,7 @@ class AuthService:
                     reason="vendor_pending_approval",
                     ip_address=ip_address,
                     user_agent=user_agent,
-                    request_id=request_id
+                    request_id=request_id,
                 )
                 await self.log_failed_login(login_data.email, login_data.device_id, "vendor_not_approved")
                 return AuthFailure(reason="vendor_pending_approval")
@@ -315,16 +375,18 @@ class AuthService:
         # Successful login - reset failed attempt counter
         await lockout_service.reset_attempts(login_data.email)
 
+        # Ensure driver users have a DriverProfile for logistics operations
+        await self._ensure_driver_profile(user)
+
         # Create or update device record
         device = await self.device_repo.get_by_user_and_device(user.id, login_data.device_id)
         if not device:
             device = UserDevice(user_id=user.id, device_id=login_data.device_id, device_name=login_data.device_name)
             await self.device_repo.create(device)
         else:
-            await self.device_repo.update(device, {
-                "last_login": datetime.now(timezone.utc),
-                "device_name": login_data.device_name
-            })
+            await self.device_repo.update(
+                device, {"last_login": datetime.now(UTC), "device_name": login_data.device_name}
+            )
 
         # Log successful authentication
         log_auth_success(
@@ -333,20 +395,26 @@ class AuthService:
             method="password",
             ip_address=ip_address,
             user_agent=user_agent,
-            request_id=request_id
+            request_id=request_id,
         )
 
-        logger.info(f"User authenticated: {user.email} on device {login_data.device_id}, remember_me={login_data.remember_me}")
-        return AuthSuccess(user=user, device_id=login_data.device_id, remember_me=login_data.remember_me)
+        logger.info(
+            f"User authenticated: {user.email} on device {login_data.device_id}, remember_me={login_data.remember_me}"
+        )
+        return AuthSuccess(
+            user=user,
+            device_id=login_data.device_id or "",
+            remember_me=bool(login_data.remember_me),
+        )
 
     async def create_tokens(
         self,
         user: User,
-        device_id: str = None,
+        device_id: str | None = None,
         remember_me: bool = False,
-        request_id: Optional[str] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None
+        request_id: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
     ) -> Token:
         """
         Create access and refresh tokens for a user.
@@ -366,7 +434,7 @@ class AuthService:
         if user.role == "vendor":
             from sqlalchemy import select
             from sqlalchemy.orm import selectinload
-            from app.domains.vendor.models.vendor_profile import VendorProfile
+
             result = await self.db.execute(
                 select(User).options(selectinload(User.vendor_profile)).where(User.id == user.id)
             )
@@ -377,6 +445,7 @@ class AuthService:
             token_expiry_days = 30
         else:
             from app.domains.admin.services import SystemSettingService
+
             auth_settings = await SystemSettingService.get_setting(self.db, "auth_settings")
             if auth_settings and isinstance(auth_settings, dict) and "refresh_token_expire_days" in auth_settings:
                 token_expiry_days = int(auth_settings["refresh_token_expire_days"])
@@ -389,7 +458,7 @@ class AuthService:
             token=refresh_token_str,
             user_id=user.id,
             device_id=device_id,
-            expires_at=datetime.now(timezone.utc) + timedelta(days=token_expiry_days)
+            expires_at=datetime.now(UTC) + timedelta(days=token_expiry_days),
         )
         await self.token_repo.create(refresh_token)
 
@@ -398,7 +467,7 @@ class AuthService:
             "sub": str(user.id),
             "email": user.email,
             "role": user.role,
-            "auth_time": int(datetime.now(timezone.utc).timestamp())  # When user authenticated
+            "auth_time": int(datetime.now(UTC).timestamp()),  # When user authenticated
         }
         if device_id:
             access_token_data["device_id"] = device_id
@@ -411,7 +480,7 @@ class AuthService:
             token_type="access",
             ip_address=ip_address,
             user_agent=user_agent,
-            request_id=request_id
+            request_id=request_id,
         )
         log_token_issued(
             user_id=str(user.id),
@@ -419,7 +488,7 @@ class AuthService:
             token_type="refresh",
             ip_address=ip_address,
             user_agent=user_agent,
-            request_id=request_id
+            request_id=request_id,
         )
 
         return Token(
@@ -427,7 +496,7 @@ class AuthService:
             refresh_token=refresh_token_str,
             token_type="bearer",
             expires_in=security_settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            user=UserResponse.model_validate(user)
+            user=UserResponse.model_validate(user),
         )
 
     async def authenticate_otp(self, login_data: OTPLoginRequest) -> Union[User, None]:
@@ -466,16 +535,18 @@ class AuthService:
         if not user.is_verified:
             await self.user_repo.update(user, {"is_verified": True})
 
+        # Ensure driver users have a DriverProfile for logistics operations
+        await self._ensure_driver_profile(user)
+
         # Create or update device record
         device = await self.device_repo.get_by_user_and_device(user.id, login_data.device_id)
         if not device:
             device = UserDevice(user_id=user.id, device_id=login_data.device_id, device_name=login_data.device_name)
             await self.device_repo.create(device)
         else:
-            await self.device_repo.update(device, {
-                "last_login": datetime.now(timezone.utc),
-                "device_name": login_data.device_name
-            })
+            await self.device_repo.update(
+                device, {"last_login": datetime.now(UTC), "device_name": login_data.device_name}
+            )
 
         logger.info(f"User authenticated via OTP: {user.email} on device {login_data.device_id}")
         return user
@@ -510,7 +581,7 @@ class AuthService:
 
         # Create new guest user with UUID-only identifier (better privacy)
         guest_uuid = str(uuid.uuid4())
-        temp_email = f"guest-{guest_uuid}"
+        temp_email = f"guest-{guest_uuid}@guest.mymeddevices.co.ke"
 
         # Create guest user with placeholder password (no password login)
         guest = User(
@@ -520,15 +591,13 @@ class AuthService:
             is_active=True,
             is_verified=True,  # Guest doesn't need verification
             first_name="Guest",
-            last_name="User"
+            last_name="User",
         )
         guest = await self.user_repo.create(guest)
 
         # Create device record
         device = UserDevice(
-            user_id=guest.id,
-            device_id=guest_data.device_id,
-            device_name=guest_data.device_name or "Guest Device"
+            user_id=guest.id, device_id=guest_data.device_id, device_name=guest_data.device_name or "Guest Device"
         )
         await self.device_repo.create(device)
         logger.info(f"New guest user created: {guest.email}")
@@ -541,19 +610,15 @@ class AuthService:
         """
         logger.warning(
             f"Failed login attempt - Email: {email}, Device: {device_id}, Reason: {reason}, "
-            f"Timestamp: {datetime.now(timezone.utc).isoformat()}"
+            f"Timestamp: {datetime.now(UTC).isoformat()}"
         )
 
-    async def change_password(
-        self,
-        user: User,
-        password_data: ChangePasswordRequest
-    ) -> bool:
+    async def change_password(self, user: User, password_data: ChangePasswordRequest) -> bool:
         """
         Change user password.
         """
         # Verify old password
-        if not verify_password(password_data.old_password, user.password_hash):
+        if not await verify_password_async(password_data.old_password, user.password_hash):
             logger.warning(f"Password change failed - invalid old password for user: {user.email}")
             return False
 
@@ -562,29 +627,26 @@ class AuthService:
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
-            "company_name": user.company_name
+            "company_name": user.company_name,
         }
         is_valid, errors = validate_password(password_data.new_password, user_info)
         if not is_valid:
             logger.warning(f"Password change failed - weak password for user: {user.email}")
-            raise ValueError(f"Password requirements not met: {'; '.join(errors)}")
+            raise BusinessRuleError(f"Password requirements not met: {'; '.join(errors)}")
 
         # Update password
-        await self.user_repo.update(user, {"password_hash": get_password_hash(password_data.new_password)})
+        await self.user_repo.update(user, {"password_hash": await get_password_hash_async(password_data.new_password)})
+        await self.db.commit()
 
         logger.info(f"Password changed successfully for user: {user.email}")
         return True
 
-    async def initiate_email_change(
-        self,
-        user: User,
-        email_data: ChangeEmailRequest
-    ) -> tuple[bool, str]:
+    async def initiate_email_change(self, user: User, email_data: ChangeEmailRequest) -> tuple[bool, str]:
         """
         Initiate email change process.
         """
         # Verify current password
-        if not verify_password(email_data.password, user.password_hash):
+        if not await verify_password_async(email_data.password, user.password_hash):
             logger.warning(f"Email change failed - invalid password for user: {user.email}")
             return False, "Invalid password"
 
@@ -603,12 +665,7 @@ class AuthService:
         logger.info(f"Email change initiated for user {user.email} -> {email_data.new_email}")
         return True, "Verification code generated for new email. Please check your inbox."
 
-    async def confirm_email_change(
-        self,
-        user: User,
-        new_email: str,
-        otp_code: str
-    ) -> tuple[bool, str]:
+    async def confirm_email_change(self, user: User, new_email: str, otp_code: str) -> tuple[bool, str]:
         """
         Confirm email change with OTP code.
         """
@@ -620,9 +677,7 @@ class AuthService:
             return False, "Invalid or expired verification code"
 
         # Double check email is still available
-        existing = await self.db.execute(
-            select(User).where(User.email == new_email, User.id != user.id)
-        )
+        existing = await self.db.execute(select(User).where(User.email == new_email, User.id != user.id))
         if existing.scalar_one_or_none():
             return False, "Email already in use"
 
@@ -633,16 +688,12 @@ class AuthService:
         logger.info(f"Email changed successfully for user: {old_email} -> {new_email}")
         return True, "Email updated successfully"
 
-    async def delete_account(
-        self,
-        user: User,
-        delete_data: DeleteAccountRequest
-    ) -> tuple[bool, str]:
+    async def delete_account(self, user: User, delete_data: DeleteAccountRequest) -> tuple[bool, str]:
         """
         Delete user account (GDPR compliance).
         """
         # Verify password
-        if not verify_password(delete_data.password, user.password_hash):
+        if not await verify_password_async(delete_data.password, user.password_hash):
             logger.warning(f"Account deletion failed - invalid password for user: {user.email}")
             return False, "Invalid password"
 
@@ -652,32 +703,35 @@ class AuthService:
 
         # Send confirmation email before anonymizing
         from app.core.mail import send_email
+
         try:
             await send_email(
                 to_email=user.email,
                 subject="Account Deleted - MyMedDevices",
                 body=f"Hello {user.first_name},\n\nYour account at MyMedDevices has been successfully deleted as per your request. All your personal data has been anonymized.\n\nThank you for being with us.",
-                html_content=f"<h1>Account Deleted</h1><p>Hello {user.first_name},</p><p>Your account at MyMedDevices has been successfully deleted as per your request. All your personal data has been anonymized.</p><p>Thank you for being with us.</p>"
+                html_content=f"<h1>Account Deleted</h1><p>Hello {user.first_name},</p><p>Your account at MyMedDevices has been successfully deleted as per your request. All your personal data has been anonymized.</p><p>Thank you for being with us.</p>",
             )
         except Exception as e:
             logger.error(f"Failed to send account deletion confirmation email to {user.email}: {e}")
 
         # Soft delete - deactivate and anonymize
-        await self.user_repo.update(user, {
-            "is_active": False,
-            "email": f"deleted_{user.id}@deleted.local",
-            "password_hash": "!deleted_no_password",
-            "first_name": "Deleted",
-            "last_name": "User",
-            "phone": None
-        })
+        await self.user_repo.update(
+            user,
+            {
+                "is_active": False,
+                "email": f"deleted_{user.id}@deleted.local",
+                "password_hash": "!deleted_no_password",
+                "first_name": "Deleted",
+                "last_name": "User",
+                "phone": None,
+            },
+        )
 
         # Anonymize linked vendor profile and archive products if user is a vendor
         if user.role == "vendor":
             from app.domains.vendor.models.vendor_profile import VendorProfile
-            result = await self.db.execute(
-                select(VendorProfile).where(VendorProfile.user_id == user.id)
-            )
+
+            result = await self.db.execute(select(VendorProfile).where(VendorProfile.user_id == user.id))
             profile = result.scalar_one_or_none()
             if profile:
                 profile.store_name = "Deleted Vendor"
@@ -704,8 +758,10 @@ class AuthService:
                 profile.document_urls = None
 
                 # Archive and soft-delete all products of this vendor
+                from sqlalchemy import func, update
+
                 from app.domains.catalog.models.product import Product
-                from sqlalchemy import update, func
+
                 await self.db.execute(
                     update(Product)
                     .where(Product.vendor_id == profile.id)
@@ -713,24 +769,16 @@ class AuthService:
                 )
 
         # Revoke all refresh tokens
-        result = await self.db.execute(
-            select(RefreshToken).where(RefreshToken.user_id == user.id)
-        )
-        tokens = result.scalars().all()
+        token_result = await self.db.execute(select(RefreshToken).where(RefreshToken.user_id == user.id))
+        tokens = token_result.scalars().all()
         for token in tokens:
             token.revoked = True
 
         await self.db.commit()
-
         logger.warning(f"Account deleted for user: {user.email} (original email anonymized)")
         return True, "Account deleted successfully"
 
-    async def reset_password(
-        self,
-        user: User,
-        otp_code: str,
-        new_password: str
-    ) -> bool:
+    async def reset_password(self, user: User, otp_code: str, new_password: str) -> bool:
         """
         Reset user password using OTP.
         """
@@ -739,12 +787,12 @@ class AuthService:
             "email": user.email,
             "first_name": user.first_name,
             "last_name": user.last_name,
-            "company_name": user.company_name
+            "company_name": user.company_name,
         }
         is_valid, errors = validate_password(new_password, user_info)
         if not is_valid:
             logger.warning(f"Password reset failed - weak password for user: {user.email}")
-            raise ValueError(f"Password requirements not met: {'; '.join(errors)}")
+            raise BusinessRuleError(f"Password requirements not met: {'; '.join(errors)}")
 
         # Verify OTP and mark as used only after password validation passes
         otp_service = OTPService(self.db)
@@ -754,7 +802,22 @@ class AuthService:
             return False
 
         # Update password
-        await self.user_repo.update(user, {"password_hash": get_password_hash(new_password)})
+        await self.user_repo.update(user, {"password_hash": await get_password_hash_async(new_password)})
+
+        # Revoke existing refresh tokens
+        from sqlalchemy import update
+        await self.db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == user.id)
+            .values(revoked=True)
+        )
+
+        # Commit password update and token revocation
+        await self.db.commit()
+
+        # Clear any failed login attempts and lockout state for this user
+        lockout_service = AccountLockoutService(self.db)
+        await lockout_service.reset_attempts(user.email)
 
         logger.info(f"Password reset successfully for user: {user.email}")
         return True
@@ -763,10 +826,8 @@ class AuthService:
         """
         Get all devices for a user.
         """
-        result = await self.db.execute(
-            select(UserDevice).where(UserDevice.user_id == user.id)
-        )
-        return result.scalars().all()
+        result = await self.db.execute(select(UserDevice).where(UserDevice.user_id == user.id))
+        return list(result.scalars().all())
 
     async def delete_device(self, user: User, device_id: str) -> bool:
         """
@@ -776,12 +837,13 @@ class AuthService:
         device = await self.device_repo.get_by_user_and_device(user.id, device_id)
         if not device:
             return False
-            
+
         # Delete device
         await self.device_repo.delete(device.id)
-        
+
         # Revoke associated refresh token
         from sqlalchemy import update
+
         await self.db.execute(
             update(RefreshToken)
             .where(RefreshToken.user_id == user.id, RefreshToken.device_id == device_id)
@@ -794,16 +856,14 @@ class AuthService:
         """
         Delete all user devices except the current one and revoke their refresh tokens.
         """
-        from sqlalchemy import delete
-        
+        from sqlalchemy import delete, update
+
         # Delete other devices
         await self.db.execute(
-            delete(UserDevice)
-            .where(UserDevice.user_id == user.id, UserDevice.device_id != current_device_id)
+            delete(UserDevice).where(UserDevice.user_id == user.id, UserDevice.device_id != current_device_id)
         )
-        
+
         # Revoke other refresh tokens
-        from sqlalchemy import update
         await self.db.execute(
             update(RefreshToken)
             .where(RefreshToken.user_id == user.id, RefreshToken.device_id != current_device_id)

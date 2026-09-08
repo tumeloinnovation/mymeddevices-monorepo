@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { ChevronLeft, ChevronRight, Stethoscope, Home, Banknote, RotateCcw, BadgeCheck, PackageSearch } from "lucide-react"
+import { ChevronLeft, ChevronRight, Stethoscope, Home, Package, RotateCcw, BadgeCheck, PackageSearch } from "lucide-react"
 import { formatCurrency } from "@/lib/utils/utils"
 import { useRouter } from "next/navigation"
 
@@ -20,6 +20,7 @@ import { CategoryListItem } from "./CategoryListItem";
 import { ShopFiltersProvider } from "@/lib/context/ShopFiltersContext";
 import { useProducts } from "@/lib/hooks/useProducts";
 import { useCategories } from "@/lib/hooks/useCategories";
+import { getValidImageUrl } from "@/lib/utils/image";
 import { Product } from "@/lib/data/types";
 
 export function BottomBar() {
@@ -71,7 +72,7 @@ export function BottomBar() {
         {/* Image Section */}
         <div className="relative aspect-square bg-gradient-to-br from-muted/50 to-muted/30 p-3">
           <Image
-            src={product.images?.[0]?.src || '/logos/logo-portrait.png'}
+            src={getValidImageUrl(product.images?.[0]?.src || (product as any)?.image_url, '/logos/logo-portrait.png')}
             alt={product.name}
             width={160}
             height={160}
@@ -141,7 +142,7 @@ export function BottomBar() {
                     {byConditionCategories.map((category) => (
                       <NavigationMenuLink key={category.slug} asChild>
                         <NavigationLink
-                          href={`/categories/${category.slug}`}
+                          href={`/products?category=${category.slug}`}
                           className="group flex flex-col rounded-lg border border-border bg-card p-4 hover:border-primary/50 hover:shadow-sm transition-all no-underline outline-none"
                           pendingClassName="opacity-50"
                         >
@@ -174,7 +175,7 @@ export function BottomBar() {
                     {byCareSettingCategories.map((category) => (
                       <NavigationMenuLink key={category.slug} asChild>
                         <NavigationLink
-                          href={`/categories/${category.slug}`}
+                          href={`/products?category=${category.slug}`}
                           className="group flex flex-col rounded-lg border border-border bg-card p-4 hover:border-primary/50 hover:shadow-sm transition-all no-underline outline-none"
                           pendingClassName="opacity-50"
                         >
@@ -191,131 +192,6 @@ export function BottomBar() {
                         </NavigationLink>
                       </NavigationMenuLink>
                     ))}
-                  </div>
-                </NavigationMenuContent>
-              </NavigationMenuItem>
-
-              {/* === By Budget === */}
-              <NavigationMenuItem>
-                <NavigationMenuTrigger>Budget</NavigationMenuTrigger>
-                <NavigationMenuContent>
-                  <div className="w-[500px] p-4">
-                    {/* Header */}
-                    <div className="flex items-center justify-between pb-3 mb-3 border-b border-border">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                          <Banknote className="w-4 h-4" />
-                        </div>
-                        <div>
-                          <h3 className="text-sm font-bold text-foreground">Shop by Budget</h3>
-                          <p className="text-xs text-muted-foreground">Select a price tier to filter certified medical equipment</p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* 2-Column Grid for Budget Cards */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <NavigationMenuLink asChild>
-                        <NavigationLink
-                          href="/products?min_price=0&max_price=1000"
-                          className="group flex flex-col justify-between p-3.5 rounded-xl border border-border/80 bg-muted/20 hover:bg-card hover:border-emerald-500/50 hover:shadow-md transition-all duration-200 no-underline outline-none"
-                          pendingClassName="opacity-50"
-                        >
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md">
-                                Under Ksh 1,000
-                              </span>
-                              <span className="text-xs text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all">→</span>
-                            </div>
-                            <h4 className="text-xs font-bold text-foreground mb-1 group-hover:text-primary transition-colors">Essentials & Basics</h4>
-                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">Test strips, bandages, masks & diagnostic disposables.</p>
-                          </div>
-                          <div className="mt-3 pt-2 border-t border-border/40 text-[10px] text-muted-foreground font-medium">
-                            Starts from <strong className="text-foreground">Ksh 200</strong>
-                          </div>
-                        </NavigationLink>
-                      </NavigationMenuLink>
-
-                      <NavigationMenuLink asChild>
-                        <NavigationLink
-                          href="/products?min_price=1000&max_price=5000"
-                          className="group flex flex-col justify-between p-3.5 rounded-xl border border-border/80 bg-muted/20 hover:bg-card hover:border-blue-500/50 hover:shadow-md transition-all duration-200 no-underline outline-none"
-                          pendingClassName="opacity-50"
-                        >
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-md">
-                                Ksh 1k – 5k
-                              </span>
-                              <span className="text-xs text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all">→</span>
-                            </div>
-                            <h4 className="text-xs font-bold text-foreground mb-1 group-hover:text-primary transition-colors">Everyday Health</h4>
-                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">Digital BP monitors, pulse oximeters & thermometers.</p>
-                          </div>
-                          <div className="mt-3 pt-2 border-t border-border/40 text-[10px] text-muted-foreground font-medium">
-                            Starts from <strong className="text-foreground">Ksh 1,200</strong>
-                          </div>
-                        </NavigationLink>
-                      </NavigationMenuLink>
-
-                      <NavigationMenuLink asChild>
-                        <NavigationLink
-                          href="/products?min_price=5000&max_price=20000"
-                          className="group flex flex-col justify-between p-3.5 rounded-xl border border-border/80 bg-muted/20 hover:bg-card hover:border-purple-500/50 hover:shadow-md transition-all duration-200 no-underline outline-none"
-                          pendingClassName="opacity-50"
-                        >
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-bold text-purple-600 dark:text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-md">
-                                Ksh 5k – 20k
-                              </span>
-                              <span className="text-xs text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all">→</span>
-                            </div>
-                            <h4 className="text-xs font-bold text-foreground mb-1 group-hover:text-primary transition-colors">Clinical & Home Care</h4>
-                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">Compressor nebulizers, wheelchairs & fetal dopplers.</p>
-                          </div>
-                          <div className="mt-3 pt-2 border-t border-border/40 text-[10px] text-muted-foreground font-medium">
-                            Starts from <strong className="text-foreground">Ksh 5,500</strong>
-                          </div>
-                        </NavigationLink>
-                      </NavigationMenuLink>
-
-                      <NavigationMenuLink asChild>
-                        <NavigationLink
-                          href="/products?min_price=20000"
-                          className="group flex flex-col justify-between p-3.5 rounded-xl border border-border/80 bg-muted/20 hover:bg-card hover:border-amber-500/50 hover:shadow-md transition-all duration-200 no-underline outline-none"
-                          pendingClassName="opacity-50"
-                        >
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md">
-                                Ksh 20,000+
-                              </span>
-                              <span className="text-xs text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition-all">→</span>
-                            </div>
-                            <h4 className="text-xs font-bold text-foreground mb-1 group-hover:text-primary transition-colors">Advanced Equipment</h4>
-                            <p className="text-[11px] text-muted-foreground line-clamp-2 leading-relaxed">Oxygen concentrators, hospital beds & patient monitors.</p>
-                          </div>
-                          <div className="mt-3 pt-2 border-t border-border/40 text-[10px] text-muted-foreground font-medium">
-                            Starts from <strong className="text-foreground">Ksh 20,000</strong>
-                          </div>
-                        </NavigationLink>
-                      </NavigationMenuLink>
-                    </div>
-
-                    {/* Footer */}
-                    <div className="mt-4 pt-3 border-t border-border flex justify-end text-xs">
-                      <NavigationMenuLink asChild>
-                        <NavigationLink
-                          href="/products"
-                          className="font-semibold text-primary hover:underline flex items-center gap-1 no-underline outline-none"
-                          pendingClassName="opacity-50"
-                        >
-                          Browse catalog →
-                        </NavigationLink>
-                      </NavigationMenuLink>
-                    </div>
                   </div>
                 </NavigationMenuContent>
               </NavigationMenuItem>

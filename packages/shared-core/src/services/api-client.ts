@@ -11,13 +11,20 @@ const API_PREFIX = '/api/v1';
 // Get base URL - for client-side, prefix is already handled by Next.js rewrites
 // For server-side, we need the full URL
 function getBaseUrl(): string {
-  if (typeof window === 'undefined') {
-    // Server-side: use full backend URL
-    return `${API_URL}${API_PREFIX}`;
+  const isTestOrSsr =
+    typeof window === 'undefined' ||
+    !window.location ||
+    !window.location.origin ||
+    window.location.origin === 'null' ||
+    typeof process !== 'undefined' && process.env?.NODE_ENV === 'test';
+
+  if (isTestOrSsr) {
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+    return `${base}${API_PREFIX}`;
   }
-  // Client-side: prefix is needed so Next.js rewrites can proxy /api/v1/* to backend
   return API_PREFIX;
 }
+
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
 
@@ -114,6 +121,11 @@ class TokenManager {
         if (typeof window !== 'undefined') {
             localStorage.setItem('refresh_token', data.refresh_token);
             setAccessToken(data.access_token);
+            // Keep the auth store + auth_token cookie in sync with this refresh so
+            // validateSession / SSR proxy don't keep using a stale token/expiry.
+            window.dispatchEvent(new CustomEvent('auth:token-refreshed', {
+              detail: { accessToken: data.access_token, expiresIn: data.expires_in },
+            }));
         }
 
         return data.access_token;
@@ -242,12 +254,17 @@ export const apiClient = {
               response: sanitize(error.message || error),
             });
           }
+          // Do not retry client-side 4xx errors (e.g. validation, forbidden, bad request)
+          if (error.status && error.status >= 400 && error.status < 500) {
+            throw error;
+          }
           if (attempts === maxAttempts - 1) {
             throw error;
           }
           attempts++;
         }
       }
+
 
       throw new Error('Request failed after retry');
     });
@@ -362,8 +379,11 @@ export const apiClient = {
         toast.error(String(errorMessage));
       }
 
-      throw new Error(errorMessage);
+      const err: any = new Error(errorMessage);
+      err.status = response.status;
+      throw err;
     }
+
 
     if (contentType?.includes('application/json')) {
       const json = await response.json();
@@ -391,12 +411,82 @@ export const apiClient = {
     return `${method}:${endpoint}:${JSON.stringify(options.params)}`;
   },
 
+  /**
+   * Synchronize auth token to cookie for SSR middleware compatibility
+   */
+  syncAuthCookie(accessToken: string | null): void {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+
+    if (!accessToken) {
+      document.cookie = 'auth_token=; Path=/; Max-Age=0; SameSite=Lax';
+      return;
+    }
+
+    const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+    let maxAge = 86400 * 7; // Default 7 days
+
+    try {
+      const payload = JSON.parse(atob(accessToken.split('.')[1]));
+      if (payload.exp) {
+        const expMs = payload.exp * 1000;
+        maxAge = Math.max(0, Math.floor((expMs - Date.now()) / 1000));
+      }
+    } catch {
+      // Keep default maxAge
+    }
+
+    document.cookie = `auth_token=${accessToken}; Path=/; Max-Age=${maxAge}; SameSite=Lax${secure}`;
+  },
+
   handleAuthFailure(): void {
     tokenManager.clearRefreshToken();
     if (typeof window !== 'undefined') {
       localStorage.removeItem('access_token');
       clearAccessToken();
+      this.syncAuthCookie(null);
       window.dispatchEvent(new CustomEvent('auth:session-expired'));
     }
   },
 };
+
+/**
+ * Check if backend API is reachable
+ */
+export async function healthCheck(): Promise<boolean> {
+  try {
+    const url = typeof window === 'undefined' ? `${API_URL}/health` : '/health';
+    const response = await fetch(url, { credentials: 'include' });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Get API base URL
+ */
+export function getApiUrl(): string {
+  return API_URL;
+}
+
+export class AuthExpiredError extends Error {
+  name = 'AuthExpiredError';
+  code?: string;
+  isRefreshError?: boolean;
+
+  constructor(
+    message: string = 'Session expired. Please login again.',
+    code?: string,
+    isRefreshError: boolean = false
+  ) {
+    super(message);
+    this.code = code;
+    this.isRefreshError = isRefreshError;
+    Object.setPrototypeOf(this, AuthExpiredError.prototype);
+  }
+}
+
+export function isAuthExpiredError(error: unknown): error is AuthExpiredError {
+  return error instanceof Error && error.name === 'AuthExpiredError';
+}
+

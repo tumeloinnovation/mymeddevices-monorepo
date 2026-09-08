@@ -3,10 +3,12 @@
   "private": true,
   "scripts": {
     "dev": "turbo dev",
-    "dev:backend": "cd apps/backend && PYTHONPATH=. uv run uvicorn app.main:app --reload",
+    "dev:backend": "cd apps/backend && PYTHONPATH=. uv run uvicorn app.main:app --reload --host 0.0.0.0",
     "dev:customer": "turbo dev --filter=customer",
     "dev:admin": "turbo dev --filter=admin",
     "dev:vendor": "turbo dev --filter=vendor",
+    "dev:driver": "pnpm --filter=mmd-driver start",
+    "dev:mobile": "NODE_OPTIONS='--max-old-space-size=8192' pnpm --filter=my-meds-device start",
     "dev:frontend": "turbo dev --filter=customer --filter=admin --filter=vendor",
     "build": "turbo build",
     "build:emails": "python3 scripts/build_emails.py",
@@ -32,9 +34,13 @@
   "packageManager": "pnpm@10.34.2+sha512.9ae7e3fe477c52bbce1ddc8aa196ff243ed4b48f1ceaa7455820adfa7a48b5f57e817ed2d20e5f3c2c3646dfedba360567693e534572dccd252fb2eb8b7c044c",
   "pnpm": {
     "overrides": {
-      "next": "16.0.7",
-      "react": "19.2.1",
-      "react-dom": "19.2.1",
+      "next": "16.2.9",
+      "react": "19.2.4",
+      "react-dom": "19.2.4",
+      "my-meds-device>react": "19.1.0",
+      "my-meds-device>react-dom": "19.1.0",
+      "my-meds-device>react-test-renderer": "19.1.0",
+      "react-native@0.81.5>react": "19.1.0",
       "@tanstack/react-query": "^5.101.0"
     }
   }

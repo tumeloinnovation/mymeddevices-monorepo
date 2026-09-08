@@ -23,7 +23,7 @@ export default function NotesSection({ notes, setNotes, disabled = false }: Note
         </Label>
       </div>
       <p className="text-sm text-muted-foreground">
-        Add any special instructions for your order. This will be shared with the vendor and admin team.
+        Add any special delivery instructions for your order (e.g., estate gate code, landmark, or preferred time).
       </p>
       <Textarea
         id="order-notes"

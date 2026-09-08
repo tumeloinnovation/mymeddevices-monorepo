@@ -13,6 +13,15 @@ export interface ProductFilters {
   search: string;
   status: string;
   categoryId: string;
+  vendorId?: string;
+}
+
+export function useProductStats(vendorId?: string) {
+  return useQuery({
+    queryKey: ["admin", "products", "stats", vendorId],
+    queryFn: () => catalogService.getProductStats(vendorId),
+    staleTime: 30 * 1000,
+  });
 }
 
 export function useProducts(filters: ProductFilters) {
@@ -25,6 +34,7 @@ export function useProducts(filters: ProductFilters) {
         search: filters.search || undefined,
         status_filter: filters.status !== "all" ? filters.status : undefined,
         category_id: filters.categoryId !== "all" ? filters.categoryId : undefined,
+        vendor_id: filters.vendorId !== "all" ? filters.vendorId : undefined,
       }),
     placeholderData: (prev) => prev,
   });
@@ -60,6 +70,24 @@ export function useVendors() {
       const map = new Map<string, string>();
       data.vendors.forEach((v) => {
         map.set(v.id, v.company_name || v.name || v.store_name || "Unknown Vendor");
+      });
+      return map;
+    },
+    staleTime: 10 * 60 * 1000,
+  });
+}
+
+export function useBrands() {
+  return useQuery({
+    queryKey: ["admin", "brands", "overview-map"],
+    queryFn: async () => {
+      const data = await catalogService.getBrands({
+        active_only: false,
+        page_size: 100,
+      });
+      const map = new Map<string, string>();
+      (data.brands || []).forEach((b) => {
+        map.set(b.id, b.name);
       });
       return map;
     },
@@ -103,5 +131,11 @@ export function useProductMutations() {
     onSuccess: invalidate,
   });
 
-  return { verify, publish, archive, unarchive, reject, delete: deleteProduct };
+  const changeStatus = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      catalogService.changeStatus(id, status as any),
+    onSuccess: invalidate,
+  });
+
+  return { verify, publish, archive, unarchive, reject, delete: deleteProduct, changeStatus };
 }

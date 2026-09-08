@@ -1,13 +1,17 @@
 "use client";
 
 import React from "react";
+import { useSearchParams } from "next/navigation";
 import { useProducts } from "@/lib/hooks/useProducts";
 import { useCategories } from "@/lib/hooks/useCategories";
 import ShopPage from "../../_components/ShopPage";
 
 const ProductsPage = () => {
-  // Fetch all published products
-  const { products, isLoading, isError, error } = useProducts({ status: "publish" });
+  const searchParams = useSearchParams();
+  const categoryParam = searchParams.get("category") || undefined;
+
+  // Fetch published products (high limit for full catalog client filtering)
+  const { products, isLoading, isError, error } = useProducts({ status: "publish", per_page: 200 });
   const { data: categories = [] } = useCategories();
 
   if (isError) {
@@ -31,6 +35,7 @@ const ProductsPage = () => {
     <ShopPage
       products={products}
       categories={categories}
+      initialSelectedCategory={categoryParam}
       title="All Products"
       isLoading={isLoading}
     />

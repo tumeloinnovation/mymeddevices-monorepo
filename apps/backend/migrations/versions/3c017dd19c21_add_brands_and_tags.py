@@ -5,11 +5,11 @@ Revises: add_email_tables
 Create Date: 2026-06-13 12:26:12.913342
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = '3c017dd19c21'

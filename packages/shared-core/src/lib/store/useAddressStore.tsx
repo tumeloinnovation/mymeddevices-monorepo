@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import {
   generateAddressId,
   areAddressesDuplicates,
-} from "@/lib/utils/address-mapper";
+} from "../utils/address-mapper";
 
 // Predefined tags
 export const PREDEFINED_TAGS = ['home', 'work', 'office', 'other'] as const;

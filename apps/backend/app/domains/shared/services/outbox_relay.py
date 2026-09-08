@@ -1,50 +1,93 @@
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from datetime import datetime
-import asyncio
+import uuid
+from datetime import UTC, datetime, timedelta
+from decimal import Decimal
+from typing import Any
 
+from sqlalchemy import and_, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.logging import logger
 from app.domains.shared.models.outbox import OutboxEvent, OutboxStatus
 from app.domains.shopping.services.email_notification_service import EmailNotificationService
-from app.core.logging import logger
+
 
 class OutboxRelay:
     def __init__(self, db: AsyncSession):
         self.db = db
         self.email_service = EmailNotificationService()
 
-    async def process_pending_events(self, limit: int = 50):
-        stmt = select(OutboxEvent).where(OutboxEvent.status == OutboxStatus.PENDING).limit(limit)
+    async def process_pending_events(self, limit: int = 50) -> int:
+        """
+        Process pending and retryable failed outbox events with exponential backoff.
+        Returns the number of processed events.
+        """
+        now = datetime.now(UTC)
+        stmt = (
+            select(OutboxEvent)
+            .where(
+                or_(
+                    OutboxEvent.status == OutboxStatus.PENDING,
+                    and_(
+                        OutboxEvent.status == OutboxStatus.FAILED,
+                        OutboxEvent.retry_count < OutboxEvent.max_retries,
+                        or_(
+                            OutboxEvent.next_retry_at.is_(None),
+                            OutboxEvent.next_retry_at <= now,
+                        ),
+                    ),
+                )
+            )
+            .order_by(OutboxEvent.created_at.asc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+
         result = await self.db.execute(stmt)
         events = result.scalars().all()
 
+        processed_count = 0
         for event in events:
             try:
-                await self._dispatch(event)
+                async with self.db.begin_nested():
+                    await self._dispatch(event)
                 event.status = OutboxStatus.PROCESSED
-                event.processed_at = datetime.utcnow()
+                event.processed_at = datetime.now(UTC)
+                event.last_error = None
+                processed_count += 1
             except Exception as e:
-                logger.error(f"Failed to process event {event.id}: {e}")
-                event.status = OutboxStatus.FAILED
-            
+                event.retry_count += 1
+                error_msg = str(e)[:1000]
+                event.last_error = error_msg
+                logger.error(
+                    f"Failed to process outbox event {event.id} (attempt {event.retry_count}/{event.max_retries}): {e}"
+                )
+
+                if event.retry_count >= event.max_retries:
+                    event.status = OutboxStatus.DEAD_LETTER
+                    logger.error(f"Outbox event {event.id} moved to DEAD_LETTER after {event.retry_count} attempts.")
+                else:
+                    event.status = OutboxStatus.FAILED
+                    backoff_seconds = min(30 * (2 ** (event.retry_count - 1)), 3600)
+                    event.next_retry_at = now + timedelta(seconds=backoff_seconds)
+
             self.db.add(event)
-        
+
         if events:
             await self.db.commit()
 
+        return processed_count
+
     async def _dispatch(self, event: OutboxEvent):
-        # Temporary in-process dispatcher until Celery is wired
         if event.event_type == "OrderCreated":
             logger.info(f"Dispatching OrderCreated event for {event.aggregate_id}")
-            import uuid
-            from sqlalchemy.orm import selectinload
             from app.domains.shopping.services.order_service import OrderService
             from app.domains.vendor.models.vendor_profile import VendorProfile
-            
+
             try:
                 order_service = OrderService(self.db)
                 order = await order_service.get_order(uuid.UUID(event.aggregate_id))
                 if order:
-                    vendor_items_map = {}
+                    vendor_items_map: dict[uuid.UUID, list[Any]] = {}
                     for item in order.items:
                         if item.vendor_id not in vendor_items_map:
                             vendor_items_map[item.vendor_id] = []
@@ -52,7 +95,12 @@ class OutboxRelay:
 
                     for vendor_id, items in vendor_items_map.items():
                         from app.domains.auth.models.user import User
-                        stmt = select(VendorProfile, User.email).join(User, VendorProfile.user_id == User.id).where(VendorProfile.id == vendor_id)
+
+                        stmt = (
+                            select(VendorProfile, User.email)
+                            .join(User, VendorProfile.user_id == User.id)
+                            .where(VendorProfile.id == vendor_id)
+                        )
                         res = await self.db.execute(stmt)
                         row = res.first()
                         if row:
@@ -64,14 +112,172 @@ class OutboxRelay:
                                     vendor_email=vendor_email,
                                     vendor_name=vendor_profile.store_name,
                                     order_number=str(order.order_number or order.id),
-                                    order_total=vendor_total
+                                    order_total=vendor_total,
                                 )
             except Exception as e:
                 logger.error(f"Error handling OrderCreated event: {e}")
+                raise
+
+
         elif event.event_type == "OrderPaid":
             logger.info(f"Dispatching OrderPaid event for {event.aggregate_id}")
-            pass
+            payload = event.payload or {}
+            sub_orders = payload.get("sub_orders") or []
+
+            # 1. Credit vendor ledgers idempotently (net = gross - platform fee)
+            from app.domains.payments.services.ledger_service import LedgerService
+
+            ledger_service = LedgerService(self.db)
+            for so in sub_orders:
+                vendor_id = so.get("vendor_id")
+                if not vendor_id:
+                    continue
+                vendor_uuid = uuid.UUID(str(vendor_id))
+                sub_order_uuid = uuid.UUID(str(so["sub_order_id"])) if so.get("sub_order_id") else None
+                gross = Decimal(str(so.get("subtotal_amount", 0)))
+
+                await ledger_service.credit_vendor_for_sub_order(
+                    vendor_id=vendor_uuid,
+                    sub_order_id=sub_order_uuid,
+                    gross_amount=gross,
+                    reference_id=str(event.aggregate_id),
+                )
+
+            # 2. Record audit StockLog entries idempotently
+            from app.domains.catalog.models import Product, StockChangeReason, StockLog
+
+            for so in sub_orders:
+                for item in so.get("items") or []:
+                    product_id = uuid.UUID(str(item["product_id"]))
+                    # Idempotency check: has StockLog for this order and product already been created?
+                    existing_log = (
+                        await self.db.execute(
+                            select(StockLog).where(
+                                StockLog.product_id == product_id,
+                                StockLog.reference_id == str(event.aggregate_id),
+                                StockLog.reason == StockChangeReason.ORDER_SALE,
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if existing_log:
+                        continue
+
+                    product_res = await self.db.execute(select(Product).where(Product.id == product_id))
+                    product = product_res.scalar_one_or_none()
+                    current_qty = product.stock_quantity if product else 0
+                    deducted_qty = int(item.get("quantity", 0))
+                    self.db.add(
+                        StockLog(
+                            product_id=product_id,
+                            vendor_id=uuid.UUID(str(item.get("vendor_id", so.get("vendor_id")))),
+                            quantity_change=-deducted_qty,
+                            previous_quantity=current_qty,
+                            new_quantity=max(0, current_qty - deducted_qty),
+                            reason=StockChangeReason.ORDER_SALE,
+                            reference_id=str(event.aggregate_id),
+                            reference_type="order",
+                        )
+                    )
+
+            # 3. Award customer loyalty points for the paid order (idempotent).
+            # Placed here because every payment path (M-Pesa callback, manual
+            # mobile money verification, COD creation) emits OrderPaid.
+            from app.domains.customers.services.loyalty_service import LoyaltyService
+            from app.domains.shopping.models.order import Order
+
+            paid_order = (
+                await self.db.execute(select(Order).where(Order.id == uuid.UUID(event.aggregate_id)))
+            ).scalar_one_or_none()
+            if paid_order:
+                await LoyaltyService(self.db).award_points_for_order(paid_order)
+
+        elif event.event_type == "OrderCancelled":
+            logger.info(f"Dispatching OrderCancelled event for {event.aggregate_id}")
+            payload = event.payload or {}
+            sub_orders = payload.get("sub_orders") or []
+
+            # Reverse vendor ledger credits for sub-orders that were paid.
+            # Idempotent via the (sub_order_id, transaction_type) unique constraint.
+            from app.domains.payments.services.ledger_service import LedgerService
+
+            ledger_service = LedgerService(self.db)
+            for so in sub_orders:
+                if not so.get("sub_order_id") or not so.get("vendor_id"):
+                    continue
+                sub_order_uuid = uuid.UUID(str(so["sub_order_id"]))
+                vendor_uuid = uuid.UUID(str(so["vendor_id"]))
+
+                await ledger_service.reverse_vendor_credit(
+                    vendor_id=vendor_uuid,
+                    sub_order_id=sub_order_uuid,
+                    reference_id=str(event.aggregate_id),
+                )
+
         elif event.event_type == "OrderShipped":
             logger.info(f"Dispatching OrderShipped event for {event.aggregate_id}")
-            pass
-        # Extend as necessary
+            from app.domains.notifications.models.notification import NotificationType
+            from app.domains.notifications.services.notification_service import (
+                NotificationService,
+            )
+            from app.domains.shopping.models.order import Order
+
+            result = await self.db.execute(
+                select(Order).where(Order.id == uuid.UUID(event.aggregate_id))
+            )
+            order = result.scalar_one_or_none()
+            if order and order.user_id:
+                payload = event.payload or {}
+                tracking_number = payload.get("tracking_number") or payload.get("tracking_no")
+                body = f"Order {order.order_number or order.id} has shipped."
+                if tracking_number:
+                    body += f" Tracking number: {tracking_number}."
+                await NotificationService(self.db).create_notification(
+                    user_id=order.user_id,
+                    notification_type=NotificationType.ORDER_SHIPPED,
+                    title="Your order has shipped",
+                    body=body,
+                    data={
+                        "order_id": str(order.id),
+                        "order_number": order.order_number,
+                        "status": "shipped",
+                        "tracking_number": tracking_number,
+                    },
+                )
+
+        elif event.event_type == "DeliveryDispatchRetry":
+            from app.domains.logistics.models.delivery import Delivery
+            from app.domains.logistics.services.driver_assignment_service import DriverAssignmentService
+
+            delivery_result = await self.db.execute(
+                select(Delivery).where(Delivery.id == uuid.UUID(event.aggregate_id))
+            )
+            delivery = delivery_result.scalar_one_or_none()
+            if not delivery or delivery.assigned_driver_id is not None:
+                return
+
+            payload = event.payload or {}
+            assigned_driver = await DriverAssignmentService(self.db).assign_best_driver(
+                delivery_id=delivery.id,
+                pickup_location=(payload.get("pickup_latitude"), payload.get("pickup_longitude")),
+            )
+            if assigned_driver is None:
+                raise RuntimeError("No available drivers")
+
+        elif event.event_type == "StaffInvitationCreated":
+            payload = event.payload or {}
+            email = payload.get("email")
+            first_name = payload.get("first_name") or "Staff Member"
+            role = payload.get("role") or "staff"
+            temp_password = payload.get("temp_password")
+            if email:
+                try:
+                    await self.email_service.send_staff_invitation(
+                        user_email=email,
+                        first_name=first_name,
+                        role=role,
+                        temp_password=temp_password,
+                    )
+                except Exception as e:
+                    logger.error(f"Error sending staff invitation email: {e}")
+                    raise
+

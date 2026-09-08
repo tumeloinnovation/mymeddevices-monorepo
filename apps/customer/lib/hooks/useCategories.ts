@@ -40,6 +40,16 @@ interface PaginationParams {
 // Categories Hook
 // ============================================================================
 
+function resolveCategoryImage(item: any): { src: string } | null {
+  const rawSrc = item.image_url || item.icon_url || item.image?.src;
+  if (!rawSrc || typeof rawSrc !== 'string') return null;
+  const trimmed = rawSrc.trim();
+  if (trimmed.startsWith('/') || trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return { src: trimmed };
+  }
+  return null;
+}
+
 /**
  * Hook for fetching all categories with React Query
  *
@@ -63,8 +73,8 @@ export function useCategories(options?: Omit<UseQueryOptions<any>, 'queryKey' | 
         parent: item.parent_id || 0,
         description: item.description || '',
         display: item.display || 'default',
-        image: item.image_url ? { src: item.image_url } : null,
-        count: item.count || item.product_count || 0,
+        image: resolveCategoryImage(item),
+        count: item.product_count ?? item.count ?? 0,
         subCategories: item.children || [],
       } as Category));
     },
@@ -112,8 +122,8 @@ export function useCategoryBySlug(
         parent: item.parent_id || 0,
         description: item.description || '',
         display: item.display || 'default',
-        image: item.image_url ? { src: item.image_url } : null,
-        count: item.count || item.product_count || 0,
+        image: resolveCategoryImage(item),
+        count: item.product_count ?? item.count ?? 0,
         subCategories: item.children || [],
       } as Category;
     },
@@ -195,7 +205,7 @@ export function useCategoryProducts(
         dimensions: item.dimensions || { length: '', width: '', height: '' },
         meta_data: [],
         date_created: item.created_at || new Date().toISOString(),
-        permalink: `/products/${item.sku || item.id}`,
+        permalink: `/products/${item.slug || item.sku || item.id}`,
         type: 'simple',
         purchasable: true,
         catalog_visibility: 'visible',
@@ -255,8 +265,8 @@ export function useCategoryTree(options?: Omit<UseQueryOptions<any>, 'queryKey' 
         parent: item.parent_id || 0,
         description: item.description || '',
         display: item.display || 'default',
-        image: item.image_url ? { src: item.image_url } : null,
-        count: item.count || item.product_count || 0,
+        image: resolveCategoryImage(item),
+        count: item.product_count ?? item.count ?? 0,
         subCategories: item.children || [],
       } as Category));
     },
@@ -303,8 +313,8 @@ export function useSubcategories(
         parent: item.parent_id || 0,
         description: item.description || '',
         display: item.display || 'default',
-        image: item.image_url ? { src: item.image_url } : null,
-        count: item.count || item.product_count || 0,
+        image: resolveCategoryImage(item),
+        count: item.product_count ?? item.count ?? 0,
         subCategories: item.children || [],
       } as Category));
     },

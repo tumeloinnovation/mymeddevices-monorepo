@@ -1,8 +1,9 @@
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Text
-from sqlalchemy.orm import relationship
+from datetime import UTC, datetime
+
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import relationship
 
 from app.core.database import Base
 
@@ -18,7 +19,7 @@ class LoyaltyLedger(Base):
     description = Column(Text, nullable=True)
     reference_type = Column(String(50), nullable=True)  # order, refund, manual, etc.
     reference_id = Column(UUID(as_uuid=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     # Relationships
     customer = relationship("User", backref="loyalty_ledger_entries")

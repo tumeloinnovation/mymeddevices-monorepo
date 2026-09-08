@@ -17,7 +17,19 @@ import { useShopFilters } from "@/lib/context/ShopFiltersContext";
 import { Category } from "@/lib/data/types";
 
 
-export default function ShopFiltersDrawer({ categories, categoriesLoading }: { categories: Category[], categoriesLoading?: boolean }) {
+interface ShopFiltersDrawerProps {
+  categories: Category[];
+  categoriesLoading?: boolean;
+  selectedCategory?: string;
+  onCategoryChange?: (categorySlug?: string) => void;
+}
+
+export default function ShopFiltersDrawer({
+  categories,
+  categoriesLoading,
+  selectedCategory,
+  onCategoryChange,
+}: ShopFiltersDrawerProps) {
   const [open, setOpen] = useState(false);
   const { filters, setFilter, clearFilters } = useShopFilters();
 
@@ -45,7 +57,12 @@ export default function ShopFiltersDrawer({ categories, categoriesLoading }: { c
             </SheetDescription>
           </SheetHeader>
 
-          <ShopSidebar categories={categories} categoriesLoading={categoriesLoading} />
+          <ShopSidebar
+            categories={categories}
+            categoriesLoading={categoriesLoading}
+            selectedCategory={selectedCategory}
+            onCategoryChange={onCategoryChange}
+          />
 
           <div className="pt-6">
             <SheetClose asChild>

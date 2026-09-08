@@ -1,17 +1,11 @@
 import uuid
-from datetime import datetime, timezone
-from typing import List, Optional, Tuple
-from sqlalchemy import select, and_, func, delete
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from datetime import UTC, datetime
 
-from app.domains.shopping.models.banner import (
-    Banner,
-    BannerStatus,
-    BannerPlacement,
-    BannerClick,
-    BannerDismissal
-)
+from sqlalchemy import and_, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import NotFoundError
+from app.domains.shopping.models.banner import Banner, BannerClick, BannerDismissal, BannerPlacement, BannerStatus
 
 
 class BannerService:
@@ -29,24 +23,24 @@ class BannerService:
         title: str,
         placement: BannerPlacement,
         created_by_id: uuid.UUID,
-        description: Optional[str] = None,
-        image_url: Optional[str] = None,
-        image_alt_text: Optional[str] = None,
-        background_color: Optional[str] = None,
-        text_color: Optional[str] = None,
-        cta_text: Optional[str] = None,
-        cta_link: Optional[str] = None,
+        description: str | None = None,
+        image_url: str | None = None,
+        image_alt_text: str | None = None,
+        background_color: str | None = None,
+        text_color: str | None = None,
+        cta_text: str | None = None,
+        cta_link: str | None = None,
         cta_target: str = "_self",
         priority: int = 0,
         status: BannerStatus = BannerStatus.DRAFT,
-        scheduled_start: Optional[datetime] = None,
-        scheduled_end: Optional[datetime] = None,
-        target_audience: Optional[List[str]] = None,
-        target_categories: Optional[List[str]] = None,
-        target_products: Optional[List[str]] = None,
-        exclude_products: Optional[List[str]] = None,
-        coupon_id: Optional[uuid.UUID] = None,
-        vendor_id: Optional[uuid.UUID] = None,
+        scheduled_start: datetime | None = None,
+        scheduled_end: datetime | None = None,
+        target_audience: list[str] | None = None,
+        target_categories: list[str] | None = None,
+        target_products: list[str] | None = None,
+        exclude_products: list[str] | None = None,
+        coupon_id: uuid.UUID | None = None,
+        vendor_id: uuid.UUID | None = None,
         is_dismissible: bool = False,
         show_close_button: bool = True,
         mobile_hidden: bool = False,
@@ -80,22 +74,23 @@ class BannerService:
             desktop_hidden=desktop_hidden,
             created_by_id=created_by_id,
         )
-        self.db.add(banner)
-        await self.db.commit()
-        await self.db.refresh(banner)
-        return banner
+        # Use transaction for atomic banner creation
+        async with self.db.begin():
+            self.db.add(banner)
+            banner_id = banner.id
+        # Reload and return
+        result = await self.get_by_id(banner_id)
+        if result is None:
+            raise NotFoundError("Banner", str(banner_id))
+        return result
 
-    async def get_by_id(self, banner_id: uuid.UUID) -> Optional[Banner]:
+    async def get_by_id(self, banner_id: uuid.UUID) -> Banner | None:
         """Get banner by ID."""
         stmt = select(Banner).where(Banner.id == banner_id)
         result = await self.db.execute(stmt)
         return result.scalar_one_or_none()
 
-    async def update_banner(
-        self,
-        banner_id: uuid.UUID,
-        **updates
-    ) -> Optional[Banner]:
+    async def update_banner(self, banner_id: uuid.UUID, **updates) -> Banner | None:
         """Update banner fields."""
         banner = await self.get_by_id(banner_id)
         if not banner:
@@ -105,28 +100,32 @@ class BannerService:
             if hasattr(banner, key):
                 setattr(banner, key, value)
 
-        await self.db.commit()
+        # Use transaction for atomic update
+        async with self.db.begin():
+            pass  # Updates already done via ORM
+
         await self.db.refresh(banner)
         return banner
 
     async def delete_banner(self, banner_id: uuid.UUID) -> bool:
         """Delete a banner."""
-        banner = await self.get_by_id(banner_id)
-        if not banner:
-            return False
+        # Use transaction for atomic deletion
+        async with self.db.begin():
+            banner = await self.get_by_id(banner_id)
+            if not banner:
+                return False
 
-        await self.db.delete(banner)
-        await self.db.commit()
+            await self.db.delete(banner)
         return True
 
     async def list_banners(
         self,
-        status: Optional[BannerStatus] = None,
-        placement: Optional[BannerPlacement] = None,
-        vendor_id: Optional[uuid.UUID] = None,
+        status: BannerStatus | None = None,
+        placement: BannerPlacement | None = None,
+        vendor_id: uuid.UUID | None = None,
         offset: int = 0,
         limit: int = 50,
-    ) -> Tuple[List[Banner], int]:
+    ) -> tuple[list[Banner], int]:
         """List banners with pagination and filtering."""
         stmt = select(Banner)
         count_stmt = select(func.count(Banner.id))
@@ -148,10 +147,7 @@ class BannerService:
         total_count = total_result.scalar() or 0
 
         # Get paginated results ordered by priority (desc) and created_at (desc)
-        stmt = stmt.order_by(
-            Banner.priority.desc(),
-            Banner.created_at.desc()
-        ).offset(offset).limit(limit)
+        stmt = stmt.order_by(Banner.priority.desc(), Banner.created_at.desc()).offset(offset).limit(limit)
 
         result = await self.db.execute(stmt)
         return list(result.scalars().all()), total_count
@@ -162,12 +158,12 @@ class BannerService:
 
     async def get_active_banners(
         self,
-        placement: Optional[BannerPlacement] = None,
-        user_id: Optional[uuid.UUID] = None,
-        category_id: Optional[str] = None,
-        product_id: Optional[str] = None,
+        placement: BannerPlacement | None = None,
+        user_id: uuid.UUID | None = None,
+        category_id: str | None = None,
+        product_id: str | None = None,
         limit: int = 10,
-    ) -> List[Banner]:
+    ) -> list[Banner]:
         """
         Get banners that should be displayed to users.
 
@@ -177,13 +173,13 @@ class BannerService:
         - Placement matches
         - Device type (mobile/desktop) - you'd pass this from request context
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         stmt = select(Banner).where(
             and_(
                 Banner.status == BannerStatus.ACTIVE,
                 (Banner.scheduled_start.is_(None)) | (Banner.scheduled_start <= now),
-                (Banner.scheduled_end.is_(None)) | (Banner.scheduled_end > now)
+                (Banner.scheduled_end.is_(None)) | (Banner.scheduled_end > now),
             )
         )
 
@@ -195,10 +191,7 @@ class BannerService:
         # if vendor_id:
         #     stmt = stmt.where((Banner.vendor_id.is_(None)) | (Banner.vendor_id == vendor_id))
 
-        stmt = stmt.order_by(
-            Banner.priority.desc(),
-            Banner.created_at.desc()
-        ).limit(limit)
+        stmt = stmt.order_by(Banner.priority.desc(), Banner.created_at.desc()).limit(limit)
 
         result = await self.db.execute(stmt)
         banners = list(result.scalars().all())
@@ -216,73 +209,82 @@ class BannerService:
 
     async def record_impression(self, banner_id: uuid.UUID) -> bool:
         """Record a banner impression (view)."""
-        banner = await self.get_by_id(banner_id)
-        if not banner:
-            return False
+        # Use transaction for atomic impression recording
+        async with self.db.begin():
+            banner = await self.get_by_id(banner_id)
+            if not banner:
+                return False
 
-        banner.impressions += 1
-        await self.db.commit()
+            banner.impressions += 1
         return True
 
     async def record_click(
         self,
         banner_id: uuid.UUID,
-        user_id: Optional[uuid.UUID] = None,
-        session_id: Optional[str] = None,
-        ip_address: Optional[str] = None,
-        user_agent: Optional[str] = None,
-        referrer: Optional[str] = None,
+        user_id: uuid.UUID | None = None,
+        session_id: str | None = None,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+        referrer: str | None = None,
     ) -> BannerClick:
         """Record a banner click."""
-        # Increment banner click count
-        banner = await self.get_by_id(banner_id)
-        if not banner:
-            raise ValueError("Banner not found")
+        # Use transaction for atomic click recording
+        async with self.db.begin():
+            # Increment banner click count
+            banner = await self.get_by_id(banner_id)
+            if not banner:
+                raise NotFoundError("Banner", banner_id)
 
-        banner.clicks += 1
+            banner.clicks += 1
 
-        # Create click record
-        click = BannerClick(
-            banner_id=banner_id,
-            user_id=user_id,
-            session_id=session_id,
-            ip_address=ip_address,
-            user_agent=user_agent,
-            referrer=referrer,
-        )
-        self.db.add(click)
+            # Create click record
+            click = BannerClick(
+                banner_id=banner_id,
+                user_id=user_id,
+                session_id=session_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                referrer=referrer,
+            )
+            self.db.add(click)
+            click_id = click.id
 
-        await self.db.commit()
-        await self.db.refresh(click)
-        return click
+        # Reload and return
+        stmt = select(BannerClick).where(BannerClick.id == click_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
     async def record_dismissal(
         self,
         banner_id: uuid.UUID,
-        user_id: Optional[uuid.UUID] = None,
-        session_id: Optional[str] = None,
+        user_id: uuid.UUID | None = None,
+        session_id: str | None = None,
     ) -> BannerDismissal:
         """Record a banner dismissal."""
-        # Increment banner dismissal count
-        banner = await self.get_by_id(banner_id)
-        if not banner:
-            raise ValueError("Banner not found")
+        # Use transaction for atomic dismissal recording
+        async with self.db.begin():
+            # Increment banner dismissal count
+            banner = await self.get_by_id(banner_id)
+            if not banner:
+                raise NotFoundError("Banner", banner_id)
 
-        banner.dismissals += 1
+            banner.dismissals += 1
 
-        # Create dismissal record
-        dismissal = BannerDismissal(
-            banner_id=banner_id,
-            user_id=user_id,
-            session_id=session_id,
-        )
-        self.db.add(dismissal)
+            # Create dismissal record
+            dismissal = BannerDismissal(
+                banner_id=banner_id,
+                user_id=user_id,
+                session_id=session_id,
+            )
+            self.db.add(dismissal)
+            dismissal_id = dismissal.id
 
-        await self.db.commit()
-        await self.db.refresh(dismissal)
-        return dismissal
+        # Reload and return
+        stmt = select(BannerDismissal).where(BannerDismissal.id == dismissal_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
-    async def get_banner_analytics(self, banner_id: uuid.UUID) -> Optional[dict]:
+    async def get_banner_analytics(self, banner_id: uuid.UUID) -> dict | None:
         """Get analytics for a specific banner."""
         banner = await self.get_by_id(banner_id)
         if not banner:
@@ -304,27 +306,26 @@ class BannerService:
         self,
         offset: int = 0,
         limit: int = 50,
-    ) -> Tuple[List[dict], int]:
+    ) -> tuple[list[dict], int]:
         """Get analytics for all banners."""
-        banners, total = await self.list_banners(
-            offset=offset,
-            limit=limit
-        )
+        banners, total = await self.list_banners(offset=offset, limit=limit)
 
         analytics_list = []
         for banner in banners:
-            analytics_list.append({
-                "banner_id": str(banner.id),
-                "title": banner.title,
-                "placement": banner.placement,
-                "impressions": banner.impressions,
-                "clicks": banner.clicks,
-                "dismissals": banner.dismissals,
-                "click_through_rate": banner.get_click_through_rate(),
-                "status": banner.status,
-                "scheduled_start": banner.scheduled_start.isoformat() if banner.scheduled_start else None,
-                "scheduled_end": banner.scheduled_end.isoformat() if banner.scheduled_end else None,
-            })
+            analytics_list.append(
+                {
+                    "banner_id": str(banner.id),
+                    "title": banner.title,
+                    "placement": banner.placement,
+                    "impressions": banner.impressions,
+                    "clicks": banner.clicks,
+                    "dismissals": banner.dismissals,
+                    "click_through_rate": banner.get_click_through_rate(),
+                    "status": banner.status,
+                    "scheduled_start": banner.scheduled_start.isoformat() if banner.scheduled_start else None,
+                    "scheduled_end": banner.scheduled_end.isoformat() if banner.scheduled_end else None,
+                }
+            )
 
         return analytics_list, total
 
@@ -337,13 +338,13 @@ class BannerService:
         Activate banners whose scheduled_start has arrived.
         Call this from a scheduled task (e.g., every minute).
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         stmt = select(Banner).where(
             and_(
                 Banner.status == BannerStatus.SCHEDULED,
                 Banner.scheduled_start <= now,
-                (Banner.scheduled_end.is_(None)) | (Banner.scheduled_end > now)
+                (Banner.scheduled_end.is_(None)) | (Banner.scheduled_end > now),
             )
         )
 
@@ -351,11 +352,12 @@ class BannerService:
         banners = result.scalars().all()
 
         count = 0
-        for banner in banners:
-            banner.status = BannerStatus.ACTIVE
-            count += 1
+        # Use transaction for atomic status updates
+        async with self.db.begin():
+            for banner in banners:
+                banner.status = BannerStatus.ACTIVE
+                count += 1
 
-        await self.db.commit()
         return count
 
     async def expire_passed_banners(self) -> int:
@@ -363,25 +365,22 @@ class BannerService:
         Expire banners whose scheduled_end has passed.
         Call this from a scheduled task.
         """
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         stmt = select(Banner).where(
-            and_(
-                Banner.status == BannerStatus.ACTIVE,
-                Banner.scheduled_end.isnot(None),
-                Banner.scheduled_end < now
-            )
+            and_(Banner.status == BannerStatus.ACTIVE, Banner.scheduled_end.isnot(None), Banner.scheduled_end < now)
         )
 
         result = await self.db.execute(stmt)
         banners = result.scalars().all()
 
         count = 0
-        for banner in banners:
-            banner.status = BannerStatus.EXPIRED
-            count += 1
+        # Use transaction for atomic status updates
+        async with self.db.begin():
+            for banner in banners:
+                banner.status = BannerStatus.EXPIRED
+                count += 1
 
-        await self.db.commit()
         return count
 
     # ========================================================================
@@ -390,9 +389,7 @@ class BannerService:
 
     async def _get_dismissed_banner_ids(self, user_id: uuid.UUID) -> set[uuid.UUID]:
         """Get set of banner IDs dismissed by this user."""
-        stmt = select(BannerDismissal.banner_id).where(
-            BannerDismissal.user_id == user_id
-        )
+        stmt = select(BannerDismissal.banner_id).where(BannerDismissal.user_id == user_id)
 
         result = await self.db.execute(stmt)
         return {row[0] for row in result.all()}

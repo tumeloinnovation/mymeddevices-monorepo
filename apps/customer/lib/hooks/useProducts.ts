@@ -61,64 +61,74 @@ export function useProducts(
       // Convert params to service format
       const serviceParams: any = {
         page: queryParams.page,
-        limit: queryParams.per_page || 20,
+        limit: queryParams.per_page || 100,
         q: queryParams.search,
         min_price: queryParams.min_price,
         max_price: queryParams.max_price,
         vendor_id: queryParams.vendor_id,
         sku: queryParams.ids?.[0], // Handle IDs
         in_stock: queryParams.stock_status === 'instock' ? true : undefined,
+        category: queryParams.category,
       };
 
       const response = await productService.getProducts(serviceParams);
 
       // Transform service Product to shared-core Product format
-      const products: Product[] = response.items.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        slug: item.slug || item.sku || item.id?.toString() || '',
-        description: item.description || '',
-        short_description: item.description?.substring(0, 150) || '',
-        sku: item.sku || '',
-        price: item.price || '0',
-        regular_price: item.compare_at_price || item.price || '0',
-        sale_price: item.price || '0',
-        on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
-        featured: item.is_featured || false,
-        status: item.status || 'published',
-        stock_status: item.stock_status || (item.stock_quantity > 0 ? 'instock' : 'outofstock'),
-        manage_stock: true,
-        stock_quantity: item.stock_quantity,
-        total_sales: 0,
-        average_rating: '0',
-        rating_count: 0,
-        images: (item.images || []).map((img: any) => ({
-          id: img.id,
-          src: img.url || img.src || '',
-          name: img.alt_text || '',
-          alt: img.alt_text || '',
-          position: img.position || 0,
-        })),
-        categories: (item.category_name || item.category) ? [{
-          id: item.category_id || 0,
-          name: item.category_name || item.category,
-          slug: (item.category_name || item.category).toLowerCase().replace(/\s+/g, '-'),
-        }] : [],
-        tags: [],
-        attributes: [],
-        related_ids: [],
-        brands: [],
-        weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
-        dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
-        meta_data: [],
-        date_created: item.created_at || new Date().toISOString(),
-        permalink: `/products/${item.slug || item.sku || item.id}`,
-        type: 'simple',
-        purchasable: true,
-        catalog_visibility: 'visible',
-        cost_price: item.cost_price,
-        specifications: (item as any).specifications,
-      }));
+      const products: Product[] = response.items.map((item: any) => {
+        // Detect product type: check product_type from backend first, then bundle_items/variants
+        const productType = item.product_type || (
+          (item.bundle_items && item.bundle_items.length > 0) ? 'bundle' :
+          (item.variants && item.variants.length > 0) ? 'variable' : 'simple'
+        );
+
+        return {
+          id: item.id,
+          name: item.name,
+          slug: item.slug || item.sku || item.id?.toString() || '',
+          description: item.description || '',
+          short_description: item.description?.substring(0, 150) || '',
+          sku: item.sku || '',
+          price: item.price || '0',
+          regular_price: item.compare_at_price || item.price || '0',
+          sale_price: item.price || '0',
+          on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
+          featured: item.is_featured || false,
+          status: item.status || 'published',
+          stock_status: item.stock_status || (item.stock_quantity > 0 ? 'instock' : 'outofstock'),
+          manage_stock: true,
+          stock_quantity: item.stock_quantity,
+          total_sales: 0,
+          average_rating: '0',
+          rating_count: 0,
+          images: (item.images || []).map((img: any) => ({
+            id: img.id,
+            src: img.url || img.src || '',
+            name: img.alt_text || '',
+            alt: img.alt_text || '',
+            position: img.position || 0,
+          })),
+          categories: (item.category_slug || item.category_name || item.category || item.category_id) ? [{
+            id: item.category_id || 0,
+            name: item.category_name || item.category || '',
+            slug: item.category_slug || (item.category_name || item.category || '').toLowerCase().replace(/\s+/g, '-'),
+          }] : [],
+          tags: [],
+          attributes: [],
+          related_ids: [],
+          brands: [],
+          weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
+          dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
+          meta_data: [],
+          date_created: item.created_at || new Date().toISOString(),
+          permalink: `/products/${item.slug || item.sku || item.id}`,
+          type: productType,
+          purchasable: true,
+          catalog_visibility: 'visible',
+          cost_price: item.cost_price,
+          specifications: (item as any).specifications,
+          bundle_items: item.bundle_items || [],
+        };
+      });
 
       return {
         items: products,
@@ -198,6 +208,12 @@ export function useProductBySlug(
     queryFn: async () => {
       const item = await productService.getProductBySlug(slug);
 
+      // Detect product type: check product_type from backend first, then bundle_items/variants
+      const productType = (item as any).product_type || (
+        ((item as any).bundle_items && (item as any).bundle_items.length > 0) ? 'bundle' :
+        ((item as any).variants && (item as any).variants.length > 0) ? 'variable' : 'simple'
+      );
+
       // Transform to shared-core Product format
       const product: Product = {
         id: item.id,
@@ -239,11 +255,12 @@ export function useProductBySlug(
         meta_data: [],
         date_created: item.created_at || new Date().toISOString(),
         permalink: `/products/${item.slug || item.sku || item.id}`,
-        type: 'simple',
+        type: productType,
         purchasable: true,
         catalog_visibility: 'visible',
         cost_price: item.cost_price !== undefined && item.cost_price !== null ? String(item.cost_price) : undefined,
         specifications: (item as any).specifications,
+        bundle_items: (item as any).bundle_items || [],
       };
 
       return product;
@@ -274,52 +291,61 @@ export function useFeaturedProducts(limit: number = 10) {
       const items = await productService.getFeaturedProducts(limit);
 
       // Transform to shared-core Product format
-      return items.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        slug: item.sku || item.id?.toString() || '',
-        description: item.description || '',
-        short_description: item.description?.substring(0, 150) || '',
-        sku: item.sku || '',
-        price: item.price || '0',
-        regular_price: item.compare_at_price || item.price || '0',
-        sale_price: item.price || '0',
-        on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
-        featured: true,
-        status: item.status === 'active' ? 'publish' : 'draft',
-        stock_status: item.stock_quantity > 0 ? 'instock' : 'outofstock',
-        manage_stock: true,
-        stock_quantity: item.stock_quantity,
-        total_sales: 0,
-        average_rating: '0',
-        rating_count: 0,
-        images: (item.images || []).map((img: any) => ({
-          id: img.id,
-          src: img.url || img.src || '',
-          name: img.alt_text || '',
-          alt: img.alt_text || '',
-          position: img.position || 0,
-        })),
-        categories: item.category ? [{
-          id: 0,
-          name: item.category,
-          slug: item.category.toLowerCase().replace(/\s+/g, '-'),
-        }] : [],
-        tags: [],
-        attributes: [],
-        related_ids: [],
-        brands: [],
-        weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
-        dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
-        meta_data: [],
-        date_created: item.created_at || new Date().toISOString(),
-        permalink: `/products/${item.slug || item.sku || item.id}`,
-        type: 'simple',
-        purchasable: true,
-        catalog_visibility: 'visible',
-        cost_price: item.cost_price,
-        specifications: (item as any).specifications,
-      } as Product));
+      return items.map((item: any) => {
+        // Detect product type: check product_type from backend first, then bundle_items/variants
+        const productType = item.product_type || (
+          (item.bundle_items && item.bundle_items.length > 0) ? 'bundle' :
+          (item.variants && item.variants.length > 0) ? 'variable' : 'simple'
+        );
+
+        return {
+          id: item.id,
+          name: item.name,
+          slug: item.sku || item.id?.toString() || '',
+          description: item.description || '',
+          short_description: item.description?.substring(0, 150) || '',
+          sku: item.sku || '',
+          price: item.price || '0',
+          regular_price: item.compare_at_price || item.price || '0',
+          sale_price: item.price || '0',
+          on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
+          featured: true,
+          status: item.status === 'active' ? 'publish' : 'draft',
+          stock_status: item.stock_quantity > 0 ? 'instock' : 'outofstock',
+          manage_stock: true,
+          stock_quantity: item.stock_quantity,
+          total_sales: 0,
+          average_rating: '0',
+          rating_count: 0,
+          images: (item.images || []).map((img: any) => ({
+            id: img.id,
+            src: img.url || img.src || '',
+            name: img.alt_text || '',
+            alt: img.alt_text || '',
+            position: img.position || 0,
+          })),
+          categories: item.category ? [{
+            id: 0,
+            name: item.category,
+            slug: item.category.toLowerCase().replace(/\s+/g, '-'),
+          }] : [],
+          tags: [],
+          attributes: [],
+          related_ids: [],
+          brands: [],
+          weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
+          dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
+          meta_data: [],
+          date_created: item.created_at || new Date().toISOString(),
+          permalink: `/products/${item.slug || item.sku || item.id}`,
+          type: productType,
+          purchasable: true,
+          catalog_visibility: 'visible',
+          cost_price: item.cost_price,
+          specifications: (item as any).specifications,
+          bundle_items: item.bundle_items || [],
+        } as Product;
+      });
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
@@ -345,52 +371,61 @@ export function useNewArrivals(limit: number = 10) {
       const items = await productService.getNewArrivals(limit);
 
       // Transform to shared-core Product format
-      return items.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        slug: item.sku || item.id?.toString() || '',
-        description: item.description || '',
-        short_description: item.description?.substring(0, 150) || '',
-        sku: item.sku || '',
-        price: item.price || '0',
-        regular_price: item.compare_at_price || item.price || '0',
-        sale_price: item.price || '0',
-        on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
-        featured: false,
-        status: item.status === 'active' ? 'publish' : 'draft',
-        stock_status: item.stock_quantity > 0 ? 'instock' : 'outofstock',
-        manage_stock: true,
-        stock_quantity: item.stock_quantity,
-        total_sales: 0,
-        average_rating: '0',
-        rating_count: 0,
-        images: (item.images || []).map((img: any) => ({
-          id: img.id,
-          src: img.url || img.src || '',
-          name: img.alt_text || '',
-          alt: img.alt_text || '',
-          position: img.position || 0,
-        })),
-        categories: item.category ? [{
-          id: 0,
-          name: item.category,
-          slug: item.category.toLowerCase().replace(/\s+/g, '-'),
-        }] : [],
-        tags: [],
-        attributes: [],
-        related_ids: [],
-        brands: [],
-        weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
-        dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
-        meta_data: [],
-        date_created: item.created_at || new Date().toISOString(),
-        permalink: `/products/${item.slug || item.sku || item.id}`,
-        type: 'simple',
-        purchasable: true,
-        catalog_visibility: 'visible',
-        cost_price: item.cost_price,
-        specifications: (item as any).specifications,
-      } as Product));
+      return items.map((item: any) => {
+        // Detect product type: check product_type from backend first, then bundle_items/variants
+        const productType = item.product_type || (
+          (item.bundle_items && item.bundle_items.length > 0) ? 'bundle' :
+          (item.variants && item.variants.length > 0) ? 'variable' : 'simple'
+        );
+
+        return {
+          id: item.id,
+          name: item.name,
+          slug: item.sku || item.id?.toString() || '',
+          description: item.description || '',
+          short_description: item.description?.substring(0, 150) || '',
+          sku: item.sku || '',
+          price: item.price || '0',
+          regular_price: item.compare_at_price || item.price || '0',
+          sale_price: item.price || '0',
+          on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
+          featured: false,
+          status: item.status === 'active' ? 'publish' : 'draft',
+          stock_status: item.stock_quantity > 0 ? 'instock' : 'outofstock',
+          manage_stock: true,
+          stock_quantity: item.stock_quantity,
+          total_sales: 0,
+          average_rating: '0',
+          rating_count: 0,
+          images: (item.images || []).map((img: any) => ({
+            id: img.id,
+            src: img.url || img.src || '',
+            name: img.alt_text || '',
+            alt: img.alt_text || '',
+            position: img.position || 0,
+          })),
+          categories: item.category ? [{
+            id: 0,
+            name: item.category,
+            slug: item.category.toLowerCase().replace(/\s+/g, '-'),
+          }] : [],
+          tags: [],
+          attributes: [],
+          related_ids: [],
+          brands: [],
+          weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
+          dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
+          meta_data: [],
+          date_created: item.created_at || new Date().toISOString(),
+          permalink: `/products/${item.slug || item.sku || item.id}`,
+          type: productType,
+          purchasable: true,
+          catalog_visibility: 'visible',
+          cost_price: item.cost_price,
+          specifications: (item as any).specifications,
+          bundle_items: item.bundle_items || [],
+        } as Product;
+      });
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
@@ -416,52 +451,61 @@ export function useOnSaleProducts(limit: number = 10) {
       const items = await productService.getSaleProducts(limit);
 
       // Transform to shared-core Product format
-      return items.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        slug: item.sku || item.id?.toString() || '',
-        description: item.description || '',
-        short_description: item.description?.substring(0, 150) || '',
-        sku: item.sku || '',
-        price: item.price || '0',
-        regular_price: item.compare_at_price || item.price || '0',
-        sale_price: item.price || '0',
-        on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
-        featured: false,
-        status: item.status === 'active' ? 'publish' : 'draft',
-        stock_status: item.stock_quantity > 0 ? 'instock' : 'outofstock',
-        manage_stock: true,
-        stock_quantity: item.stock_quantity,
-        total_sales: 0,
-        average_rating: '0',
-        rating_count: 0,
-        images: (item.images || []).map((img: any) => ({
-          id: img.id,
-          src: img.url || img.src || '',
-          name: img.alt_text || '',
-          alt: img.alt_text || '',
-          position: img.position || 0,
-        })),
-        categories: item.category ? [{
-          id: 0,
-          name: item.category,
-          slug: item.category.toLowerCase().replace(/\s+/g, '-'),
-        }] : [],
-        tags: [],
-        attributes: [],
-        related_ids: [],
-        brands: [],
-        weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
-        dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
-        meta_data: [],
-        date_created: item.created_at || new Date().toISOString(),
-        permalink: `/products/${item.slug || item.sku || item.id}`,
-        type: 'simple',
-        purchasable: true,
-        catalog_visibility: 'visible',
-        cost_price: item.cost_price,
-        specifications: (item as any).specifications,
-      } as Product));
+      return items.map((item: any) => {
+        // Detect product type: check product_type from backend first, then bundle_items/variants
+        const productType = item.product_type || (
+          (item.bundle_items && item.bundle_items.length > 0) ? 'bundle' :
+          (item.variants && item.variants.length > 0) ? 'variable' : 'simple'
+        );
+
+        return {
+          id: item.id,
+          name: item.name,
+          slug: item.sku || item.id?.toString() || '',
+          description: item.description || '',
+          short_description: item.description?.substring(0, 150) || '',
+          sku: item.sku || '',
+          price: item.price || '0',
+          regular_price: item.compare_at_price || item.price || '0',
+          sale_price: item.price || '0',
+          on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
+          featured: false,
+          status: item.status === 'active' ? 'publish' : 'draft',
+          stock_status: item.stock_quantity > 0 ? 'instock' : 'outofstock',
+          manage_stock: true,
+          stock_quantity: item.stock_quantity,
+          total_sales: 0,
+          average_rating: '0',
+          rating_count: 0,
+          images: (item.images || []).map((img: any) => ({
+            id: img.id,
+            src: img.url || img.src || '',
+            name: img.alt_text || '',
+            alt: img.alt_text || '',
+            position: img.position || 0,
+          })),
+          categories: item.category ? [{
+            id: 0,
+            name: item.category,
+            slug: item.category.toLowerCase().replace(/\s+/g, '-'),
+          }] : [],
+          tags: [],
+          attributes: [],
+          related_ids: [],
+          brands: [],
+          weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
+          dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
+          meta_data: [],
+          date_created: item.created_at || new Date().toISOString(),
+          permalink: `/products/${item.slug || item.sku || item.id}`,
+          type: productType,
+          purchasable: true,
+          catalog_visibility: 'visible',
+          cost_price: item.cost_price,
+          specifications: (item as any).specifications,
+          bundle_items: item.bundle_items || [],
+        } as Product;
+      });
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
   });
@@ -536,52 +580,61 @@ export function useBestSellers(limit: number = 10) {
       const items = await productService.getFeaturedProducts(limit);
 
       // Transform to shared-core Product format
-      return items.map((item: any) => ({
-        id: item.id,
-        name: item.name,
-        slug: item.sku || item.id?.toString() || '',
-        description: item.description || '',
-        short_description: item.description?.substring(0, 150) || '',
-        sku: item.sku || '',
-        price: item.price || '0',
-        regular_price: item.compare_at_price || item.price || '0',
-        sale_price: item.price || '0',
-        on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
-        featured: true,
-        status: item.status === 'active' ? 'publish' : 'draft',
-        stock_status: item.stock_quantity > 0 ? 'instock' : 'outofstock',
-        manage_stock: true,
-        stock_quantity: item.stock_quantity,
-        total_sales: 0,
-        average_rating: '0',
-        rating_count: 0,
-        images: (item.images || []).map((img: any) => ({
-          id: img.id,
-          src: img.url || img.src || '',
-          name: img.alt_text || '',
-          alt: img.alt_text || '',
-          position: img.position || 0,
-        })),
-        categories: item.category ? [{
-          id: 0,
-          name: item.category,
-          slug: item.category.toLowerCase().replace(/\s+/g, '-'),
-        }] : [],
-        tags: [],
-        attributes: [],
-        related_ids: [],
-        brands: [],
-        weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
-        dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
-        meta_data: [],
-        date_created: item.created_at || new Date().toISOString(),
-        permalink: `/products/${item.slug || item.sku || item.id}`,
-        type: 'simple',
-        purchasable: true,
-        catalog_visibility: 'visible',
-        cost_price: item.cost_price,
-        specifications: (item as any).specifications,
-      } as Product));
+      return items.map((item: any) => {
+        // Detect product type: check product_type from backend first, then bundle_items/variants
+        const productType = item.product_type || (
+          (item.bundle_items && item.bundle_items.length > 0) ? 'bundle' :
+          (item.variants && item.variants.length > 0) ? 'variable' : 'simple'
+        );
+
+        return {
+          id: item.id,
+          name: item.name,
+          slug: item.sku || item.id?.toString() || '',
+          description: item.description || '',
+          short_description: item.description?.substring(0, 150) || '',
+          sku: item.sku || '',
+          price: item.price || '0',
+          regular_price: item.compare_at_price || item.price || '0',
+          sale_price: item.price || '0',
+          on_sale: !!(item.compare_at_price && item.compare_at_price !== item.price),
+          featured: true,
+          status: item.status === 'active' ? 'publish' : 'draft',
+          stock_status: item.stock_quantity > 0 ? 'instock' : 'outofstock',
+          manage_stock: true,
+          stock_quantity: item.stock_quantity,
+          total_sales: 0,
+          average_rating: '0',
+          rating_count: 0,
+          images: (item.images || []).map((img: any) => ({
+            id: img.id,
+            src: img.url || img.src || '',
+            name: img.alt_text || '',
+            alt: img.alt_text || '',
+            position: img.position || 0,
+          })),
+          categories: item.category ? [{
+            id: 0,
+            name: item.category,
+            slug: item.category.toLowerCase().replace(/\s+/g, '-'),
+          }] : [],
+          tags: [],
+          attributes: [],
+          related_ids: [],
+          brands: [],
+          weight: (item as any).weight_kg ? `${(item as any).weight_kg} kg` : '',
+          dimensions: (item as any).dimensions || { length: '', width: '', height: '' },
+          meta_data: [],
+          date_created: item.created_at || new Date().toISOString(),
+          permalink: `/products/${item.slug || item.sku || item.id}`,
+          type: productType,
+          purchasable: true,
+          catalog_visibility: 'visible',
+          cost_price: item.cost_price,
+          specifications: (item as any).specifications,
+          bundle_items: item.bundle_items || [],
+        } as Product;
+      });
     },
     staleTime: 10 * 60 * 1000, // 10 minutes
   });

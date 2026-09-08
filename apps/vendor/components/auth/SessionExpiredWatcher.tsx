@@ -1,42 +1,54 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { SessionExpiredModal } from '@/components/auth/SessionExpiredModal';
-import { useAuth } from '@/providers/AuthProvider';
-import { useAuthStore } from '@/lib/store/useAuthStore';
+import { SessionExpiredModal } from '@mymeddevices/shared-ui';
+import { useAuthStore } from '@mymeddevices/shared-core';
 
 export function SessionExpiredWatcher() {
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState('');
-  const { login, forceLogout } = useAuth();
+  const isSessionExpired = useAuthStore((s) => s.isSessionExpired);
+  const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
-    // Session expiration is handled gracefully upon API 401 response without hard reloading the window
-  }, []);
+    if (isSessionExpired && user?.email) {
+      setEmail(user.email);
+      setIsOpen(true);
+    } else if (!isSessionExpired) {
+      setIsOpen(false);
+    }
+  }, [isSessionExpired, user?.email]);
 
   useEffect(() => {
     const handleExpired = () => {
       const store = useAuthStore.getState();
-      if (store.user) {
+      if (store.user?.email) {
         setEmail(store.user.email);
         setIsOpen(true);
       } else {
-        forceLogout();
+        store.clearAuth();
+        if (typeof window !== 'undefined') {
+          window.location.href = '/login';
+        }
       }
     };
 
     window.addEventListener('auth:session-expired', handleExpired);
     return () => window.removeEventListener('auth:session-expired', handleExpired);
-  }, [forceLogout]);
+  }, []);
 
   const handleLogin = async (password: string) => {
-    await login({ email, password });
+    const store = useAuthStore.getState();
+    await store.login({ email, password }, 'vendor');
     setIsOpen(false);
   };
 
   const handleLogout = () => {
     setIsOpen(false);
-    forceLogout();
+    useAuthStore.getState().clearAuth();
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
   };
 
   return (
@@ -49,3 +61,4 @@ export function SessionExpiredWatcher() {
     />
   );
 }
+

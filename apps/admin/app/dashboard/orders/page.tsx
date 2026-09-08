@@ -196,11 +196,11 @@ function OrdersContent() {
       if (search) {
         const q = search.toLowerCase();
         filteredList = filteredList.filter((o: any) =>
-          o.id?.toLowerCase().includes(q) ||
-          o.order_number?.toLowerCase().includes(q) ||
-          o.user?.email?.toLowerCase().includes(q) ||
-          o.user?.first_name?.toLowerCase().includes(q) ||
-          o.user?.last_name?.toLowerCase().includes(q)
+          String(o.id || "").toLowerCase().includes(q) ||
+          String(o.order_number || "").toLowerCase().includes(q) ||
+          String(o.user?.email || "").toLowerCase().includes(q) ||
+          String(o.user?.first_name || "").toLowerCase().includes(q) ||
+          String(o.user?.last_name || "").toLowerCase().includes(q)
         );
       }
       if (amountRange.min !== null || amountRange.max !== null) {

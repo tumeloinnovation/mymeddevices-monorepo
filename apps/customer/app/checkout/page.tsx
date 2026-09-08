@@ -11,7 +11,6 @@ import { PACKAGING_FEE, SERVICES_FEE } from '@/lib/config/fees';
 import CustomerSection from './_components/CustomerSection';
 import DeliverySection from './_components/DeliverySection';
 import ReviewSection from './_components/ReviewSection';
-import NotesSection from './_components/NotesSection';
 import Section from './_components/Section';
 import SummaryPanel from './_components/SummaryPanel';
 import MobileBottomSummary from './_components/MobileBottomSummary';
@@ -31,6 +30,7 @@ export default function HybridCheckout() {
     customer,
     setCustomer,
     shipping,
+    tax,
     shippingLoading,
     calculateRequested,
     setCalculateRequested,
@@ -56,10 +56,17 @@ export default function HybridCheckout() {
     appliedCoupon,
     orderNotes,
     setOrderNotes,
+    pointsToRedeem,
+    setPointsToRedeem,
+    successfulOrder,
+    isRedirecting,
   } = useCheckoutLogic();
 
-
-  const total = subtotal + shipping + PACKAGING_FEE + SERVICES_FEE;
+  const discountAmount = appliedCoupon?.discount_amount || 0;
+  const pointsDiscountAmount = Math.floor(pointsToRedeem / 2);
+  const discountedSubtotal = Math.max(0, subtotal - discountAmount - pointsDiscountAmount);
+  const effectiveTax = tax > 0 ? tax : Math.round(discountedSubtotal * 0.16 * 100) / 100;
+  const total = discountedSubtotal + shipping + effectiveTax + PACKAGING_FEE + SERVICES_FEE;
 
   // Wait for cart to hydrate before rendering
   if (!hydrated) {
@@ -73,8 +80,64 @@ export default function HybridCheckout() {
     );
   }
 
+  // Show loading state during redirect
+  if (isRedirecting) {
+    return (
+      <div className="px-4 py-16 max-w-2xl mx-auto text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#E67E22] mx-auto mb-4"></div>
+        <h2 className="text-xl font-semibold mb-2">Redirecting to your order...</h2>
+        <p className="text-muted-foreground">Please wait while we set up your order details.</p>
+      </div>
+    );
+  }
+
   // If cart empty, show simple empty state
   if (items.length === 0) {
+    // If there's a successful order but redirect didn't work, show fallback
+    if (successfulOrder) {
+      return (
+        <div className="px-4 py-16 max-w-2xl mx-auto text-center">
+          <div className="max-w-md mx-auto mb-8">
+            <svg
+              viewBox="0 0 400 300"
+              className="w-full h-auto"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              aria-hidden="true"
+            >
+              <circle cx="200" cy="150" r="100" fill="#10B981" opacity="0.1" />
+              <path
+                d="M200 100 L200 200 M200 200 L180 180 M200 200 L220 180"
+                stroke="#10B981"
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              <circle cx="200" cy="150" r="80" fill="#10B981" opacity="0.2" />
+            </svg>
+          </div>
+
+          <h2 className="text-2xl font-semibold mb-3 text-green-600">Order Placed Successfully!</h2>
+          <p className="text-muted-foreground mb-6">
+            Your order #{successfulOrder.orderNumber || successfulOrder.id.slice(0, 8)} has been placed successfully.
+          </p>
+
+          <div className="flex gap-3 justify-center">
+            <Button
+              asChild
+              className="bg-[#E67E22] hover:bg-[#d36f1f]"
+            >
+              <Link href={`/orders/${successfulOrder.id}`}>
+                View Order Details
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link href="/">Continue Shopping</Link>
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="px-4 py-16 max-w-4xl mx-auto text-center">
         {/* Empty Cart SVG Illustration */}
@@ -174,6 +237,18 @@ export default function HybridCheckout() {
 
   const customerData = getCustomerData();
 
+  // Debug validation state
+  console.log('[Checkout] Validation state:', {
+    customerData,
+    delivery,
+    isProcessingMpesa,
+    isAddingNotes,
+    items: items.length,
+    subtotal,
+    shipping,
+    total,
+  });
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-8">
       <div className="flex items-start gap-8 lg:gap-12">
@@ -246,16 +321,6 @@ export default function HybridCheckout() {
 
           <Separator className="my-6" />
 
-          {/* --- Order Notes Section --- */}
-          <div className="py-4">
-            <NotesSection
-              notes={orderNotes}
-              setNotes={setOrderNotes}
-              disabled={isPending || isProcessingMpesa}
-            />
-          </div>
-
-          <Separator className="my-6" />
 
           {/* --- Accordion Step: Review --- */}
           <Section
@@ -299,6 +364,7 @@ export default function HybridCheckout() {
             shipping={shipping}
             packagingFee={PACKAGING_FEE}
             servicesFee={SERVICES_FEE}
+            tax={effectiveTax}
             total={total}
             isPending={isPending || isProcessingMpesa || isAddingNotes}
             onCheckout={handleCheckout}
@@ -307,11 +373,12 @@ export default function HybridCheckout() {
               !customerData.phone ||
               !customerData.email ||
               !delivery ||
-              shippingLoading ||
-              !calculateRequested ||
               isProcessingMpesa ||
               isAddingNotes
-            } 
+            }
+            orderNotes={orderNotes}
+            setOrderNotes={setOrderNotes}
+            isAddingNotes={isAddingNotes}
             isShippingCalculating={shippingLoading}
             shippingCalculated={calculateRequested}
             couponCode={couponCode}
@@ -320,6 +387,9 @@ export default function HybridCheckout() {
             handleRemoveCoupon={handleRemoveCoupon}
             isApplyingCoupon={isApplyingCoupon}
             appliedCoupon={appliedCoupon}
+            pointsToRedeem={pointsToRedeem}
+            setPointsToRedeem={setPointsToRedeem}
+            isAuthenticated={isAuthenticated}
           />
         </div>
       </div>
@@ -337,8 +407,6 @@ export default function HybridCheckout() {
           !customerData.phone ||
           !customerData.email ||
           !delivery ||
-          shippingLoading ||
-          !calculateRequested ||
           isProcessingMpesa ||
           isAddingNotes
         }
@@ -356,6 +424,7 @@ export default function HybridCheckout() {
               shipping={shipping}
               packagingFee={PACKAGING_FEE}
               servicesFee={SERVICES_FEE}
+              tax={effectiveTax}
               total={total}
               isPending={isPending || isProcessingMpesa || isAddingNotes}
               onCheckout={handleCheckout}
@@ -364,11 +433,12 @@ export default function HybridCheckout() {
                 !customerData.phone ||
                 !customerData.email ||
                 !delivery ||
-                shippingLoading ||
-                !calculateRequested ||
                 isProcessingMpesa ||
                 isAddingNotes
-              } 
+              }
+              orderNotes={orderNotes}
+              setOrderNotes={setOrderNotes}
+              isAddingNotes={isAddingNotes}
               isShippingCalculating={shippingLoading}
               shippingCalculated={calculateRequested}
               couponCode={couponCode}
@@ -377,6 +447,9 @@ export default function HybridCheckout() {
               handleRemoveCoupon={handleRemoveCoupon}
               isApplyingCoupon={isApplyingCoupon}
               appliedCoupon={appliedCoupon}
+              pointsToRedeem={pointsToRedeem}
+              setPointsToRedeem={setPointsToRedeem}
+              isAuthenticated={isAuthenticated}
             />
           </SheetContent>
         </Sheet>

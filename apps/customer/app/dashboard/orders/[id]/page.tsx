@@ -5,38 +5,96 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { formatCurrency } from '@/lib/utils/utils';
 import { useCustomerOrder, useOrderTracking } from '@/hooks/useDashboard';
+import { PACKAGING_FEE, SERVICES_FEE } from '@/lib/config/fees';
+import { getValidImageUrl } from '@/lib/utils/image';
 import ShipmentTracking from '@/app/dashboard/_components/ShipmentTracking';
 import {
     ArrowLeft,
     Package,
-    MapPin,
-    CreditCard,
-    Calendar,
     Truck,
     FileText,
+    Calendar,
+    MapPin,
+    Receipt,
     Info,
+    CheckCircle2,
+    Clock,
+    Printer,
+    PhoneCall,
+    MessageCircle,
+    ArrowRight,
+    ShieldCheck,
+    CreditCard,
+    AlertCircle,
+    ListOrdered,
 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-const statusConfig: Record<string, { label: string; className: string }> = {
-    // Canonical order statuses (aligned with backend)
-    pending: { label: 'Pending', className: 'bg-yellow-100 text-yellow-700' },
-    paid: { label: 'Paid', className: 'bg-blue-100 text-blue-700' },
-    processing: { label: 'Processing', className: 'bg-blue-100 text-blue-700' },
-    shipped: { label: 'Shipped', className: 'bg-purple-100 text-purple-700' },
-    delivered: { label: 'Delivered', className: 'bg-green-100 text-green-700' },
-    cancelled: { label: 'Cancelled', className: 'bg-red-100 text-red-700' },
-    refunded: { label: 'Refunded', className: 'bg-purple-100 text-purple-700' },
-    // Legacy status mappings (for backward compatibility)
-    'on-hold': { label: 'Pending', className: 'bg-yellow-100 text-yellow-700' }, // Maps to pending
-    completed: { label: 'Delivered', className: 'bg-green-100 text-green-700' }, // Maps to delivered
-    failed: { label: 'Cancelled', className: 'bg-red-100 text-red-700' }, // Maps to cancelled
+const statusConfig: Record<
+    string,
+    { label: string; badgeClass: string; stepIndex: number; icon: any; description: string }
+> = {
+    pending: {
+        label: 'Order Placed',
+        badgeClass: 'bg-amber-50 text-amber-900 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700/80 shadow-xs font-semibold ring-1 ring-amber-400/20',
+        stepIndex: 0,
+        icon: Clock,
+        description: 'Your order has been received and is awaiting payment confirmation.',
+    },
+    paid: {
+        label: 'Payment Confirmed',
+        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+        stepIndex: 1,
+        icon: CheckCircle2,
+        description: 'Payment verified successfully. We are preparing your medical devices.',
+    },
+    processing: {
+        label: 'Processing & Packing',
+        badgeClass: 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-300 dark:border-blue-800',
+        stepIndex: 2,
+        icon: Package,
+        description: 'Your items are being quality checked, sanitized, and packed securely.',
+    },
+    shipped: {
+        label: 'Dispatched / In Transit',
+        badgeClass: 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300 border-purple-300 dark:border-purple-800',
+        stepIndex: 3,
+        icon: Truck,
+        description: 'Your package is on its way to your specified delivery address.',
+    },
+    delivered: {
+        label: 'Delivered',
+        badgeClass: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
+        stepIndex: 4,
+        icon: CheckCircle2,
+        description: 'Package delivered. Thank you for choosing MyMedDevices Kenya.',
+    },
+    cancelled: {
+        label: 'Cancelled',
+        badgeClass: 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border-rose-300 dark:border-rose-800',
+        stepIndex: -1,
+        icon: AlertCircle,
+        description: 'This order has been cancelled.',
+    },
+    refunded: {
+        label: 'Refunded',
+        badgeClass: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700',
+        stepIndex: -1,
+        icon: Receipt,
+        description: 'This order has been refunded to your original payment method.',
+    },
 };
+
+const TRACKING_STEPS = [
+    { key: 'placed', label: 'Order Placed', icon: Clock },
+    { key: 'paid', label: 'Payment Confirmed', icon: CreditCard },
+    { key: 'processing', label: 'Processing', icon: Package },
+    { key: 'shipped', label: 'In Transit', icon: Truck },
+    { key: 'delivered', label: 'Delivered', icon: CheckCircle2 },
+];
 
 export default function OrderDetailPage() {
     const params = useParams();
@@ -44,24 +102,16 @@ export default function OrderDetailPage() {
     const orderId = params.id as string;
 
     const { data: order, isLoading: orderLoading, error: orderError } = useCustomerOrder(orderId);
-    const { data: trackingData, isLoading: trackingLoading } = useOrderTracking(orderId);
+    const { data: trackingData } = useOrderTracking(orderId);
+
+    const handlePrint = () => {
+        if (typeof window !== 'undefined') {
+            window.print();
+        }
+    };
 
     if (orderLoading) {
-        return (
-            <div className="space-y-6">
-                <Skeleton className="h-10 w-32" />
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                    <div className="lg:col-span-2 space-y-6">
-                        <Skeleton className="h-64 w-full" />
-                        <Skeleton className="h-96 w-full" />
-                    </div>
-                    <div className="space-y-6">
-                        <Skeleton className="h-48 w-full" />
-                        <Skeleton className="h-48 w-full" />
-                    </div>
-                </div>
-            </div>
-        );
+        return <DashboardOrderDetailSkeleton />;
     }
 
     if (orderError || !order) {
@@ -69,289 +119,282 @@ export default function OrderDetailPage() {
             <div className="space-y-6">
                 <Button
                     variant="ghost"
-                    onClick={() => router.back()}
+                    onClick={() => router.push('/dashboard/orders')}
                     className="gap-2"
                 >
                     <ArrowLeft className="h-4 w-4" />
                     Back to Orders
                 </Button>
-                <Card>
+                <Card className="border border-border/70 shadow-sm">
                     <CardContent className="p-12 text-center">
                         <Package className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                        <h2 className="text-xl font-semibold mb-2">Order Not Found</h2>
-                        <p className="text-muted-foreground">
+                        <h2 className="text-xl font-bold mb-2 text-foreground">Order Not Found</h2>
+                        <p className="text-muted-foreground text-sm max-w-md mx-auto mb-6">
                             {orderError ? 'Failed to load order details.' : "The order you're looking for doesn't exist."}
                         </p>
+                        <Button asChild className="rounded-xl">
+                            <Link href="/dashboard/orders">View All Orders</Link>
+                        </Button>
                     </CardContent>
                 </Card>
             </div>
         );
     }
 
-    const status = statusConfig[order.status] || statusConfig.pending;
+    const currentStatusConfig = statusConfig[order.status] || statusConfig.pending;
+    const isCancelledOrRefunded = order.status === 'cancelled' || order.status === 'refunded';
+
+    const orderAny = order as any;
+    const totalAmount = Number(order.total_amount || 0);
+
+    const subtotal = Number(
+        orderAny.subtotal ??
+        orderAny.shipping_address?.subtotal ??
+        order.items?.reduce((sum, item) => sum + Number(item.total_price), 0) ??
+        0
+    );
+
+    const discountAmount = Number(
+        orderAny.discount_amount ??
+        orderAny.shipping_address?.discount_amount ??
+        0
+    );
+
+    const packagingFee = Number(
+        orderAny.packaging_fee ??
+        orderAny.shipping_address?.packaging_fee ??
+        PACKAGING_FEE
+    );
+
+    const servicesFee = Number(
+        orderAny.services_fee ??
+        orderAny.shipping_address?.services_fee ??
+        SERVICES_FEE
+    );
+
+    const taxAmount = Number(
+        orderAny.tax_amount ??
+        orderAny.shipping_address?.tax_amount ??
+        Math.round(Math.max(0, subtotal - discountAmount) * 0.16)
+    );
+
+    const shippingFee = Number(
+        orderAny.shipping_amount ??
+        orderAny.shipping_address?.shipping_amount ??
+        Math.max(0, totalAmount - subtotal + discountAmount - taxAmount - packagingFee - servicesFee)
+    );
+
+    const paymentTitle =
+        orderAny.payment_method_title ||
+        orderAny.shipping_address?.payment_method_title ||
+        (orderAny.payment_method === 'mpesa' || orderAny.shipping_address?.payment_method === 'mpesa'
+            ? 'Lipa na M-Pesa'
+            : 'Cash on Delivery');
 
     return (
         <div className="space-y-6">
-            {/* Header */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div className="flex items-center gap-4">
-                    <Link href="/dashboard/orders">
-                        <Button variant="ghost" size="icon">
-                            <ArrowLeft className="h-4 w-4" />
-                        </Button>
-                    </Link>
-                    <div>
-                        <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-                            Order #{order.order_number}
-                        </h1>
-                        <p className="text-muted-foreground">
-                            Placed on{' '}
-                            {new Date(order.created_at).toLocaleDateString('en-US', {
-                                year: 'numeric',
-                                month: 'long',
-                                day: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                            })}
-                        </p>
+            {/* --- HERO BANNER / ORDER HEADER --- */}
+            <Card className="border border-border/80 shadow-xs overflow-hidden rounded-2xl bg-card">
+                <div className="p-6 sm:p-8 bg-gradient-to-r from-primary/5 via-primary/10 to-transparent border-b border-border/60">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-primary/15 text-primary">
+                                    <Package className="h-5 w-5" />
+                                </div>
+                                <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight">
+                                    Order #{order.order_number || order.id.split('-')[0]}
+                                </h1>
+                            </div>
+                            <p className="text-xs sm:text-sm text-muted-foreground flex flex-wrap items-center gap-x-2 gap-y-1">
+                                <span>Placed on</span>
+                                <span className="font-medium text-foreground">
+                                    {new Date(order.created_at).toLocaleDateString('en-KE', {
+                                        weekday: 'short',
+                                        year: 'numeric',
+                                        month: 'short',
+                                        day: 'numeric',
+                                        hour: '2-digit',
+                                        minute: '2-digit',
+                                    })}
+                                </span>
+                                <span>•</span>
+                                <span>Currency: <strong>{order.currency || 'KES'}</strong></span>
+                            </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2.5">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handlePrint}
+                                className="gap-2 text-xs font-semibold rounded-xl border-border bg-card shadow-xs hover:bg-muted"
+                            >
+                                <Printer className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span>Print Receipt</span>
+                            </Button>
+                            <Badge
+                                variant="outline"
+                                className={`px-3.5 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border shadow-xs ${currentStatusConfig.badgeClass}`}
+                            >
+                                <currentStatusConfig.icon className="h-3.5 w-3.5" />
+                                <span>{currentStatusConfig.label}</span>
+                            </Badge>
+                        </div>
                     </div>
                 </div>
-                <Badge className={`${status.className} text-sm px-4 py-1`}>
-                    {status.label}
-                </Badge>
-            </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Order Items */}
-                <div className="lg:col-span-2 space-y-6">
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2">
-                                <Package className="h-5 w-5" />
-                                Order Items ({order.items.length})
+                {/* --- HORIZONTAL STEP PROGRESS TRACKER --- */}
+                {!isCancelledOrRefunded && (
+                    <div className="p-6 sm:p-8 border-b border-border/60 bg-muted/10">
+                        <div className="relative">
+                            {/* Desktop Progress Bar */}
+                            <div className="hidden sm:block absolute top-1/2 left-6 right-6 -translate-y-1/2 h-1 bg-border rounded-full z-0">
+                                <div
+                                    className="h-full bg-primary rounded-full transition-all duration-700 ease-out"
+                                    style={{
+                                        width: `${Math.min(100, Math.max(0, (currentStatusConfig.stepIndex / (TRACKING_STEPS.length - 1)) * 100))}%`,
+                                    }}
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 relative z-10">
+                                {TRACKING_STEPS.map((step, index) => {
+                                    const StepIcon = step.icon;
+                                    const isCompleted = index <= currentStatusConfig.stepIndex;
+                                    const isCurrent = index === currentStatusConfig.stepIndex;
+
+                                    return (
+                                        <div key={step.key} className="flex flex-col items-center text-center">
+                                            <div
+                                                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border-2 ${
+                                                    isCurrent
+                                                        ? 'bg-primary text-primary-foreground border-primary shadow-md ring-4 ring-primary/20 scale-110'
+                                                        : isCompleted
+                                                        ? 'bg-primary text-primary-foreground border-primary'
+                                                        : 'bg-card text-muted-foreground border-border'
+                                                }`}
+                                            >
+                                                <StepIcon className="h-4 w-4" />
+                                            </div>
+                                            <span
+                                                className={`mt-2.5 text-xs font-semibold ${
+                                                    isCurrent
+                                                        ? 'text-primary'
+                                                        : isCompleted
+                                                        ? 'text-foreground'
+                                                        : 'text-muted-foreground'
+                                                }`}
+                                            >
+                                                {step.label}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Status Hint / Callout */}
+                <div className={`px-6 py-3.5 text-xs flex items-center gap-2.5 border-t border-border/40 ${
+                    order.status === 'pending'
+                        ? 'bg-amber-500/10 text-amber-900 dark:text-amber-200'
+                        : 'bg-muted/20 text-muted-foreground'
+                }`}>
+                    <Info className={`h-4 w-4 shrink-0 ${order.status === 'pending' ? 'text-amber-600 dark:text-amber-400' : 'text-primary'}`} />
+                    <span className="font-medium">{currentStatusConfig.description}</span>
+                </div>
+            </Card>
+
+            {/* --- MAIN 2-COLUMN GRID --- */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* LEFT COLUMN: Items, Timeline, Notes, Assurance */}
+                <div className="lg:col-span-7 space-y-6">
+                    {/* 1. Ordered Products Card */}
+                    <Card className="border border-border/80 shadow-xs rounded-2xl overflow-hidden bg-card">
+                        <CardHeader className="border-b border-border/60 py-4 px-6 bg-muted/10">
+                            <CardTitle className="text-base font-bold flex items-center justify-between">
+                                <span className="flex items-center gap-2 text-foreground">
+                                    <Package className="h-4 w-4 text-primary" />
+                                    <span>Ordered Medical Devices ({order.items?.length || 0})</span>
+                                </span>
                             </CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="divide-y">
-                                {order.items.map((item) => (
+                        <CardContent className="p-0 divide-y divide-border/60">
+                            {order.items?.map((item) => {
+                                const itemImage = getValidImageUrl(
+                                    item.product?.image_url,
+                                    '/logos/logo-portrait.png'
+                                );
+                                const unitPrice = Number(item.unit_price);
+                                const totalPrice = Number(item.total_price);
+
+                                return (
                                     <div
                                         key={item.id}
-                                        className="flex items-start gap-4 py-4 first:pt-0 last:pb-0"
+                                        className="p-4 sm:p-5 flex items-start gap-4 hover:bg-muted/10 transition-colors"
                                     >
-                                        <div className="relative h-20 w-20 rounded-lg overflow-hidden bg-muted shrink-0">
-                                            {item.product?.image_url ? (
-                                                <Image
-                                                    src={item.product.image_url}
-                                                    alt={item.product_name}
-                                                    fill
-                                                    className="object-cover"
-                                                    sizes="80px"
-                                                />
-                                            ) : (
-                                                <div className="h-full w-full flex items-center justify-center">
-                                                    <Package className="h-8 w-8 text-muted-foreground" />
-                                                </div>
-                                            )}
+                                        <div className="relative h-20 w-20 sm:h-24 sm:w-24 rounded-xl overflow-hidden bg-muted/30 shrink-0 border border-border p-1.5 flex items-center justify-center">
+                                            <Image
+                                                src={itemImage}
+                                                alt={item.product_name || 'Medical Device'}
+                                                fill
+                                                className="object-contain p-1"
+                                                sizes="(max-width: 640px) 80px, 96px"
+                                            />
                                         </div>
+
                                         <div className="flex-1 min-w-0">
-                                            <h4 className="font-medium text-foreground line-clamp-2">
-                                                {item.product_name}
+                                            <h4 className="text-sm sm:text-base font-semibold text-foreground leading-snug line-clamp-2">
+                                                {item.product_name || 'Medical Product'}
                                             </h4>
+
                                             {item.product?.sku && (
-                                                <p className="text-xs text-muted-foreground mt-1">
+                                                <p className="text-[11px] font-mono text-muted-foreground mt-0.5">
                                                     SKU: {item.product.sku}
                                                 </p>
                                             )}
-                                            <p className="text-sm text-muted-foreground mt-1">
-                                                Qty: {item.quantity} × Ksh {formatCurrency(Number(item.unit_price))}
-                                            </p>
+
+                                            <div className="mt-2 flex flex-wrap items-center gap-2">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-muted text-[11px] font-medium text-foreground">
+                                                    Qty: {item.quantity}
+                                                </span>
+                                                <span className="text-xs text-muted-foreground">
+                                                    @ Ksh {formatCurrency(unitPrice)} each
+                                                </span>
+                                            </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="font-semibold text-foreground">
-                                                Ksh {formatCurrency(parseFloat(item.total_price))}
+
+                                        <div className="text-right shrink-0">
+                                            <p className="text-sm sm:text-base font-bold text-primary">
+                                                Ksh {formatCurrency(totalPrice)}
                                             </p>
                                         </div>
                                     </div>
-                                ))}
-                            </div>
+                                );
+                            })}
                         </CardContent>
                     </Card>
 
-                    {/* Order Notes */}
+                    {/* 2. Order Notes (if provided) */}
                     {order.notes && (
-                        <Card>
-                            <CardHeader>
-                                <CardTitle className="flex items-center gap-2 text-base">
-                                    <FileText className="h-4 w-4" />
-                                    Order Notes
+                        <Card className="border border-border/80 shadow-xs rounded-2xl bg-card">
+                            <CardHeader className="py-4 px-6 border-b border-border/60 bg-muted/10">
+                                <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                                    <FileText className="h-4 w-4 text-primary" />
+                                    <span>Delivery Instructions</span>
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent>
-                                <p className="text-sm text-foreground bg-muted/50 rounded-md p-3">
+                            <CardContent className="p-5">
+                                <p className="text-xs sm:text-sm text-foreground/90 bg-muted/40 rounded-xl p-3.5 border border-border/60 leading-relaxed">
                                     {order.notes}
                                 </p>
                             </CardContent>
                         </Card>
                     )}
 
-                    {/* Addresses */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <MapPin className="h-4 w-4" />
-                                Delivery Address
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="text-sm space-y-1">
-                            {order.shipping_address ? (
-                                <>
-                                    <p className="font-medium text-foreground">
-                                        {(order.shipping_address as any).first_name || ''} {(order.shipping_address as any).last_name || ''}
-                                    </p>
-                                    {(order.shipping_address as any).company && (
-                                        <p className="text-muted-foreground">{(order.shipping_address as any).company}</p>
-                                    )}
-                                    <p className="text-muted-foreground">
-                                        {(order.shipping_address as any).address_line1 || (order.shipping_address as any).address_1 || (order.shipping_address as any).address}
-                                    </p>
-                                    {((order.shipping_address as any).address_line2 || (order.shipping_address as any).address_2) && (
-                                        <p className="text-muted-foreground">
-                                            {(order.shipping_address as any).address_line2 || (order.shipping_address as any).address_2}
-                                        </p>
-                                    )}
-                                    <p className="text-muted-foreground">
-                                        {(order.shipping_address as any).city || 'Nairobi'}, {(order.shipping_address as any).state || 'Nairobi'} {(order.shipping_address as any).postal_code || (order.shipping_address as any).postcode || ''}
-                                    </p>
-                                    <p className="text-muted-foreground">{(order.shipping_address as any).country || 'Kenya'}</p>
-                                    {(order.shipping_address as any).phone && (
-                                        <p className="text-muted-foreground mt-2">Phone: {(order.shipping_address as any).phone}</p>
-                                    )}
-                                </>
-                            ) : (
-                                <p className="text-muted-foreground">Standard Delivery</p>
-                            )}
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Order Summary Sidebar */}
-                <div className="space-y-6">
-                    {/* Order Summary */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-base">Order Summary</CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Subtotal</span>
-                                <span>
-                                    Ksh{' '}
-                                    {formatCurrency(
-                                        (order as any).subtotal ||
-                                        order.items.reduce(
-                                            (sum, item) => sum + parseFloat(item.total_price || String((item as any).subtotal || 0)),
-                                            0
-                                        )
-                                    )}
-                                </span>
-                            </div>
-                            <div className="flex justify-between text-sm">
-                                <span className="text-muted-foreground">Shipping Fee</span>
-                                <span>
-                                    Ksh{' '}
-                                    {formatCurrency(
-                                        Number((order as any).shipping_amount ?? (order as any).shipping_address?.shipping_amount ?? 0)
-                                    )}
-                                </span>
-                            </div>
-                            <div className="flex justify-between text-sm items-center gap-2">
-                                <div className="flex items-center gap-1">
-                                    <span className="text-muted-foreground">Packaging Fee</span>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Fee for secure packaging materials and handling</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </div>
-                                <span>
-                                    Ksh{' '}
-                                    {formatCurrency(
-                                        Number((order as any).packaging_fee ?? (order as any).shipping_address?.packaging_fee ?? 100)
-                                    )}
-                                </span>
-                            </div>
-                            <div className="flex justify-between text-sm items-center gap-2">
-                                <div className="flex items-center gap-1">
-                                    <span className="text-muted-foreground">Services Fee</span>
-                                    <Tooltip>
-                                        <TooltipTrigger asChild>
-                                            <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                            <p>Platform service fee for order processing</p>
-                                        </TooltipContent>
-                                    </Tooltip>
-                                </div>
-                                <span>
-                                    Ksh{' '}
-                                    {formatCurrency(
-                                        Number((order as any).services_fee ?? (order as any).shipping_address?.services_fee ?? 50)
-                                    )}
-                                </span>
-                            </div>
-                            {Number((order as any).discount_amount || (order as any).shipping_address?.discount_amount || 0) > 0 && (
-                                <div className="flex justify-between text-sm text-green-600 font-medium">
-                                    <span>Discount</span>
-                                    <span>
-                                        -Ksh {formatCurrency(Number((order as any).discount_amount || (order as any).shipping_address?.discount_amount))}
-                                    </span>
-                                </div>
-                            )}
-                            <Separator />
-                            <div className="flex justify-between font-semibold text-foreground text-base">
-                                <span>Total</span>
-                                <span>
-                                    Ksh {formatCurrency(parseFloat(String(order.total_amount)))}
-                                </span>
-                            </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Payment Info */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <CreditCard className="h-4 w-4" />
-                                Payment Method
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="text-sm space-y-2">
-                            <div className="flex items-center justify-between">
-                                <span className="text-muted-foreground">Method</span>
-                                <span className="font-medium text-foreground">
-                                    {(order as any).payment_method_title ||
-                                     (order as any).shipping_address?.payment_method_title ||
-                                     ((order as any).payment_method === 'mpesa' || (order as any).shipping_address?.payment_method === 'mpesa' ? 'M-Pesa Express' : 'Cash on Delivery')}
-                                </span>
-                            </div>
-                            {(order as any).date_paid && (
-                                <div className="flex items-center justify-between">
-                                    <span className="text-muted-foreground">Paid on</span>
-                                    <span className="text-foreground">
-                                        {new Date((order as any).date_paid).toLocaleDateString('en-US', {
-                                            month: 'short',
-                                            day: 'numeric',
-                                            year: 'numeric',
-                                        })}
-                                    </span>
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
-                    {/* Shipment Tracking */}
+                    {/* 3. Live Shipment Tracking (if available) */}
                     {trackingData?.tracking_number ? (
                         <ShipmentTracking
                             trackingNumber={trackingData.tracking_number}
@@ -368,53 +411,190 @@ export default function OrderDetailPage() {
                             estimatedDelivery={(order as any).estimated_delivery}
                             events={[]}
                         />
-                    ) : (
-                        <Card>
-                            <CardContent className="p-6">
-                                <div className="flex items-center gap-3 text-muted-foreground">
-                                    <Truck className="h-5 w-5" />
-                                    <p className="text-sm">Tracking information will be available once the order is shipped.</p>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    )}
+                    ) : null}
 
-                    {/* Order Timeline */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="flex items-center gap-2 text-base">
-                                <Calendar className="h-4 w-4" />
-                                Timeline
+                    {/* 4. Authentic Medical Device Assurance Banner */}
+                    <div className="p-5 rounded-2xl bg-gradient-to-br from-primary/10 via-emerald-500/5 to-transparent border border-primary/20 flex items-start gap-4">
+                        <div className="p-2.5 rounded-xl bg-primary/20 text-primary shrink-0">
+                            <ShieldCheck className="h-6 w-6" />
+                        </div>
+                        <div className="space-y-1">
+                            <h4 className="text-sm font-bold text-foreground">100% Certified Medical Devices</h4>
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                All equipment supplied by MyMedDevices Kenya is KMPDB & PPB certified, tested for clinical accuracy, and backed by manufacturer warranty with doorstep replacement support.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* RIGHT COLUMN: Receipt Summary, Delivery Details & Support */}
+                <div className="lg:col-span-5 space-y-6">
+                    {/* 1. Receipt Summary Card */}
+                    <Card className="border border-border/80 shadow-sm rounded-2xl overflow-hidden bg-card">
+                        <CardHeader className="py-4 px-6 border-b border-border/60 bg-muted/10">
+                            <CardTitle className="text-base font-bold flex items-center gap-2 text-foreground">
+                                <Receipt className="h-4 w-4 text-primary" />
+                                <span>Payment & Order Summary</span>
                             </CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="space-y-3">
-                                <TimelineItem
-                                    label="Order Placed"
-                                    date={order.created_at}
-                                    completed
-                                />
-                                {order.status !== 'pending' && (
-                                    <TimelineItem
-                                        label="Payment Received"
-                                        date={order.updated_at}
-                                        completed
-                                    />
-                                )}
-                                {order.status === 'processing' && (
-                                    <TimelineItem
-                                        label="Processing"
-                                        date={order.updated_at}
-                                        completed
-                                    />
-                                )}
-                                {(order.status === 'delivered' || (order.status as string) === 'completed') && (
-                                    <TimelineItem
-                                        label="Completed"
-                                        date={order.updated_at}
-                                        completed
-                                    />
-                                )}
+
+                        <CardContent className="p-6 space-y-3.5">
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground">Items Subtotal</span>
+                                <span className="font-semibold text-foreground">Ksh {formatCurrency(subtotal)}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground">Delivery & Shipping</span>
+                                <span className="font-medium text-foreground">Ksh {formatCurrency(shippingFee)}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-sm">
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                    <span>Packaging & Handling</span>
+                                    <span title="Careful medical device protection packaging" className="cursor-help">
+                                        <Info className="h-3.5 w-3.5 opacity-60" />
+                                    </span>
+                                </div>
+                                <span className="font-medium text-foreground">Ksh {formatCurrency(packagingFee)}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-sm">
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                    <span>Platform Services Fee</span>
+                                    <span title="Order processing and verification fee" className="cursor-help">
+                                        <Info className="h-3.5 w-3.5 opacity-60" />
+                                    </span>
+                                </div>
+                                <span className="font-medium text-foreground">Ksh {formatCurrency(servicesFee)}</span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-muted-foreground">VAT (16% inclusive)</span>
+                                <span className="font-medium text-foreground">Ksh {formatCurrency(taxAmount)}</span>
+                            </div>
+
+                            {discountAmount > 0 && (
+                                <div className="flex justify-between items-center text-sm text-emerald-600 dark:text-emerald-400 font-semibold pt-1 border-t border-dashed border-border/60">
+                                    <span>Promotional Discount</span>
+                                    <span>-Ksh {formatCurrency(discountAmount)}</span>
+                                </div>
+                            )}
+
+                            <Separator className="my-2" />
+
+                            <div className="flex justify-between items-baseline pt-1">
+                                <div>
+                                    <span className="text-base font-bold text-foreground">Total Amount</span>
+                                    <p className="text-[11px] text-muted-foreground">All taxes & fees included</p>
+                                </div>
+                                <span className="text-xl sm:text-2xl font-extrabold text-primary">
+                                    Ksh {formatCurrency(totalAmount)}
+                                </span>
+                            </div>
+
+                            {/* Payment Method Badge */}
+                            <div className="pt-2">
+                                <div className="flex items-center gap-2.5 p-3 rounded-xl bg-muted/40 border border-border/60">
+                                    <CreditCard className="h-4 w-4 text-primary shrink-0" />
+                                    <div className="text-xs">
+                                        <p className="text-muted-foreground">Payment Method</p>
+                                        <p className="font-semibold text-foreground">{paymentTitle}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* 2. Delivery Address Card */}
+                    <Card className="border border-border/80 shadow-xs rounded-2xl bg-card">
+                        <CardHeader className="py-4 px-6 border-b border-border/60 bg-muted/10">
+                            <CardTitle className="text-sm font-bold flex items-center gap-2 text-foreground">
+                                <MapPin className="h-4 w-4 text-primary" />
+                                <span>Delivery Address</span>
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-5">
+                            {order.shipping_address ? (
+                                <div className="text-xs sm:text-sm space-y-1.5">
+                                    <p className="font-bold text-foreground text-sm">
+                                        {(order.shipping_address as any).full_name ||
+                                            `${order.shipping_address.first_name || ''} ${order.shipping_address.last_name || ''}`.trim()}
+                                    </p>
+                                    <div className="text-muted-foreground space-y-0.5 leading-relaxed">
+                                        {order.shipping_address.address_line1 && (
+                                            <p>{order.shipping_address.address_line1}</p>
+                                        )}
+                                        {order.shipping_address.address_line2 && (
+                                            <p>{order.shipping_address.address_line2}</p>
+                                        )}
+                                        {(order.shipping_address.city || order.shipping_address.state) && (
+                                            <p>
+                                                {[
+                                                    order.shipping_address.city,
+                                                    order.shipping_address.state,
+                                                    order.shipping_address.postal_code,
+                                                ]
+                                                    .filter(Boolean)
+                                                    .join(', ')}
+                                            </p>
+                                        )}
+                                        {order.shipping_address.country && (
+                                            <p className="font-medium text-foreground">{order.shipping_address.country}</p>
+                                        )}
+                                        {order.shipping_address.phone && (
+                                            <p className="font-mono text-primary font-medium pt-1">
+                                                📞 {order.shipping_address.phone}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="text-xs text-muted-foreground">Standard door-to-door delivery</p>
+                            )}
+                        </CardContent>
+                    </Card>
+
+                    {/* 3. Customer Care & Inquiries */}
+                    <Card className="border border-border/80 shadow-xs rounded-2xl bg-card">
+                        <CardHeader className="py-4 px-6 border-b border-border/60 bg-muted/10">
+                            <CardTitle className="text-sm font-bold text-foreground">
+                                Need Help With This Order?
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-5 space-y-3">
+                            <p className="text-xs text-muted-foreground leading-relaxed">
+                                Have a question about dispatch time, delivery reschedule, or device usage? Our local customer care team is ready to assist you.
+                            </p>
+                            <div className="grid grid-cols-2 gap-2.5 pt-1">
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-10 rounded-xl text-xs font-semibold gap-1.5 border-border bg-card hover:bg-muted"
+                                >
+                                    <a href="tel:+254707757088">
+                                        <PhoneCall className="h-3.5 w-3.5 text-primary" />
+                                        <span>Call Support</span>
+                                    </a>
+                                </Button>
+                                <Button
+                                    asChild
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-10 rounded-xl text-xs font-semibold gap-1.5 border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100"
+                                >
+                                    <a
+                                        href={`https://wa.me/254735239696?text=${encodeURIComponent(
+                                            `Hello MyMedDevices, I have an inquiry about Order #${order.order_number || order.id}`
+                                        )}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                    >
+                                        <MessageCircle className="h-3.5 w-3.5 text-emerald-600" />
+                                        <span>WhatsApp</span>
+                                    </a>
+                                </Button>
                             </div>
                         </CardContent>
                     </Card>
@@ -424,34 +604,25 @@ export default function OrderDetailPage() {
     );
 }
 
-function TimelineItem({
-    label,
-    date,
-    completed,
-}: {
-    label: string;
-    date: string;
-    completed: boolean;
-}) {
+// ============================================================================
+// Skeleton Loader
+// ============================================================================
+
+function DashboardOrderDetailSkeleton() {
     return (
-        <div className="flex items-start gap-3">
-            <div
-                className={`mt-1 h-2 w-2 rounded-full ${
-                    completed ? 'bg-green-500' : 'bg-muted'
-                }`}
-            />
-            <div className="flex-1">
-                <p className="text-sm font-medium">{label}</p>
-                <p className="text-xs text-muted-foreground">
-                    {new Date(date).toLocaleDateString('en-US', {
-                        month: 'short',
-                        day: 'numeric',
-                        year: 'numeric',
-                        hour: '2-digit',
-                        minute: '2-digit',
-                    })}
-                </p>
+        <div className="space-y-6">
+            <div className="h-36 w-full bg-muted/40 rounded-2xl animate-pulse" />
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-7 space-y-6">
+                    <div className="h-80 w-full bg-muted/30 rounded-2xl animate-pulse" />
+                    <div className="h-32 w-full bg-muted/30 rounded-2xl animate-pulse" />
+                </div>
+                <div className="lg:col-span-5 space-y-6">
+                    <div className="h-64 w-full bg-muted/30 rounded-2xl animate-pulse" />
+                    <div className="h-44 w-full bg-muted/30 rounded-2xl animate-pulse" />
+                </div>
             </div>
         </div>
     );
 }
+

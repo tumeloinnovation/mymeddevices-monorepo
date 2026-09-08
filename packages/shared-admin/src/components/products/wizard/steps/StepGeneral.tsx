@@ -67,6 +67,24 @@ export function StepGeneral({
   };
 
   useEffect(() => {
+    if (categoryIdVal && categories.length > 0) {
+      const match = categories.find((c) => c.id === categoryIdVal || c.name === categoryIdVal);
+      if (match && watch("category_name") !== match.name) {
+        setValue("category_name", match.name);
+      }
+    }
+  }, [categoryIdVal, categories, setValue, watch]);
+
+  useEffect(() => {
+    if (brandVal && brands.length > 0) {
+      const match = brands.find((b) => b.id === brandVal || b.name === brandVal);
+      if (match && watch("brand_name") !== match.name) {
+        setValue("brand_name", match.name);
+      }
+    }
+  }, [brandVal, brands, setValue, watch]);
+
+  useEffect(() => {
     const timeoutId = setTimeout(async () => {
       if (slugVal && slugVal.length >= 3) {
         setSlugChecking(true);
@@ -105,6 +123,59 @@ export function StepGeneral({
           <Badge variant="outline" className="font-mono text-[10px] uppercase">Step 1 of 6</Badge>
         </CardHeader>
         <CardContent className="p-6 space-y-6">
+          {/* Product Type Classification Selector */}
+          <div className="space-y-2">
+            <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">
+              Product Classification Type <span className="text-rose-500">*</span>
+            </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setValue("product_type", "simple", { shouldValidate: true })}
+                className={`p-3 text-left border rounded-lg transition-all flex items-start gap-3 ${
+                  (productTypeVal || "simple") === "simple"
+                    ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 ring-1 ring-emerald-500"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
+                }`}
+              >
+                <div className={`p-2 rounded-md ${ (productTypeVal || "simple") === "simple" ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500" }`}>
+                  <Package className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-xs text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    Simple Product
+                  </div>
+                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Standalone device with a single SKU & price.
+                  </div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setValue("product_type", "variable", { shouldValidate: true })}
+                className={`p-3 text-left border rounded-lg transition-all flex items-start gap-3 ${
+                  productTypeVal === "variable"
+                    ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 ring-1 ring-emerald-500"
+                    : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 bg-white dark:bg-zinc-900"
+                }`}
+              >
+                <div className={`p-2 rounded-md ${ productTypeVal === "variable" ? "bg-emerald-500 text-white" : "bg-zinc-100 dark:bg-zinc-800 text-zinc-500" }`}>
+                  <Layers className="h-4 w-4" />
+                </div>
+                <div>
+                  <div className="font-semibold text-xs text-zinc-900 dark:text-zinc-100 flex items-center gap-1.5">
+                    Variable Product
+                  </div>
+                  <div className="text-[10px] text-zinc-500 dark:text-zinc-400 mt-0.5">
+                    Has variations (e.g., Folds, Size, Material).
+                  </div>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          <Separator className="bg-zinc-200 dark:bg-zinc-800" />
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
@@ -232,15 +303,20 @@ export function StepGeneral({
               </Label>
               <SearchableSelect
                 options={brands.map((b) => ({
-                  value: b.id,
+                  value: b.name,
                   label: b.name,
                   badge: b.approval_status === "pending" ? "Pending" : undefined,
                 }))}
-                value={brandVal || ""}
+                value={
+                  brands.find((b) => b.name === brandVal || b.id === brandVal)?.name ||
+                  brandVal ||
+                  ""
+                }
                 onChange={(val: string) => {
-                  const brand = brands.find((b) => b.id === val);
-                  setValue("brand", val, { shouldValidate: true });
-                  if (brand) setValue("brand_name", brand.name);
+                  const brand = brands.find((b) => b.id === val || b.name === val);
+                  const cleanName = brand ? brand.name : val;
+                  setValue("brand", cleanName, { shouldValidate: true });
+                  setValue("brand_name", cleanName);
                 }}
                 placeholder="Select brand..."
                 searchPlaceholder="Search brands..."
@@ -251,43 +327,6 @@ export function StepGeneral({
                 createLoading={createBrandLoading}
                 createError={createBrandError || undefined}
               />
-            </div>
-          </div>
-
-          <Separator className="bg-zinc-200 dark:bg-zinc-800" />
-
-          <div className="space-y-1.5">
-            <Label className="text-xs uppercase tracking-wider font-semibold text-zinc-700 dark:text-zinc-300">
-              Product Type Classification
-            </Label>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              {[
-                { value: "equipment", label: "Equipment", icon: Package },
-                { value: "consumables", label: "Consumables", icon: Trash2 },
-                { value: "topicals", label: "Topicals & Creams", icon: Droplet },
-                { value: "implants", label: "Implants", icon: Shield },
-                { value: "accessories", label: "Accessories", icon: Layers },
-              ].map((type) => {
-                const Icon = type.icon;
-                const isSelected = productTypeVal === type.value;
-                return (
-                  <button
-                    key={type.value}
-                    type="button"
-                    onClick={() => setValue("product_type", type.value, { shouldValidate: true })}
-                    className={`flex flex-col items-center gap-1.5 p-3 border rounded-lg transition-all text-center ${
-                      isSelected
-                        ? "bg-emerald-50 border-emerald-500 dark:bg-emerald-950/30"
-                        : "bg-white border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
-                    }`}
-                  >
-                    <Icon className={`h-4 w-4 ${isSelected ? "text-emerald-600" : "text-zinc-400"}`} />
-                    <span className={`text-[10px] font-semibold ${isSelected ? "text-emerald-700 dark:text-emerald-400" : "text-zinc-500"}`}>
-                      {type.label}
-                    </span>
-                  </button>
-                );
-              })}
             </div>
           </div>
 
@@ -317,7 +356,7 @@ export function StepGeneral({
             </div>
           </div>
 
-          {vendorProducts.length > 0 && onCloneProduct && (
+          {role !== "admin" && vendorProducts.length > 0 && onCloneProduct && (
             <div className="space-y-2 pt-2">
               <span className="text-[10px] font-mono uppercase text-zinc-400">Quick Clone from Existing Listings:</span>
               <div className="flex items-center gap-2 overflow-x-auto pb-2">

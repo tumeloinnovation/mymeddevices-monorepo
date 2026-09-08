@@ -1,34 +1,74 @@
 <mjml>
   <mj-head>
     <mj-include path="../components/head.mjml" />
+    <mj-style inline="inline">
+      .link-fallback {
+        color: #053D7A;
+        word-break: break-all;
+        font-size: 13px;
+      }
+    </mj-style>
   </mj-head>
   <mj-body background-color="#f4f6f8">
     <mj-include path="../components/header.mjml" />
     
-    <mj-section padding="36px 32px 12px" background-color="#ffffff">
+    <!-- Hero Section -->
+    <mj-section padding="32px 32px 16px" background-color="#ffffff">
       <mj-column>
-        <mj-text mj-class="h1">Invitation to Join MyMedDevices</mj-text>
-        <mj-text>Hi {{ first_name }},</mj-text>
-        <mj-text>You have been invited to join the MyMedDevices platform as a <strong>{{ role }}</strong>.</mj-text>
-      </mj-column>
-    </mj-section>
-
-    <mj-section padding="0 32px" background-color="#ffffff">
-      <mj-column background-color="#f8fafc" border="1px solid #e2e8f0" border-radius="8px" padding="20px">
-        <mj-text padding="0 0 10px">Your temporary login credentials:</mj-text>
-        <mj-text padding="0"><span style="font-weight: 600; color: #053D7A;">Email:</span> {{ email }}</mj-text>
-        <mj-text padding="0"><span style="font-weight: 600; color: #053D7A;">Temporary Password:</span> {{ temp_password }}</mj-text>
-      </mj-column>
-    </mj-section>
-
-    <mj-section padding="24px 32px 24px" background-color="#ffffff">
-      <mj-column>
-        <mj-text padding="0 0 24px">
-          Please log in using the button below. You will be prompted to change your password upon your first login.
+        <mj-text font-size="12px" font-weight="700" color="#EF6C24" text-transform="uppercase" letter-spacing="1px" padding="0 0 8px">
+          Portal Invitation &amp; Onboarding
         </mj-text>
-        <mj-button href="{{ login_url }}">
-          Log In Now
+        <mj-text mj-class="h1" padding="0 0 12px">
+          Invitation to Join MyMedDevices
+        </mj-text>
+        <mj-text font-size="15px" color="#334155" line-height="1.6" padding="0">
+          Hi <strong>{{ first_name }}</strong>, you have been invited to join the MyMedDevices platform as a <strong>{{ role }}</strong>.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Credentials Card -->
+    <mj-section padding="8px 32px 16px" background-color="#ffffff">
+      <mj-column background-color="#f8fafc" border="1px solid #e2e8f0" border-radius="10px" padding="18px 20px">
+        <mj-text font-size="13px" font-weight="700" color="#053D7A" text-transform="uppercase" letter-spacing="0.5px" padding="0 0 12px">
+          Your Access Credentials
+        </mj-text>
+        <mj-text font-size="14px" color="#475569" padding="2px 0">
+          <strong style="color: #1e293b;">Login Email:</strong> {{ email }}
+        </mj-text>
+        <mj-text font-size="14px" color="#475569" padding="2px 0">
+          <strong style="color: #1e293b;">Assigned Role:</strong> {{ role }}
+        </mj-text>
+        {% if temp_password %}
+        <mj-text font-size="14px" color="#475569" padding="6px 0 2px">
+          <strong style="color: #1e293b;">Temporary Password:</strong> <code style="background-color: #e2e8f0; padding: 2px 8px; border-radius: 4px; font-weight: 700; color: #0f172a; font-size: 14px;">{{ temp_password }}</code>
+        </mj-text>
+        <mj-text font-size="12px" color="#64748b" padding="4px 0 0">
+          * You will be prompted to change this password on your first login.
+        </mj-text>
+        {% endif %}
+      </mj-column>
+    </mj-section>
+
+    <!-- CTA Section -->
+    <mj-section padding="12px 32px 28px" background-color="#ffffff">
+      <mj-column>
+        <mj-button href="{{ login_url }}" background-color="#EF6C24" color="#ffffff" font-size="16px" font-weight="600" border-radius="8px" padding="14px 32px">
+          Log In to Portal
         </mj-button>
+        <mj-text font-size="12px" color="#94a3b8" align="center" padding="16px 0 0">
+          If the button doesn't work, copy and paste this link into your browser:<br/>
+          <a href="{{ login_url }}" class="link-fallback">{{ login_url }}</a>
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Support Section -->
+    <mj-section padding="0 32px 24px" background-color="#ffffff">
+      <mj-column background-color="#f1f5f9" border-radius="8px" padding="12px 16px">
+        <mj-text font-size="12px" color="#64748b" line-height="1.5" padding="0">
+          <strong>Need assistance?</strong> Contact our technical support team at <a href="mailto:support@mymeddevices.com" style="color: #053D7A; text-decoration: underline;">support@mymeddevices.com</a>.
+        </mj-text>
       </mj-column>
     </mj-section>
 

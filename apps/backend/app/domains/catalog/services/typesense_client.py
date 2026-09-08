@@ -1,14 +1,15 @@
 import json
 import uuid
 from datetime import datetime
-from typing import List, Optional, Tuple, Dict, Any
+from typing import Any
+
 import typesense
-from typesense.exceptions import ObjectNotFound, TypesenseClientError
+from typesense.exceptions import ObjectNotFound
 
 from app.core.logging import logger
-
 from app.domains.catalog.config import settings
 from app.domains.catalog.models.product import Product
+
 
 class TypesenseProductImage:
     def __init__(self, img_dict: dict):
@@ -17,7 +18,7 @@ class TypesenseProductImage:
         self.alt_text = img_dict.get("alt_text")
         self.sort_order = img_dict.get("sort_order", 0)
         self.is_primary = img_dict.get("is_primary", False)
-        
+
         cat = img_dict.get("created_at")
         if cat:
             if isinstance(cat, (int, float)):
@@ -31,6 +32,7 @@ class TypesenseProductImage:
                 self.created_at = datetime.utcnow()
         else:
             self.created_at = datetime.utcnow()
+
 
 class TypesenseProductDTO:
     def __init__(self, doc: dict):
@@ -49,7 +51,7 @@ class TypesenseProductDTO:
         self.is_featured = doc.get("is_featured", False)
         self.popularity_score = doc.get("popularity_score", 0)
         self.weight_kg = doc.get("weight_kg")
-        
+
         # Deserialize JSON strings/objects
         dims = doc.get("dimensions")
         if dims and isinstance(dims, str):
@@ -59,7 +61,7 @@ class TypesenseProductDTO:
                 self.dimensions = None
         else:
             self.dimensions = dims
-            
+
         self.brand = doc.get("brand")
         self.model_number = doc.get("model_number")
 
@@ -71,7 +73,7 @@ class TypesenseProductDTO:
                 self.specifications = None
         else:
             self.specifications = specs
-            
+
         certs = doc.get("certifications")
         if certs and isinstance(certs, str):
             try:
@@ -80,14 +82,11 @@ class TypesenseProductDTO:
                 self.certifications = None
         else:
             self.certifications = certs
-            
-        self.kmpdb_registration_number = doc.get("kmpdb_registration_number")
-        self.ppb_classification = doc.get("ppb_classification")
-        self.ce_marking_or_fda_clearance = doc.get("ce_marking_or_fda_clearance")
+
         self.warranty_info = doc.get("warranty_info")
         self.meta_title = doc.get("meta_title")
         self.meta_description = doc.get("meta_description")
-        
+
         tags_val = doc.get("tags")
         if tags_val:
             if isinstance(tags_val, str):
@@ -99,7 +98,7 @@ class TypesenseProductDTO:
                 self.tags = tags_val
         else:
             self.tags = []
-            
+
         imgs = doc.get("images")
         if imgs:
             if isinstance(imgs, str):
@@ -112,7 +111,7 @@ class TypesenseProductDTO:
             self.images = [TypesenseProductImage(img) for img in parsed_imgs]
         else:
             self.images = []
-            
+
         created_at_val = doc.get("created_at")
         if created_at_val:
             if isinstance(created_at_val, (int, float)):
@@ -124,15 +123,15 @@ class TypesenseProductDTO:
                     self.created_at = datetime.utcnow()
         else:
             self.created_at = datetime.utcnow()
-            
+
+        self.category: Any = None
         if self.category_id or self.category_name:
-            self.category = type("CategoryDTO", (), {
-                "id": self.category_id,
-                "name": self.category_name,
-                "slug": doc.get("category_slug")
-            })
-        else:
-            self.category = None
+            self.category = type(
+                "CategoryDTO",
+                (),
+                {"id": self.category_id, "name": self.category_name, "slug": doc.get("category_slug")},
+            )
+
 
 class TypesenseClient:
     def __init__(self):
@@ -141,22 +140,25 @@ class TypesenseClient:
             logger.warning("TYPESENSE_API_KEY is not set. Typesense integration will be disabled.")
             return
 
-        self.client = typesense.Client({
-            'nodes': [{
-                'host': settings.TYPESENSE_HOST,
-                'port': str(settings.TYPESENSE_PORT),
-                'protocol': settings.TYPESENSE_PROTOCOL
-            }],
-            'api_key': settings.TYPESENSE_API_KEY,
-            'connection_timeout_seconds': 2
-        })
+        client_config: dict[str, Any] = {
+            "nodes": [
+                {
+                    "host": settings.TYPESENSE_HOST,
+                    "port": str(settings.TYPESENSE_PORT),
+                    "protocol": settings.TYPESENSE_PROTOCOL,
+                }
+            ],
+            "api_key": settings.TYPESENSE_API_KEY,
+            "connection_timeout_seconds": 2,
+        }
+        self.client = typesense.Client(client_config)  # type: ignore[arg-type]
         self._ensure_collection()
 
     def _ensure_collection(self):
         if not self.client:
             return
-        
-        schema = {
+
+        schema: dict[str, Any] = {
             "name": "products",
             "fields": [
                 {"name": "id", "type": "string"},
@@ -170,15 +172,13 @@ class TypesenseClient:
                 {"name": "in_stock", "type": "bool", "facet": True},
                 {"name": "stock_quantity", "type": "int32", "optional": True},
                 {"name": "is_featured", "type": "bool", "facet": True},
+                {"name": "is_clinical_pick", "type": "bool", "facet": True, "optional": True},
                 {"name": "popularity_score", "type": "int32"},
                 {"name": "category_id", "type": "string", "optional": True, "facet": True},
                 {"name": "category_name", "type": "string", "optional": True, "facet": True},
                 {"name": "category_slug", "type": "string", "optional": True, "facet": True},
                 {"name": "brand", "type": "string", "optional": True, "facet": True},
                 {"name": "model_number", "type": "string", "optional": True},
-                {"name": "kmpdb_registration_number", "type": "string", "optional": True},
-                {"name": "ppb_classification", "type": "string", "optional": True, "facet": True},
-                {"name": "ce_marking_or_fda_clearance", "type": "string", "optional": True},
                 {"name": "warranty_info", "type": "string", "optional": True},
                 {"name": "meta_title", "type": "string", "optional": True},
                 {"name": "meta_description", "type": "string", "optional": True},
@@ -189,18 +189,18 @@ class TypesenseClient:
                 {"name": "certifications", "type": "string", "optional": True},
                 {"name": "status", "type": "string", "facet": True},
                 {"name": "is_deleted", "type": "bool", "facet": True},
-                {"name": "created_at", "type": "int64"}
+                {"name": "created_at", "type": "int64"},
             ],
-            "default_sorting_field": "popularity_score"
+            "default_sorting_field": "popularity_score",
         }
-        
+
         try:
-            self.client.collections['products'].retrieve()
+            self.client.collections["products"].retrieve()
             logger.info("Typesense products collection already exists.")
         except ObjectNotFound:
             logger.info("Typesense products collection does not exist. Creating...")
             try:
-                self.client.collections.create(schema)
+                self.client.collections.create(schema)  # type: ignore[arg-type]
                 logger.info("Successfully created Typesense products collection.")
             except Exception as e:
                 logger.error(f"Failed to create Typesense products collection: {e}")
@@ -215,16 +215,18 @@ class TypesenseClient:
         images_list = []
         if product.images:
             for img in product.images:
-                images_list.append({
-                    "id": str(img.id),
-                    "url": img.url,
-                    "alt_text": img.alt_text,
-                    "sort_order": img.sort_order,
-                    "is_primary": img.is_primary,
-                    "created_at": img.created_at.isoformat() if img.created_at else datetime.utcnow().isoformat()
-                })
+                images_list.append(
+                    {
+                        "id": str(img.id),
+                        "url": img.url,
+                        "alt_text": img.alt_text,
+                        "sort_order": img.sort_order,
+                        "is_primary": img.is_primary,
+                        "created_at": img.created_at.isoformat() if img.created_at else datetime.utcnow().isoformat(),
+                    }
+                )
 
-        document = {
+        document: dict[str, Any] = {
             "id": str(product.id),
             "name": product.name,
             "slug": product.slug,
@@ -242,9 +244,6 @@ class TypesenseClient:
             "category_slug": product.category.slug if product.category else "",
             "brand": product.brand or "",
             "model_number": product.model_number or "",
-            "kmpdb_registration_number": product.kmpdb_registration_number or "",
-            "ppb_classification": product.ppb_classification or "",
-            "ce_marking_or_fda_clearance": product.ce_marking_or_fda_clearance or "",
             "warranty_info": product.warranty_info or "",
             "meta_title": product.meta_title or "",
             "meta_description": product.meta_description or "",
@@ -255,11 +254,13 @@ class TypesenseClient:
             "certifications": json.dumps(product.certifications) if product.certifications else None,
             "status": product.status,
             "is_deleted": bool(product.is_deleted),
-            "created_at": int(product.created_at.timestamp()) if product.created_at else int(datetime.utcnow().timestamp())
+            "created_at": int(product.created_at.timestamp())
+            if product.created_at
+            else int(datetime.utcnow().timestamp()),
         }
 
         try:
-            self.client.collections['products'].documents.upsert(document)
+            self.client.collections["products"].documents.upsert(document)
             logger.info(f"Indexed product {product.id} to Typesense.")
         except Exception as e:
             logger.error(f"Failed to index product {product.id} in Typesense: {e}")
@@ -269,7 +270,7 @@ class TypesenseClient:
             return
 
         try:
-            self.client.collections['products'].documents[str(product_id)].delete()
+            self.client.collections["products"].documents[str(product_id)].delete()
             logger.info(f"Deleted product {product_id} from Typesense.")
         except ObjectNotFound:
             logger.warning(f"Product {product_id} not found in Typesense for deletion.")
@@ -278,18 +279,21 @@ class TypesenseClient:
 
     def search_storefront(
         self,
-        category_id: Optional[str] = None,
-        category_slug: Optional[str] = None,
-        search: Optional[str] = None,
-        price_min: Optional[float] = None,
-        price_max: Optional[float] = None,
-        is_featured: Optional[bool] = None,
-        is_on_sale: Optional[bool] = None,
-        in_stock: Optional[bool] = None,
+        category_id: str | None = None,
+        category_slug: str | None = None,
+        search: str | None = None,
+        price_min: float | None = None,
+        price_max: float | None = None,
+        is_featured: bool | None = None,
+        is_clinical_pick: bool | None = None,
+        care_setting: str | None = None,
+        condition: str | None = None,
+        is_on_sale: bool | None = None,
+        in_stock: bool | None = None,
         sort_by: str = "newest",
         page: int = 1,
-        page_size: int = 20
-    ) -> Tuple[List[TypesenseProductDTO], int]:
+        page_size: int = 20,
+    ) -> tuple[list[TypesenseProductDTO], int]:
         if not self.client:
             logger.warning("Typesense search called but client is disabled. Returning empty list.")
             return [], 0
@@ -306,6 +310,12 @@ class TypesenseClient:
             filter_parts.append(f"price:<={price_max}")
         if is_featured is not None:
             filter_parts.append(f"is_featured:={str(is_featured).lower()}")
+        if is_clinical_pick is not None:
+            filter_parts.append(f"is_clinical_pick:={str(is_clinical_pick).lower()}")
+        if care_setting:
+            filter_parts.append(f"tags:={care_setting}")
+        if condition:
+            filter_parts.append(f"tags:={condition}")
         if is_on_sale is not None:
             filter_parts.append(f"is_on_sale:={str(is_on_sale).lower()}")
         if in_stock is True:
@@ -325,26 +335,26 @@ class TypesenseClient:
         elif sort_by == "name_asc":
             sort_by_param = "name:asc"
 
-        search_parameters = {
-            'q': search if search else '*',
-            'query_by': 'name,brand,description,short_description',
-            'sort_by': sort_by_param,
-            'page': page,
-            'per_page': page_size
+        search_parameters: dict[str, Any] = {
+            "q": search if search else "*",
+            "query_by": "name,brand,description,short_description",
+            "sort_by": sort_by_param,
+            "page": page,
+            "per_page": page_size,
         }
         if filter_by:
-            search_parameters['filter_by'] = filter_by
+            search_parameters["filter_by"] = filter_by
 
         try:
-            results = self.client.collections['products'].documents.search(search_parameters)
-            total = results.get('found', 0)
-            hits = results.get('hits', [])
-            
+            results = self.client.collections["products"].documents.search(search_parameters)  # type: ignore[arg-type]
+            total = results.get("found", 0)
+            hits = results.get("hits", [])
+
             products = []
             for hit in hits:
-                doc = hit.get('document', {})
+                doc = dict(hit.get("document", {}))
                 products.append(TypesenseProductDTO(doc))
-                
+
             return products, total
         except Exception as e:
             logger.error(f"Typesense search failed: {e}")

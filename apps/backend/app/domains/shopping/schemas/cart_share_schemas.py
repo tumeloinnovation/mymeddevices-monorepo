@@ -1,56 +1,57 @@
 import uuid
-from typing import Optional, List
-from pydantic import BaseModel, Field
 from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CartShareCreate(BaseModel):
     """Schema for creating a cart share."""
-    expires_days: Optional[int] = Field(
-        default=7,
-        ge=1,
-        le=30,
-        description="Number of days until share link expires (1-30, default 7)"
+
+    expires_days: int | None = Field(
+        default=7, ge=1, le=30, description="Number of days until share link expires (1-30, default 7)"
     )
 
 
 class CartShareResponse(BaseModel):
     """Cart share response."""
+
     id: uuid.UUID
     cart_id: uuid.UUID
     share_token: str
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None
     access_count: int
     share_url: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SharedCartProduct(BaseModel):
     """Product details in shared cart."""
+
     id: uuid.UUID
-    sku: Optional[str] = None
+    sku: str | None = None
     name: str
     price: float
-    image_url: Optional[str] = None
+    image_url: str | None = None
 
 
 class SharedCartItem(BaseModel):
     """Cart item in shared cart."""
+
     id: uuid.UUID
     product_id: uuid.UUID
     quantity: int
-    notes: Optional[str] = None
+    notes: str | None = None
     product: SharedCartProduct
 
 
 class SharedCartResponse(BaseModel):
     """Shared cart response (accessible without auth)."""
+
     cart_id: uuid.UUID
-    items: List[SharedCartItem] = []
+    items: list[SharedCartItem] = []
     item_count: int = 0
     subtotal: float
     shared_at: datetime
-    expires_at: Optional[datetime] = None
+    expires_at: datetime | None = None

@@ -1,0 +1,184 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main, master, staging, develop]
+  pull_request:
+    branches: [main, master, staging, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-lint-and-typecheck:
+    name: Backend Lint & Typecheck
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Check Ruff formatting
+        run: uv run ruff format --check .
+
+      - name: Check Ruff linting
+        run: uv run ruff check .
+
+      - name: Run Mypy typecheck
+        run: uv run mypy app
+
+      - name: Security Scan (Bandit)
+        run: uv run bandit -r app/ -ll -ii --skip B101,B104,B311
+
+  backend-test:
+    name: Backend Test Suite
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mymeddevices_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: apps/backend
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --dev
+
+      - name: Run Alembic migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/mymeddevices_test
+        run: uv run alembic upgrade head
+
+      - name: Run Pytest with Coverage
+        env:
+          TEST_DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/mymeddevices_test
+          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: testing
+          JWT_SECRET: test_jwt_secret_key_minimum_32_characters_long_12345
+        run: uv run pytest --cov=app --cov-report=term-missing --cov-report=xml
+
+      - name: Upload Coverage Artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage-report
+          path: apps/backend/coverage.xml
+
+  frontend-typecheck:
+    name: Frontend Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck Shared Packages
+        run: |
+          pnpm --filter=@mymeddevices/shared-core exec tsc --noEmit
+          pnpm --filter=@mymeddevices/shared-ui exec tsc --noEmit
+          pnpm --filter=@mymeddevices/shared-admin exec tsc --noEmit
+
+      - name: Typecheck Customer App
+        run: pnpm --filter=customer exec tsc --noEmit
+
+      - name: Typecheck Admin App
+        run: pnpm --filter=admin exec tsc --noEmit
+
+      - name: Typecheck Vendor App
+        run: pnpm --filter=vendor exec tsc --noEmit
+
+  frontend-test-lint-build:
+    name: Frontend Tests, Lint & Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+
+      - name: Install Monorepo Dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run Shared Core Tests
+        run: pnpm --filter=@mymeddevices/shared-core test
+
+      - name: Run Customer Tests
+        run: pnpm --filter=customer test
+
+      - name: Run Vendor Tests
+        run: pnpm --filter=vendor test
+
+      - name: Run Admin Tests
+        run: pnpm --filter=admin test
+
+      - name: Run Monorepo Lint
+        run: pnpm lint
+
+      - name: Run Monorepo Build
+        run: pnpm build

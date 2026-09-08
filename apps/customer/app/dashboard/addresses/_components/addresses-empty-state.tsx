@@ -1,44 +1,41 @@
 'use client';
 
-import { Card } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Truck } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { MapPin, Plus, Navigation, ShieldCheck, Hospital } from 'lucide-react';
 
 interface AddressesEmptyStateProps {
   onAdd: () => void;
 }
 
-/**
- * Empty state for addresses page
- * Shows when user has no addresses saved
- */
 export function AddressesEmptyState({ onAdd }: AddressesEmptyStateProps) {
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3 }}
-      className="flex flex-col items-center justify-center py-16 px-4"
-    >
-      <Card className="w-full max-w-md p-8 text-center">
-        {/* Illustration */}
-        <div className="flex items-center justify-center w-24 h-24 mx-auto mb-6 rounded-full bg-primary/5">
-          <MapPin className="h-12 w-12 text-muted-foreground" />
+    <Card className="border border-border/80 bg-card shadow-xs rounded-2xl overflow-hidden">
+      <CardContent className="flex flex-col items-center justify-center p-8 sm:p-14 text-center max-w-md mx-auto space-y-4">
+        <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-tr from-primary/20 to-emerald-500/10 text-primary border border-primary/25 shadow-xs">
+          <MapPin className="h-8 w-8 animate-bounce" />
         </div>
 
-        {/* Message */}
-        <h3 className="text-xl font-semibold mb-2">No saved addresses</h3>
-        <p className="text-muted-foreground mb-6">
-          Add your home and work addresses for faster checkout. We'll use Google Maps to find your location.
-        </p>
+        <div className="space-y-1">
+          <h3 className="text-lg font-bold tracking-tight text-foreground">No Delivery Locations Saved</h3>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Save your hospital, clinic, practice, or residential address for quick procurement and expedited courier dispatch across Kenya.
+          </p>
+        </div>
 
-        {/* CTA */}
-        <Button onClick={onAdd} className="gap-2">
-          <Truck className="h-4 w-4" />
+        <Button
+          onClick={onAdd}
+          className="rounded-xl font-semibold gap-2 shadow-xs mt-2"
+        >
+          <Plus className="h-4 w-4" />
           Add Your First Address
         </Button>
-      </Card>
-    </motion.div>
+
+        <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground pt-4 border-t border-border/60 w-full">
+          <ShieldCheck className="h-3.5 w-3.5 text-emerald-500 shrink-0" />
+          <span>Google Maps verified GPS pin coordinates supported</span>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

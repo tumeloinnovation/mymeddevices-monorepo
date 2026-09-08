@@ -3,6 +3,7 @@ import Image from 'next/image';
 import SectionHeader from './SectionHeader';
 import Link from 'next/link';
 import { useCategories } from '@/lib/hooks/useCategories';
+import { getValidImageUrl } from '@/lib/utils/image';
 import { FolderOpen } from 'lucide-react';
 
 export const ShopByCategories: React.FC = () => {
@@ -42,13 +43,13 @@ export const ShopByCategories: React.FC = () => {
           {categories.slice(0, 10).map((category) => (
             <Link
               key={category.id}
-              href={`/categories/${category.slug}`}
+              href={`/products?category=${category.slug}`}
               aria-label={`Browse ${category.name} products`}
               className="group flex flex-col items-center text-center bg-card border border-border rounded-2xl p-4 transition-shadow duration-200 ease-in-out hover:shadow-md focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <div className="w-20 h-20 sm:w-16 sm:h-16 rounded-lg overflow-hidden bg-muted flex items-center justify-center mb-3">
                 <Image
-                  src={category.image?.src || '/logos/logo-portrait.png'}
+                  src={getValidImageUrl(category.image?.src || (category as any).image_url, '/logos/logo-portrait.png')}
                   alt={category.name}
                   width={80}
                   height={80}
@@ -60,7 +61,9 @@ export const ShopByCategories: React.FC = () => {
                 {category.name}
               </h3>
 
-              <span className="mt-2 text-[12px] text-muted-foreground bg-muted/50 px-2 py-1 rounded-full">{category.count} items</span>
+              <span className="mt-2 text-[12px] text-muted-foreground bg-muted/50 px-2 py-1 rounded-full">
+                {category.count ?? 0} {(category.count ?? 0) === 1 ? 'item' : 'items'}
+              </span>
             </Link>
           ))}
         </div>

@@ -1,73 +1,82 @@
-from typing import Annotated, List, Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.responses import success_response, ApiSuccessResponse
 from app.core.dependencies import require_role
+from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.auth.models.user import User
-from app.domains.shopping.schemas.order_schemas import OrderResponse, OrderStatusUpdate, OrderListResponse, OrderInternalNotesUpdate
+from app.domains.shopping.schemas.order_schemas import (
+    OrderInternalNotesUpdate,
+    OrderListResponse,
+    OrderResponse,
+    OrderStatusUpdate,
+)
 from app.domains.shopping.services.order_service import OrderService
 
 router = APIRouter(prefix="/admin/shopping/orders", tags=["Admin Order Management"])
 
+
 @router.get("", response_model=ApiSuccessResponse[OrderListResponse])
 async def admin_list_orders(
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    status: Optional[str] = Query(None),
-    user_id: Optional[uuid.UUID] = Query(None),
+    status: str | None = Query(None),
+    user_id: uuid.UUID | None = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin lists all orders with filters."""
     service = OrderService(db)
     orders, total = await service.list_orders(
-        user_id=user_id,
-        status=status,
-        offset=(page - 1) * page_size,
-        limit=page_size
+        user_id=user_id, status=status, offset=(page - 1) * page_size, limit=page_size
     )
     return success_response({"orders": orders, "total": total})
 
+
 from app.domains.shopping.services.order_state_machine import InvalidStateTransitionError
+
 
 @router.patch("/{order_id}/status", response_model=ApiSuccessResponse[OrderResponse])
 async def admin_update_order_status(
     order_id: uuid.UUID,
     data: OrderStatusUpdate,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin updates order status (e.g., from pending to paid) with state machine validation."""
     try:
+        user_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
         service = OrderService(db)
-        order = await service.update_order_status(order_id, data.status)
+        order = await service.update_order_status(
+            order_id,
+            data.status,
+            user_id=current_user.id,
+            user_name=f"Admin ({user_name})",
+        )
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
+        await db.commit()
         return success_response(order)
     except InvalidStateTransitionError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid status transition: {str(e)}"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid status transition: {str(e)}")
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
 
 @router.patch("/{order_id}/internal-notes", response_model=ApiSuccessResponse[OrderResponse])
 async def admin_update_internal_notes(
     order_id: uuid.UUID,
     data: OrderInternalNotesUpdate,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin updates internal notes for an order (admin-only communication)."""
-    from sqlalchemy import update, select
-    from app.domains.shopping.models.order import Order
+    from sqlalchemy import select
+
+    from app.domains.shopping.models.order import Order, OrderTimelineEvent
 
     # Get the order
     stmt = select(Order).where(Order.id == order_id)
@@ -79,22 +88,37 @@ async def admin_update_internal_notes(
 
     # Update internal notes
     order.internal_notes = data.internal_notes
-    await db.commit()
-    await db.refresh(order)
 
-    return success_response(order)
+    # Add audit timeline event
+    user_name = f"{current_user.first_name or ''} {current_user.last_name or ''}".strip() or current_user.email
+    current_status = order.status.value if hasattr(order.status, "value") else str(order.status)
+    timeline_event = OrderTimelineEvent(
+        id=uuid.uuid4(),
+        order_id=order_id,
+        status=current_status,
+        message=f"Internal notes updated by Admin ({user_name})",
+        created_by=current_user.id,
+    )
+    db.add(timeline_event)
+    await db.commit()
+
+    service = OrderService(db)
+    order_loaded = await service.get_order(str(order_id))
+    return success_response(order_loaded)
+
 
 @router.get("/vendor", response_model=ApiSuccessResponse[OrderListResponse])
 async def vendor_list_orders(
     current_user: Annotated[User, Depends(require_role("vendor", "admin"))],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Vendor lists orders containing their products."""
     # We need the vendor profile ID for this user
-    from app.domains.vendor.models.vendor_profile import VendorProfile
     from sqlalchemy import select
+
+    from app.domains.vendor.models.vendor_profile import VendorProfile
 
     stmt = select(VendorProfile).where(VendorProfile.user_id == current_user.id)
     result = await db.execute(stmt)
@@ -105,9 +129,7 @@ async def vendor_list_orders(
 
     service = OrderService(db)
     orders, total = await service.list_orders(
-        vendor_id=vendor_profile.id,
-        offset=(page - 1) * page_size,
-        limit=page_size
+        vendor_id=vendor_profile.id, offset=(page - 1) * page_size, limit=page_size
     )
 
     # Secure data: filter order items and recalculate totals for the vendor
@@ -129,7 +151,7 @@ async def vendor_list_orders(
 async def admin_get_order_details(
     order_id: uuid.UUID,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin gets full order details including internal notes."""
     service = OrderService(db)

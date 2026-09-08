@@ -12,6 +12,8 @@ type CategoryWithChildren = Category & { children?: CategoryWithChildren[] };
 interface ShopSidebarProps {
   categories: CategoryWithChildren[];
   categoriesLoading?: boolean;
+  selectedCategory?: string;
+  onCategoryChange?: (categorySlug?: string) => void;
 }
 type CategoryWithLevel = Category & { level: number };
 
@@ -22,8 +24,9 @@ const getHierarchicalCategories = (categories: CategoryWithChildren[]): Category
   const traverse = (cats: CategoryWithChildren[], level: number) => {
     cats.forEach(cat => {
       result.push({ ...cat, level });
-      if (cat.children && cat.children.length > 0) {
-        traverse(cat.children, level + 1);
+      const sub = cat.children || (cat as any).subCategories;
+      if (sub && sub.length > 0) {
+        traverse(sub, level + 1);
       }
     });
   };
@@ -32,12 +35,25 @@ const getHierarchicalCategories = (categories: CategoryWithChildren[]): Category
   return result;
 };
 
-export default function ShopSidebar({ categories, categoriesLoading }: ShopSidebarProps) {
-  // --- Simplified State Management ---
-  // All state is now consumed directly from the context. No more props for filters!
-  const { filters, setFilter, clearFilters } = useShopFilters();
+export default function ShopSidebar({
+  categories,
+  categoriesLoading,
+  selectedCategory,
+  onCategoryChange,
+}: ShopSidebarProps) {
+  const { filters, setFilter } = useShopFilters();
 
   const hierarchicalCategories = getHierarchicalCategories(categories);
+  const activeCategory = selectedCategory !== undefined ? selectedCategory : filters.selectedCategory;
+
+  const handleToggle = (slug: string) => {
+    const nextSlug = activeCategory === slug ? undefined : slug;
+    if (onCategoryChange) {
+      onCategoryChange(nextSlug);
+    } else {
+      setFilter("selectedCategory", nextSlug);
+    }
+  };
 
   return (
     <aside className="space-y-8">
@@ -56,26 +72,24 @@ export default function ShopSidebar({ categories, categoriesLoading }: ShopSideb
             size="sm"
           />
         ) : (
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
             {hierarchicalCategories.map((category) => (
-              <div key={category.id} className="flex items-center gap-2" style={{ paddingLeft: `${category.level * 16}px` }}>
+              <div key={category.id} className="flex items-center gap-2" style={{ paddingLeft: `${category.level * 14}px` }}>
                 <input
                   type="radio"
                   id={`cat-${category.id}`}
                   name="shop-category"
-                  // The UI is now driven by the context state
-                  checked={filters.selectedCategory === category.slug}
-                  // The action updates the context state
-                  onChange={() =>
-                    setFilter(
-                      "selectedCategory",
-                      filters.selectedCategory === category.slug ? undefined : category.slug
-                    )
-                  }
-                  className="accent-primary"
+                  checked={activeCategory === category.slug}
+                  onChange={() => handleToggle(category.slug)}
+                  className="accent-primary cursor-pointer"
                 />
-                <label htmlFor={`cat-${category.id}`} className="text-sm cursor-pointer">
-                  {category.name}
+                <label htmlFor={`cat-${category.id}`} className="text-sm cursor-pointer flex-1 flex items-center justify-between">
+                  <span className={activeCategory === category.slug ? "font-medium text-primary" : "text-foreground"}>
+                    {category.name}
+                  </span>
+                  {typeof category.count === "number" && category.count > 0 && (
+                    <span className="text-xs text-muted-foreground ml-2">({category.count})</span>
+                  )}
                 </label>
               </div>
             ))}

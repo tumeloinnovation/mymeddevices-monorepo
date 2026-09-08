@@ -49,6 +49,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { apiClient } from "@mymeddevices/shared-core";
+
+
+
 
 interface Refund {
   id: string;
@@ -103,22 +107,43 @@ export default function RefundManagement() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        skip: String((page - 1) * pagination.page_size),
+        page: String(page),
         limit: String(pagination.page_size),
       });
 
       if (filters.status) params.append("status", filters.status);
 
-      const response = await fetch(`/api/v1/payments/refunds?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch refunds");
+      const data = await apiClient.get<any>(`/returns/admin/list?${params}`).catch(() => ({ items: [], total: 0, page: 1, limit: pagination.page_size }));
+      const items = data?.items || [];
 
-      const data = await response.json();
-      setRefunds(data.refunds || []);
+      setRefunds(
+        items.map((r: any) => ({
+          id: r.id,
+          transaction_id: r.return_number || r.refund_transaction_id || r.id,
+          order_id: r.order_id || null,
+          amount: r.refund_amount || 0,
+          currency: "KES",
+          refund_fee: 0,
+          net_refund: r.refund_amount || 0,
+          status: r.status || "pending",
+          reason: r.reason || "Customer return",
+          reason_details: r.description || null,
+          phone_number: "—",
+          reversal_id: null,
+          mpesa_receipt: r.refund_transaction_id || null,
+          initiated_at: r.created_at || new Date().toISOString(),
+          processed_at: r.resolved_at || null,
+          completed_at: r.status === 'completed' ? r.resolved_at : null,
+          failure_reason: null,
+        }))
+      );
+
+      const total = data?.total || items.length;
       setPagination({
-        total: data.total,
-        page: data.page,
-        page_size: data.page_size,
-        total_pages: Math.ceil(data.total / data.page_size),
+        total,
+        page: data?.page || page,
+        page_size: data?.limit || pagination.page_size,
+        total_pages: Math.ceil(total / (data?.limit || pagination.page_size)) || 1,
       });
     } catch (error) {
       console.error("Failed to load refunds:", error);
@@ -127,6 +152,7 @@ export default function RefundManagement() {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchRefunds();
@@ -198,19 +224,10 @@ export default function RefundManagement() {
 
     setApproving(true);
     try {
-      const response = await fetch(
-        `/api/v1/payments/refunds/${selectedRefund.id}/approve`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            approved,
-            notes: approvalNotes,
-          }),
-        }
-      );
-
-      if (!response.ok) throw new Error("Failed to process refund");
+      await apiClient.put(`/returns/${selectedRefund.id}/status`, {
+        status: approved ? "approved" : "rejected",
+        notes: approvalNotes,
+      });
 
       toast.success(
         approved
@@ -226,6 +243,7 @@ export default function RefundManagement() {
       setApproving(false);
     }
   };
+
 
   const handleViewDetails = (refund: Refund) => {
     setSelectedRefund(refund);

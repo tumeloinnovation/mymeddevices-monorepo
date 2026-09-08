@@ -1,12 +1,13 @@
 from datetime import datetime
-from typing import Optional, List
-from uuid import UUID
-from pydantic import BaseModel, Field, field_validator
 from enum import Enum
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class BannerPlacement(str, Enum):
     """Where banners can be displayed."""
+
     HOMEPAGE_HERO = "homepage_hero"
     HOMEPAGE_SIDEBAR = "homepage_sidebar"
     CATEGORY_PAGE = "category_page"
@@ -18,6 +19,7 @@ class BannerPlacement(str, Enum):
 
 class BannerStatus(str, Enum):
     """Banner status."""
+
     DRAFT = "draft"
     SCHEDULED = "scheduled"
     ACTIVE = "active"
@@ -27,23 +29,24 @@ class BannerStatus(str, Enum):
 
 class BannerBase(BaseModel):
     """Base banner schema."""
+
     title: str = Field(..., max_length=200)
-    description: Optional[str] = None
-    image_url: Optional[str] = None
-    image_alt_text: Optional[str] = Field(None, max_length=200)
-    background_color: Optional[str] = Field(None, pattern=r'^#[0-9A-Fa-f]{6}$')
-    text_color: Optional[str] = Field(None, pattern=r'^#[0-9A-Fa-f]{6}$')
-    cta_text: Optional[str] = Field(None, max_length=100)
-    cta_link: Optional[str] = None
+    description: str | None = None
+    image_url: str | None = None
+    image_alt_text: str | None = Field(None, max_length=200)
+    background_color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    text_color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    cta_text: str | None = Field(None, max_length=100)
+    cta_link: str | None = None
     cta_target: str = "_self"
     placement: BannerPlacement
     priority: int = 0
-    target_audience: Optional[List[str]] = None
-    target_categories: Optional[List[str]] = None
-    target_products: Optional[List[str]] = None
-    exclude_products: Optional[List[str]] = None
-    coupon_id: Optional[UUID] = None
-    vendor_id: Optional[UUID] = None
+    target_audience: list[str] | None = None
+    target_categories: list[str] | None = None
+    target_products: list[str] | None = None
+    exclude_products: list[str] | None = None
+    coupon_id: UUID | None = None
+    vendor_id: UUID | None = None
     is_dismissible: bool = False
     show_close_button: bool = True
     mobile_hidden: bool = False
@@ -52,67 +55,70 @@ class BannerBase(BaseModel):
 
 class BannerCreate(BannerBase):
     """Schema for creating a banner."""
-    status: BannerStatus = BannerStatus.DRAFT
-    scheduled_start: Optional[datetime] = None
-    scheduled_end: Optional[datetime] = None
 
-    @field_validator('scheduled_end')
+    status: BannerStatus = BannerStatus.DRAFT
+    scheduled_start: datetime | None = None
+    scheduled_end: datetime | None = None
+
+    @field_validator("scheduled_end")
     @classmethod
-    def validate_end_date(cls, v: Optional[datetime], info) -> Optional[datetime]:
-        if v and info.data.get('scheduled_start') and v < info.data['scheduled_start']:
-            raise ValueError('End date must be after start date')
+    def validate_end_date(cls, v: datetime | None, info) -> datetime | None:
+        if v and info.data.get("scheduled_start") and v < info.data["scheduled_start"]:
+            raise ValueError("End date must be after start date")
         return v
 
 
 class BannerUpdate(BaseModel):
     """Schema for updating a banner."""
-    title: Optional[str] = Field(None, max_length=200)
-    description: Optional[str] = None
-    image_url: Optional[str] = None
-    image_alt_text: Optional[str] = Field(None, max_length=200)
-    background_color: Optional[str] = Field(None, pattern=r'^#[0-9A-Fa-f]{6}$')
-    text_color: Optional[str] = Field(None, pattern=r'^#[0-9A-Fa-f]{6}$')
-    cta_text: Optional[str] = Field(None, max_length=100)
-    cta_link: Optional[str] = None
-    cta_target: Optional[str] = None
-    placement: Optional[BannerPlacement] = None
-    priority: Optional[int] = None
-    status: Optional[BannerStatus] = None
-    scheduled_start: Optional[datetime] = None
-    scheduled_end: Optional[datetime] = None
-    target_audience: Optional[List[str]] = None
-    target_categories: Optional[List[str]] = None
-    target_products: Optional[List[str]] = None
-    exclude_products: Optional[List[str]] = None
-    coupon_id: Optional[UUID] = None
-    vendor_id: Optional[UUID] = None
-    is_dismissible: Optional[bool] = None
-    show_close_button: Optional[bool] = None
-    mobile_hidden: Optional[bool] = None
-    desktop_hidden: Optional[bool] = None
+
+    title: str | None = Field(None, max_length=200)
+    description: str | None = None
+    image_url: str | None = None
+    image_alt_text: str | None = Field(None, max_length=200)
+    background_color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    text_color: str | None = Field(None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    cta_text: str | None = Field(None, max_length=100)
+    cta_link: str | None = None
+    cta_target: str | None = None
+    placement: BannerPlacement | None = None
+    priority: int | None = None
+    status: BannerStatus | None = None
+    scheduled_start: datetime | None = None
+    scheduled_end: datetime | None = None
+    target_audience: list[str] | None = None
+    target_categories: list[str] | None = None
+    target_products: list[str] | None = None
+    exclude_products: list[str] | None = None
+    coupon_id: UUID | None = None
+    vendor_id: UUID | None = None
+    is_dismissible: bool | None = None
+    show_close_button: bool | None = None
+    mobile_hidden: bool | None = None
+    desktop_hidden: bool | None = None
 
 
 class BannerResponse(BannerBase):
     """Banner response schema."""
+
     id: UUID
     status: BannerStatus
-    scheduled_start: Optional[datetime] = None
-    scheduled_end: Optional[datetime] = None
+    scheduled_start: datetime | None = None
+    scheduled_end: datetime | None = None
     impressions: int = 0
     clicks: int = 0
     dismissals: int = 0
     click_through_rate: float = 0.0
     created_at: datetime
     updated_at: datetime
-    created_by_id: Optional[UUID] = None
+    created_by_id: UUID | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class BannerListResponse(BaseModel):
     """Response schema for banner list."""
-    items: List[BannerResponse]
+
+    items: list[BannerResponse]
     total: int
     page: int
     page_size: int
@@ -120,15 +126,16 @@ class BannerListResponse(BaseModel):
 
 class PublicBanner(BaseModel):
     """Minimal banner info for public display."""
+
     id: UUID
     title: str
-    description: Optional[str] = None
-    image_url: Optional[str] = None
-    image_alt_text: Optional[str] = None
-    background_color: Optional[str] = None
-    text_color: Optional[str] = None
-    cta_text: Optional[str] = None
-    cta_link: Optional[str] = None
+    description: str | None = None
+    image_url: str | None = None
+    image_alt_text: str | None = None
+    background_color: str | None = None
+    text_color: str | None = None
+    cta_text: str | None = None
+    cta_link: str | None = None
     cta_target: str = "_self"
     placement: BannerPlacement
     priority: int
@@ -140,18 +147,21 @@ class PublicBanner(BaseModel):
 
 class BannerClickCreate(BaseModel):
     """Schema for recording a banner click."""
+
     banner_id: UUID
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 class BannerDismissalCreate(BaseModel):
     """Schema for recording a banner dismissal."""
+
     banner_id: UUID
-    session_id: Optional[str] = None
+    session_id: str | None = None
 
 
 class BannerAnalytics(BaseModel):
     """Banner analytics response."""
+
     banner_id: UUID
     title: str
     impressions: int
@@ -159,5 +169,5 @@ class BannerAnalytics(BaseModel):
     dismissals: int
     click_through_rate: float
     status: BannerStatus
-    scheduled_start: Optional[datetime] = None
-    scheduled_end: Optional[datetime] = None
+    scheduled_start: datetime | None = None
+    scheduled_end: datetime | None = None

@@ -9,10 +9,10 @@ Since the tables already use PostgreSQL ENUM types which enforce
 valid values at the database level, this migration focuses on
 data cleanup and adds comment documentation.
 """
-from typing import Sequence, Union
-from alembic import op
-import sqlalchemy as sa
+from collections.abc import Sequence
+from typing import Union
 
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = '20260730_add_status'

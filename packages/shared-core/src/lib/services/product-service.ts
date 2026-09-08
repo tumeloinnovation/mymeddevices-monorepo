@@ -73,6 +73,7 @@ export const productService = {
           price_min: params.min_price,
           price_max: params.max_price,
           in_stock: params.in_stock ?? true,
+          category: params.category,
         },
         skipAuth: true,
       });

@@ -1,12 +1,23 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { SessionExpiredModal } from '@/components/auth/SessionExpiredModal';
-import { useAuthStore } from '@/lib/store/useAuthStore';
+import { SessionExpiredModal } from '@mymeddevices/shared-ui';
+import { useAuthStore } from '@mymeddevices/shared-core';
 
 export function SessionExpiredWatcher() {
   const [isOpen, setIsOpen] = useState(false);
   const [email, setEmail] = useState('');
+  const isSessionExpired = useAuthStore((s) => s.isSessionExpired);
+  const user = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    if (isSessionExpired && user?.email) {
+      setEmail(user.email);
+      setIsOpen(true);
+    } else if (!isSessionExpired) {
+      setIsOpen(false);
+    }
+  }, [isSessionExpired, user?.email]);
 
   useEffect(() => {
     // Validate stored tokens on mount
@@ -22,7 +33,7 @@ export function SessionExpiredWatcher() {
   useEffect(() => {
     const handleExpired = () => {
       const store = useAuthStore.getState();
-      if (store.user) {
+      if (store.user?.email) {
         setEmail(store.user.email);
         setIsOpen(true);
       } else {
@@ -39,7 +50,7 @@ export function SessionExpiredWatcher() {
 
   const handleLogin = async (password: string) => {
     const store = useAuthStore.getState();
-    await store.login({ email, password });
+    await store.login({ email, password }, 'customer');
     setIsOpen(false);
   };
 
@@ -61,3 +72,4 @@ export function SessionExpiredWatcher() {
     />
   );
 }
+

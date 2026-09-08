@@ -53,8 +53,8 @@ export const customerLoyaltyApi = {
     try {
       const response = await apiClient.get<any>('/customers/me/loyalty/summary');
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response.data || response;
       }
 
       throw new Error('Invalid response format');
@@ -77,8 +77,8 @@ export const customerLoyaltyApi = {
         },
       });
 
-      if (response && response.data) {
-        return response.data;
+      if (response) {
+        return response.data || response;
       }
 
       throw new Error('Invalid response format');
@@ -102,9 +102,10 @@ export const customerLoyaltyApi = {
         description,
       });
 
-      if (response && response.data) {
-        toast.success(response.data.message || 'Points redeemed successfully');
-        return response.data;
+      if (response) {
+        const data = response.data || response;
+        toast.success(data.message || 'Points redeemed successfully');
+        return data;
       }
 
       throw new Error('Invalid response format');

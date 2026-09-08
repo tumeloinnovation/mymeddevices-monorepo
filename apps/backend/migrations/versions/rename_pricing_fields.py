@@ -5,11 +5,10 @@ Revises: cd037f9d732d
 Create Date: 2026-08-08 12:00:00.000000
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
 from alembic import op
-import sqlalchemy as sa
-
 
 # revision identifiers, used by Alembic.
 revision: str = '001_rename_pricing_fields'

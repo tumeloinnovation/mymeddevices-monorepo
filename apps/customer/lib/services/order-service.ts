@@ -13,6 +13,14 @@ export interface Order {
   guest_token?: string;
   status: 'pending' | 'paid' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'refunded';
   total_amount: number;
+  subtotal?: number;
+  shipping_amount?: number;
+  packaging_fee?: number;
+  services_fee?: number;
+  tax_amount?: number;
+  discount_amount?: number;
+  payment_method?: string;
+  payment_method_title?: string;
   currency: string;
   shipping_address?: Address | Record<string, any>;
   notes?: string;
@@ -55,6 +63,7 @@ export interface CheckoutRequest {
   notes?: string;
   idempotency_key?: string;
   guest_token?: string;
+  points_to_redeem?: number;
 }
 
 export interface PaymentRequest {
@@ -118,6 +127,13 @@ export interface PaginatedResponse<T> {
 // Order Service
 // ============================================================================
 
+function extractData<T>(response: any): T {
+  if (response && typeof response === 'object' && 'success' in response && 'data' in response) {
+    return response.data as T;
+  }
+  return response as T;
+}
+
 /**
  * Order service for API integration
  *
@@ -147,8 +163,9 @@ export const orderService = {
         },
       });
 
-      if (response?.success && response?.data) {
-        return response.data;
+      const data = extractData<PaginatedResponse<Order>>(response);
+      if (data) {
+        return data;
       }
 
       throw new Error('Invalid response format');
@@ -166,8 +183,9 @@ export const orderService = {
       const params = guestToken ? { guest_token: guestToken } : {};
       const response = await apiClient.get<any>(`/shopping/orders/public/${id}`, { params });
 
-      if (response?.success && response?.data) {
-        return response.data;
+      const data = extractData<Order>(response);
+      if (data) {
+        return data;
       }
 
       throw new Error('Invalid response format');
@@ -186,8 +204,9 @@ export const orderService = {
         params: { order_number: orderNumber, limit: 1 },
       });
 
-      if (response?.success && response?.data?.items && response.data.items.length > 0) {
-        return response.data.items[0];
+      const data = extractData<any>(response);
+      if (data?.items && data.items.length > 0) {
+        return data.items[0];
       }
 
       return null;
@@ -207,10 +226,11 @@ export const orderService = {
   async createOrder(request: CheckoutRequest): Promise<Order> {
     try {
       const response = await apiClient.post<any>('/shopping/checkout', request);
+      const data = extractData<Order>(response);
 
-      if (response?.success && response?.data) {
+      if (data && (data.id || (data as any).order_number)) {
         toast.success('Order created successfully');
-        return response.data;
+        return data;
       }
 
       throw new Error('Invalid response format');
@@ -227,7 +247,8 @@ export const orderService = {
     shippingAddress: Address | Record<string, any>,
     billingAddress?: Address | Record<string, any>,
     notes?: string,
-    guestToken?: string
+    guestToken?: string,
+    pointsToRedeem?: number
   ): Promise<Order> {
     try {
       if (!cart || !cart.items || cart.items.length === 0) {
@@ -243,6 +264,7 @@ export const orderService = {
         notes,
         idempotency_key: idempotencyKey,
         guest_token: guestToken,
+        points_to_redeem: pointsToRedeem,
       });
     } catch (error: any) {
       if (error.message !== 'Your cart is empty. Please add items before checkout.') {
@@ -367,9 +389,10 @@ export const orderService = {
   async getOrderStatus(orderId: string): Promise<OrderStatus> {
     try {
       const response = await apiClient.get<any>(`/shopping/orders/${orderId}/status`);
+      const data = extractData<OrderStatus>(response);
 
-      if (response?.success && response?.data) {
-        return response.data;
+      if (data) {
+        return data;
       }
 
       throw new Error('Invalid response format');
@@ -385,9 +408,10 @@ export const orderService = {
   async trackOrder(orderId: string): Promise<OrderTracking> {
     try {
       const response = await apiClient.get<any>(`/shopping/orders/${orderId}/tracking`);
+      const data = extractData<OrderTracking>(response);
 
-      if (response?.success && response?.data) {
-        return response.data;
+      if (data) {
+        return data;
       }
 
       throw new Error('Invalid response format');
@@ -428,10 +452,11 @@ export const orderService = {
       const response = await apiClient.post<any>(`/shopping/orders/${orderId}/cancel`, {
         reason,
       });
+      const data = extractData<Order>(response);
 
-      if (response?.success && response?.data) {
+      if (data) {
         toast.success('Order cancelled successfully');
-        return response.data;
+        return data;
       }
 
       throw new Error('Invalid response format');
@@ -455,10 +480,11 @@ export const orderService = {
       const response = await apiClient.post<any>(`/shopping/orders/${orderId}/refund`, {
         reason,
       });
+      const data = extractData<any>(response);
 
-      if (response?.success && response?.data) {
+      if (data) {
         toast.success('Refund requested successfully');
-        return response.data;
+        return data;
       }
 
       throw new Error('Invalid response format');

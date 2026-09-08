@@ -1,0 +1,117 @@
+{
+  "expo": {
+    "name": "MyMedDevices",
+    "slug": "mymeddevices",
+    "version": "0.0.4",
+    "orientation": "default",
+    "icon": "./assets/images/icon.png",
+    "scheme": "my-med-device",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "jsEngine": "hermes",
+    "ios": {
+      "supportsTablet": false,
+      "splash": {
+        "image": "./assets/images/icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff",
+        "dark": {
+          "image": "./assets/images/icon.png",
+          "backgroundColor": "#000000",
+          "resizeMode": "contain"
+        }
+      },
+      "bundleIdentifier": "com.tumeloinnovations.mymeddevices",
+      "infoPlist": {
+        "UIViewControllerBasedStatusBarAppearance": "YES",
+        "LSApplicationQueriesSchemes": [
+          "whatsapp"
+        ]
+      },
+      "buildNumber": "9"
+    },
+    "android": {
+      "versionCode": 26,
+      "package": "com.tumeloinnovations.my_med_devices",
+      "splash": {
+        "image": "./assets/images/icon.png",
+        "resizeMode": "contain",
+        "backgroundColor": "#ffffff",
+        "dark": {
+          "image": "./assets/images/icon.png",
+          "backgroundColor": "#000000",
+          "resizeMode": "contain"
+        }
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "onesignal-expo-plugin",
+        {
+          "mode": "production",
+          "smallIcons": [
+            "./assets/images/ic_stat_onesignal_default.png"
+          ]
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "targetSdkVersion": 35
+          }
+        }
+      ],
+      "expo-secure-store",
+      "expo-web-browser",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Allow MyMedDevices to use your location to find delivery options near you."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "oneSignalAppId": "d72027c1-3b1b-467c-b6a7-c8e1bf0e56a8",
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "targetName": "OneSignalNotificationServiceExtension",
+                  "bundleIdentifier": "com.tumeloinnovations.mymeddevices.OneSignalNotificationServiceExtension",
+                  "entitlements": {
+                    "com.apple.security.application-groups": [
+                      "group.com.tumeloinnovations.mymeddevices.onesignal"
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "da88290e-8f9c-444b-9848-2043eea907c6"
+      }
+    },
+    "runtimeVersion": "0.0.4",
+    "updates": {
+      "url": "https://u.expo.dev/da88290e-8f9c-444b-9848-2043eea907c6"
+    }
+  }
+}

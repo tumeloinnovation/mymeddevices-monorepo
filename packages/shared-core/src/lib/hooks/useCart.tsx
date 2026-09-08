@@ -16,9 +16,8 @@ export function useCart() {
   // Map store items to the simplified CartItem type expected by components
   const mappedItems = Array.isArray(store.items) ? store.items.map(item => ({
     id: item.id,
-    name: item.name,
     price: Number(item.price) || 0,
-    image: item.images?.[0]?.src,
+    image: (item.images?.[0] as any)?.url || (item.images?.[0] as any)?.src || (item as any).image_url,
     quantity: item.quantity,
   })) : [];
 

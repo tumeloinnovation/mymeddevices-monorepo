@@ -1,9 +1,9 @@
-'use client'
+'use client';
 
-import { useAuthStore } from '@/lib/store/useAuthStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
-import type { AuthUser, LoginCredentials, RegisterData, LoginMode } from '@/lib/auth/types';
+import type { AuthUser, LoginCredentials, RegisterData, LoginMode } from '../../auth/types';
 
 interface UseAuthReturn {
   user: AuthUser | null;
@@ -20,9 +20,6 @@ interface UseAuthReturn {
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (token: string, newPassword: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
-
-  setDemoCustomer: () => void;
-  setDemoVendor: () => void;
 
   isVendor: () => boolean;
   isCustomer: () => boolean;
@@ -64,9 +61,6 @@ export function useAuth(): UseAuthReturn {
     changePassword: async (currentPassword: string, newPassword: string) => {
       return authStore.changePassword({ old_password: currentPassword, new_password: newPassword });
     },
-
-    setDemoCustomer: authStore.setDemoCustomer,
-    setDemoVendor: authStore.setDemoVendor,
 
     isVendor: authStore.isVendor,
     isCustomer: authStore.isCustomer,

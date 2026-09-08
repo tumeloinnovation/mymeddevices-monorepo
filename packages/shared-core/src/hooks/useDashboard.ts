@@ -77,6 +77,7 @@ export function useCustomerOrders(page = 1, perPage = 10, status?: string) {
                     subtotal_tax: '0',
                     total_tax: '0',
                     sku: item.product?.sku || '',
+                    image: item.product?.image_url ? { id: '', src: item.product.image_url } : undefined,
                 })),
                 shipping_lines: [],
                 meta_data: [],

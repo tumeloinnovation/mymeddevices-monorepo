@@ -1,35 +1,42 @@
 import uuid
-from datetime import datetime, timezone
-from typing import Tuple, List, Optional
-from sqlalchemy import select, func, and_, desc
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime
+
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.domains.tickets.models.ticket import Ticket, TicketReply
 from app.domains.tickets.schemas.ticket_schemas import (
     TicketCreate,
-    TicketUpdate,
     TicketReplyCreate,
+    TicketUpdate,
 )
-from app.domains.auth.models.user import User
 
 
 class TicketService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @asynccontextmanager
+    async def _transaction(self):
+        """Use begin_nested (SAVEPOINT) when already in a transaction."""
+        if self.db.in_transaction():
+            async with self.db.begin_nested():
+                yield
+        else:
+            async with self.db.begin():
+                yield
+
     def _generate_ticket_number(self) -> str:
         """Generate a unique ticket number."""
-        # Use timestamp + random suffix for uniqueness
         timestamp = datetime.now().strftime("%Y%m%d")
         import random
+
         return f"TKT-{timestamp}-{random.randint(1000, 9999)}"
 
-    async def create_ticket(
-        self, customer_id: uuid.UUID, ticket_in: TicketCreate
-    ) -> Ticket:
+    async def create_ticket(self, customer_id: uuid.UUID, ticket_in: TicketCreate) -> Ticket:
         """Create a new support ticket."""
-        # Check if ticket number already exists and generate new one if needed
         ticket_number = self._generate_ticket_number()
         while await self._ticket_number_exists(ticket_number):
             ticket_number = self._generate_ticket_number()
@@ -44,47 +51,48 @@ class TicketService:
             status="open",
         )
 
-        self.db.add(ticket)
-        await self.db.commit()
-        await self.db.refresh(ticket)
+        async with self._transaction():
+            self.db.add(ticket)
+            await self.db.flush()
+            ticket_id = ticket.id
 
-        return ticket
+        await self.db.commit()
+
+        # Reload and return
+        result = await self.db.execute(
+            select(Ticket).options(selectinload(Ticket.replies)).where(Ticket.id == ticket_id)
+        )
+        return result.scalar_one()
 
     async def _ticket_number_exists(self, ticket_number: str) -> bool:
         """Check if ticket number already exists."""
-        result = await self.db.execute(
-            select(Ticket).where(Ticket.ticket_number == ticket_number)
-        )
+        result = await self.db.execute(select(Ticket).where(Ticket.ticket_number == ticket_number))
         return result.scalar_one_or_none() is not None
 
-    async def get_ticket(self, ticket_id: uuid.UUID) -> Optional[Ticket]:
+    async def get_ticket(self, ticket_id: uuid.UUID) -> Ticket | None:
         """Get a ticket by ID with replies."""
         result = await self.db.execute(
-            select(Ticket)
-            .options(selectinload(Ticket.replies))
-            .where(Ticket.id == ticket_id)
+            select(Ticket).options(selectinload(Ticket.replies)).where(Ticket.id == ticket_id)
         )
         return result.scalar_one_or_none()
 
-    async def get_ticket_by_number(self, ticket_number: str) -> Optional[Ticket]:
+    async def get_ticket_by_number(self, ticket_number: str) -> Ticket | None:
         """Get a ticket by ticket number."""
         result = await self.db.execute(
-            select(Ticket)
-            .options(selectinload(Ticket.replies))
-            .where(Ticket.ticket_number == ticket_number)
+            select(Ticket).options(selectinload(Ticket.replies)).where(Ticket.ticket_number == ticket_number)
         )
         return result.scalar_one_or_none()
 
     async def list_tickets(
         self,
-        customer_id: Optional[uuid.UUID] = None,
-        status: Optional[str] = None,
-        category: Optional[str] = None,
-        priority: Optional[str] = None,
-        search: Optional[str] = None,
+        customer_id: uuid.UUID | None = None,
+        status: str | None = None,
+        category: str | None = None,
+        priority: str | None = None,
+        search: str | None = None,
         offset: int = 0,
         limit: int = 20,
-    ) -> Tuple[List[Ticket], int]:
+    ) -> tuple[list[Ticket], int]:
         """List tickets with filters."""
         query = select(Ticket)
 
@@ -99,10 +107,7 @@ class TicketService:
         if priority:
             conditions.append(Ticket.priority == priority)
         if search:
-            conditions.append(
-                (Ticket.subject.ilike(f"%{search}%")) |
-                (Ticket.ticket_number.ilike(f"%{search}%"))
-            )
+            conditions.append((Ticket.subject.ilike(f"%{search}%")) | (Ticket.ticket_number.ilike(f"%{search}%")))
 
         if conditions:
             query = query.where(and_(*conditions))
@@ -121,9 +126,7 @@ class TicketService:
 
         return list(tickets), total
 
-    async def update_ticket(
-        self, ticket_id: uuid.UUID, ticket_in: TicketUpdate
-    ) -> Optional[Ticket]:
+    async def update_ticket(self, ticket_id: uuid.UUID, ticket_in: TicketUpdate) -> Ticket | None:
         """Update a ticket."""
         ticket = await self.get_ticket(ticket_id)
         if not ticket:
@@ -135,12 +138,11 @@ class TicketService:
 
         await self.db.commit()
         await self.db.refresh(ticket)
-
         return ticket
 
     async def add_reply(
         self, ticket_id: uuid.UUID, user_id: uuid.UUID, reply_in: TicketReplyCreate
-    ) -> Optional[TicketReply]:
+    ) -> TicketReply | None:
         """Add a reply to a ticket."""
         ticket = await self.get_ticket(ticket_id)
         if not ticket:
@@ -156,7 +158,7 @@ class TicketService:
         self.db.add(reply)
 
         # Update ticket's last_reply_at
-        ticket.last_reply_at = datetime.now(timezone.utc)
+        ticket.last_reply_at = datetime.now(UTC)
 
         # Auto-update status based on who is replying
         if reply_in.is_internal == "no" and ticket.status in ["resolved", "closed"]:
@@ -166,21 +168,16 @@ class TicketService:
 
         await self.db.commit()
         await self.db.refresh(reply)
-
         return reply
 
-    async def get_replies(self, ticket_id: uuid.UUID) -> List[TicketReply]:
+    async def get_replies(self, ticket_id: uuid.UUID) -> list[TicketReply]:
         """Get all replies for a ticket."""
         result = await self.db.execute(
-            select(TicketReply)
-            .where(TicketReply.ticket_id == ticket_id)
-            .order_by(TicketReply.created_at)
+            select(TicketReply).where(TicketReply.ticket_id == ticket_id).order_by(TicketReply.created_at)
         )
         return list(result.scalars().all())
 
-    async def update_status(
-        self, ticket_id: uuid.UUID, status: str, user_id: uuid.UUID
-    ) -> Optional[Ticket]:
+    async def update_status(self, ticket_id: uuid.UUID, status: str, user_id: uuid.UUID) -> Ticket | None:
         """Update ticket status."""
         ticket = await self.get_ticket(ticket_id)
         if not ticket:
@@ -189,22 +186,19 @@ class TicketService:
         ticket.status = status
 
         if status == "resolved":
-            ticket.resolved_at = datetime.now(timezone.utc)
+            ticket.resolved_at = datetime.now(UTC)
         elif status == "closed":
-            ticket.closed_at = datetime.now(timezone.utc)
+            ticket.closed_at = datetime.now(UTC)
 
         await self.db.commit()
         await self.db.refresh(ticket)
-
         return ticket
 
-    async def close_ticket(self, ticket_id: uuid.UUID, user_id: uuid.UUID) -> Optional[Ticket]:
+    async def close_ticket(self, ticket_id: uuid.UUID, user_id: uuid.UUID) -> Ticket | None:
         """Close a ticket."""
         return await self.update_status(ticket_id, "closed", user_id)
 
-    async def assign_ticket(
-        self, ticket_id: uuid.UUID, assign_to_id: uuid.UUID
-    ) -> Optional[Ticket]:
+    async def assign_ticket(self, ticket_id: uuid.UUID, assign_to_id: uuid.UUID) -> Ticket | None:
         """Assign a ticket to a user."""
         ticket = await self.get_ticket(ticket_id)
         if not ticket:
@@ -216,7 +210,6 @@ class TicketService:
 
         await self.db.commit()
         await self.db.refresh(ticket)
-
         return ticket
 
     async def delete_ticket(self, ticket_id: uuid.UUID) -> bool:

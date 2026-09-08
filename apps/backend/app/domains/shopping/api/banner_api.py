@@ -1,28 +1,26 @@
-from typing import Annotated, List, Optional
 import uuid
-from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.responses import success_response, ApiSuccessResponse
-from app.core.dependencies import require_role, get_current_user
-from app.domains.shopping.api.dependencies import get_optional_current_user
+from app.core.dependencies import require_role
+from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.auth.models.user import User
+from app.domains.shopping.api.dependencies import get_optional_current_user
 from app.domains.shopping.schemas.banner_schemas import (
-    BannerCreate,
-    BannerUpdate,
-    BannerResponse,
-    BannerListResponse,
-    PublicBanner,
     BannerAnalytics,
     BannerClickCreate,
+    BannerCreate,
     BannerDismissalCreate,
     BannerPlacement,
+    BannerResponse,
     BannerStatus,
+    BannerUpdate,
+    PublicBanner,
 )
 from app.domains.shopping.services.banner_service import BannerService
-
 
 router = APIRouter(prefix="/admin/banners", tags=["Admin Banners"])
 
@@ -31,22 +29,25 @@ router = APIRouter(prefix="/admin/banners", tags=["Admin Banners"])
 # ADMIN BANNER MANAGEMENT
 # ============================================================================
 
-@router.get("", response_model=ApiSuccessResponse[List[BannerResponse]])
+
+@router.get("", response_model=ApiSuccessResponse[list[BannerResponse]])
 async def admin_list_banners(
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    placement: Optional[BannerPlacement] = None,
-    status: Optional[BannerStatus] = None,
+    placement: BannerPlacement | None = None,
+    status: BannerStatus | None = None,
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin lists all banners with filtering."""
     service = BannerService(db)
+    from app.domains.shopping.models.banner import BannerPlacement as ModelBannerPlacement
+    from app.domains.shopping.models.banner import BannerStatus as ModelBannerStatus
+
+    model_status = ModelBannerStatus(status.value) if status else None
+    model_placement = ModelBannerPlacement(placement.value) if placement else None
     banners, total = await service.list_banners(
-        status=status,
-        placement=placement,
-        offset=(page - 1) * page_size,
-        limit=page_size
+        status=model_status, placement=model_placement, offset=(page - 1) * page_size, limit=page_size
     )
     return success_response(banners)
 
@@ -55,15 +56,12 @@ async def admin_list_banners(
 async def admin_create_banner(
     data: BannerCreate,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin creates a new banner."""
     service = BannerService(db)
     try:
-        banner = await service.create_banner(
-            created_by_id=current_user.id,
-            **data.model_dump()
-        )
+        banner = await service.create_banner(created_by_id=current_user.id, **data.model_dump())
         return success_response(banner)
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
@@ -73,7 +71,7 @@ async def admin_create_banner(
 async def admin_get_banner(
     banner_id: uuid.UUID,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin gets banner details."""
     service = BannerService(db)
@@ -88,7 +86,7 @@ async def admin_update_banner(
     banner_id: uuid.UUID,
     data: BannerUpdate,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin updates banner details."""
     service = BannerService(db)
@@ -105,7 +103,7 @@ async def admin_update_banner(
 async def admin_delete_banner(
     banner_id: uuid.UUID,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin deletes a banner."""
     service = BannerService(db)
@@ -119,7 +117,7 @@ async def admin_delete_banner(
 async def admin_activate_banner(
     banner_id: uuid.UUID,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin activates a banner."""
     service = BannerService(db)
@@ -133,7 +131,7 @@ async def admin_activate_banner(
 async def admin_pause_banner(
     banner_id: uuid.UUID,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin pauses a banner."""
     service = BannerService(db)
@@ -147,7 +145,7 @@ async def admin_pause_banner(
 async def admin_get_banner_analytics(
     banner_id: uuid.UUID,
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin gets analytics for a specific banner."""
     service = BannerService(db)
@@ -157,19 +155,16 @@ async def admin_get_banner_analytics(
     return success_response(analytics)
 
 
-@router.get("/analytics/all", response_model=ApiSuccessResponse[List[dict]])
+@router.get("/analytics/all", response_model=ApiSuccessResponse[list[dict]])
 async def admin_get_all_analytics(
     current_user: Annotated[User, Depends(require_role("admin", "worker"))],
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Admin gets analytics for all banners."""
     service = BannerService(db)
-    analytics, total = await service.get_all_analytics(
-        offset=(page - 1) * page_size,
-        limit=page_size
-    )
+    analytics, total = await service.get_all_analytics(offset=(page - 1) * page_size, limit=page_size)
     return success_response(analytics)
 
 
@@ -180,22 +175,23 @@ async def admin_get_all_analytics(
 public_router = APIRouter(prefix="/banners", tags=["Public Banners"])
 
 
-@public_router.get("", response_model=ApiSuccessResponse[List[PublicBanner]])
+@public_router.get("", response_model=ApiSuccessResponse[list[PublicBanner]])
 async def get_public_banners(
-    placement: Optional[BannerPlacement] = None,
+    placement: BannerPlacement | None = None,
     limit: int = Query(10, ge=1, le=20),
     db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_current_user)
+    current_user: User | None = Depends(get_optional_current_user),
 ):
     """
     Get active banners for display.
     Optionally filter by placement (homepage_hero, header_bar, etc.)
     """
     service = BannerService(db)
+    from app.domains.shopping.models.banner import BannerPlacement as ModelBannerPlacement
+
+    model_placement = ModelBannerPlacement(placement.value) if placement else None
     banners = await service.get_active_banners(
-        placement=placement,
-        user_id=current_user.id if current_user else None,
-        limit=limit
+        placement=model_placement, user_id=current_user.id if current_user else None, limit=limit
     )
 
     # Record impressions for returned banners
@@ -204,24 +200,26 @@ async def get_public_banners(
 
     public_banners = []
     for banner in banners:
-        public_banners.append({
-            "id": banner.id,
-            "title": banner.title,
-            "description": banner.description,
-            "image_url": banner.image_url,
-            "image_alt_text": banner.image_alt_text,
-            "background_color": banner.background_color,
-            "text_color": banner.text_color,
-            "cta_text": banner.cta_text,
-            "cta_link": banner.cta_link,
-            "cta_target": banner.cta_target,
-            "placement": banner.placement,
-            "priority": banner.priority,
-            "is_dismissible": banner.is_dismissible,
-            "show_close_button": banner.show_close_button,
-            "mobile_hidden": banner.mobile_hidden,
-            "desktop_hidden": banner.desktop_hidden,
-        })
+        public_banners.append(
+            {
+                "id": banner.id,
+                "title": banner.title,
+                "description": banner.description,
+                "image_url": banner.image_url,
+                "image_alt_text": banner.image_alt_text,
+                "background_color": banner.background_color,
+                "text_color": banner.text_color,
+                "cta_text": banner.cta_text,
+                "cta_link": banner.cta_link,
+                "cta_target": banner.cta_target,
+                "placement": banner.placement,
+                "priority": banner.priority,
+                "is_dismissible": banner.is_dismissible,
+                "show_close_button": banner.show_close_button,
+                "mobile_hidden": banner.mobile_hidden,
+                "desktop_hidden": banner.desktop_hidden,
+            }
+        )
 
     return success_response(public_banners)
 
@@ -231,7 +229,7 @@ async def record_banner_click(
     data: BannerClickCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_current_user)
+    current_user: User | None = Depends(get_optional_current_user),
 ):
     """Record a banner click (for analytics)."""
     service = BannerService(db)
@@ -258,7 +256,7 @@ async def dismiss_banner(
     data: BannerDismissalCreate,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_current_user)
+    current_user: User | None = Depends(get_optional_current_user),
 ):
     """Record a banner dismissal (user closed the banner)."""
     service = BannerService(db)

@@ -49,6 +49,8 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { apiClient } from "@mymeddevices/shared-core";
+
 import Link from "next/link";
 
 interface Transaction {
@@ -102,23 +104,37 @@ export default function TransactionHistory() {
     setLoading(true);
     try {
       const params = new URLSearchParams({
-        skip: String((page - 1) * pagination.page_size),
+        page: String(page),
         limit: String(pagination.page_size),
       });
 
       if (filters.status) params.append("status", filters.status);
-      if (filters.phone_number) params.append("phone_number", filters.phone_number);
 
-      const response = await fetch(`/api/v1/payments/transactions?${params}`);
-      if (!response.ok) throw new Error("Failed to fetch transactions");
+      const data = await apiClient.get<any>(`/admin/payments/mobile-money?${params}`).catch(() => ({ payments: [], total: 0, page: 1, limit: pagination.page_size }));
+      const payments = data?.payments || [];
 
-      const data = await response.json();
-      setTransactions(data.transactions || []);
+      setTransactions(
+        payments.map((p: any) => ({
+          id: p.id,
+          transaction_id: p.transaction_id || p.id,
+          order_id: p.order_id || 'N/A',
+          amount: p.amount || 0,
+          currency: "KES",
+          payment_method: p.provider || "mpesa",
+          status: p.status === 'verified' ? 'completed' : p.status === 'reversed' ? 'failed' : p.status || 'pending',
+          phone_number: p.phone_number || p.mpesa_receipt_number || "—",
+          customer_name: p.customer_name || "Customer",
+          created_at: p.created_at || new Date().toISOString(),
+          error_message: p.reversal_reason || null,
+        }))
+      );
+
+      const total = data?.total || payments.length;
       setPagination({
-        total: data.total,
-        page: data.page,
-        page_size: data.page_size,
-        total_pages: Math.ceil(data.total / data.page_size),
+        total,
+        page: data?.page || page,
+        page_size: data?.limit || pagination.page_size,
+        total_pages: Math.ceil(total / (data?.limit || pagination.page_size)) || 1,
       });
     } catch (error) {
       console.error("Failed to load transactions:", error);
@@ -127,6 +143,7 @@ export default function TransactionHistory() {
       setLoading(false);
     }
   };
+
 
   useEffect(() => {
     fetchTransactions();

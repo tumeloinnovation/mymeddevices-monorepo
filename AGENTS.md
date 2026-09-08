@@ -79,20 +79,19 @@ MyMedDevices/
 
 ## Backend Domains (Domain-Driven Architecture)
 
-The backend (`apps/backend/app/domains/`) is structured into **12 domain modules**:
+The backend (`apps/backend/app/domains/`) is structured into **11 core domain modules**:
 
-1. **`auth`**: Identity, JWT token generation, refresh tokens, OTP SMS/Email, user device sessions.
+1. **`auth`**: Identity, RS256 JWT tokens, refresh tokens, OTP SMS/Email, user device sessions.
 2. **`catalog`**: Products, medical classifications (KMPDB, PPB, CE/FDA), categories, brands, tags, AI assistant (Google Gemini).
 3. **`customers`**: Customer profiles, avatars, delivery addresses, loyalty points ledger, wishlists, reviews.
-4. **`payments`**: M-Pesa Daraja STK Push, callbacks, payment methods, transaction ledgers, refunds.
-5. **`shopping`**: Guest/customer shopping carts, item snapshots, cart merging, coupon validation, checkout validation, orders, shipments.
-6. **`vendor`**: Vendor store profiles, payout options (M-Pesa / Bank), sales analytics, order item fulfillment.
-7. **`admin`**: System status, dynamic rate limiting, user stats, vendor application moderation.
-8. **`tickets`**: Support ticket management, priority tracking, staff response threads.
-9. **`returns`**: Order return requests, approval workflows, refund triggers.
-10. **`recommendations`**: AI/trending product recommendation engine.
-11. **`users`**: General user profile management.
-12. **`shared`**: Base SQLAlchemy mixins (`IDMixin`, `AuditMixin`, `SoftDeleteMixin`, Outbox pattern).
+4. **`shopping`**: Guest/customer carts, item snapshots, cart merging, coupon validation, checkout, orders, shipments, and payment processing (M-Pesa Daraja STK Push, webhook callbacks with HMAC secret verification, manual mobile money payment tracking, transaction reconciliation).
+5. **`vendor`**: Vendor store profiles, payout options (M-Pesa / Bank), sales analytics, order item fulfillment, vendor ledgers.
+6. **`admin`**: System status, dynamic rate limiting, user stats, vendor application moderation.
+7. **`tickets`**: Support ticket management, priority tracking, staff response threads.
+8. **`returns`**: Order return requests, approval workflows, refund triggers.
+9. **`recommendations`**: AI/trending product recommendation engine.
+10. **`users`**: General user profile management.
+11. **`shared`**: Base SQLAlchemy mixins (`IDMixin`, `AuditMixin`, `SoftDeleteMixin`, resilient Outbox pattern with retry backoff).
 
 ---
 
@@ -103,7 +102,8 @@ The backend (`apps/backend/app/domains/`) is structured into **12 domain modules
 - **`Product`**: Medical item with pricing breakdown (`base_price`, `markup_price`, `commission_fee`, `price`) and regulatory fields (`kmpdb_registration_number`, `ppb_classification`, `ce_marking_or_fda_clearance`). Status: `draft`, `pending_review`, `published`, `archived`.
 - **`Order`**: Order header with `status` (`pending`, `paid`, `processing`, `shipped`, `delivered`, `cancelled`, `refunded`).
 - **`OrderItem`**: Per-vendor items with `fulfillment_status` (`pending`, `packed`, `shipped`, `delivered`).
-- **`Transaction`**: M-Pesa transaction tracking (`merchant_request_id`, `checkout_request_id`, `mpesa_receipt`).
+- **`MobileMoneyPayment`**: M-Pesa / Mobile money payment records (`order_id`, `transaction_id`, `amount`, `status`: `pending`, `verified`, `reversed`, `refunded`).
+- **`OutboxEvent`**: Transactional outbox event with retry resilience (`retry_count`, `max_retries`, `last_error`, `next_retry_at`, `status`: `PENDING`, `PROCESSED`, `FAILED`, `DEAD_LETTER`).
 
 ---
 

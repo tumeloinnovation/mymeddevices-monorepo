@@ -5,11 +5,11 @@ Revises: 81a15ca609e8
 Create Date: 2026-06-15 17:10:29.028358
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'd0e84711c147'

@@ -44,7 +44,7 @@ export const MainBar: FC<MainBarProps> = ({ isMenuOpen, toggleMenu }) => {
 
       {/* Search */}
       <div className="flex-grow min-w-0 md:min-w-[200px]">
-        <SearchBar placeholder="Search for Medicines and Health Products" />
+        <SearchBar placeholder="Search medical devices, equipment, essentials..." />
       </div>
       {/* Icons */}
       <div className="flex items-center gap-x-2 md:gap-x-4.5">

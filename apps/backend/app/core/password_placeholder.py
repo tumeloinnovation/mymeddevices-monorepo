@@ -14,8 +14,7 @@ Security: These accounts can ONLY authenticate via OTP or other methods,
 """
 
 import uuid
-from typing import Literal, Optional
-
+from typing import Literal
 
 # Placeholder prefix constants
 PLACEHOLDER_PREFIX = "!"
@@ -38,7 +37,7 @@ def is_placeholder_password(password_hash: str) -> bool:
     return password_hash.startswith(PLACEHOLDER_PREFIX)
 
 
-def get_placeholder_type(password_hash: str) -> Optional[Literal["pending", "guest", "other"]]:
+def get_placeholder_type(password_hash: str) -> Literal["pending", "guest", "other"] | None:
     """
     Identify the type of placeholder password.
 

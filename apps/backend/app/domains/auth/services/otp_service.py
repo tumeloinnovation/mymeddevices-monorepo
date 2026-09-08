@@ -1,16 +1,19 @@
 import secrets
-import httpx
 import time
-from datetime import datetime, timedelta, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from app.domains.auth.models.user import User
-from app.domains.auth.models.otp import OTP
-from app.core.logging import logger
-from app.core.security import settings
+from datetime import UTC, datetime, timedelta
 
-_in_memory_attempts = {}
-_in_memory_expiry = {}
+import httpx
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.config import settings
+from app.core.exceptions import BusinessRuleError
+from app.core.logging import logger
+from app.domains.auth.models.otp import OTP
+from app.domains.auth.models.user import User
+
+_in_memory_attempts: dict[str, int] = {}
+_in_memory_expiry: dict[str, float] = {}
 
 
 class OTPService:
@@ -27,10 +30,12 @@ class OTPService:
         self.db = db
         self.redis_client = None
         import sys
+
         is_testing = "pytest" in sys.modules or "unittest" in sys.modules
         if not is_testing and settings.REDIS_URL:
             try:
                 import redis.asyncio as aioredis
+
                 self.redis_client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
             except Exception:
                 pass
@@ -42,17 +47,13 @@ class OTPService:
             if exp < now:
                 _in_memory_attempts.pop(k, None)
                 _in_memory_expiry.pop(k, None)
-        
+
         _in_memory_attempts[key] = _in_memory_attempts.get(key, 0) + 1
         if key not in _in_memory_expiry:
-            _in_memory_expiry[key] = now + 900 # 15 minutes
+            _in_memory_expiry[key] = now + 900  # 15 minutes
         return _in_memory_attempts[key]
 
-    async def generate_otp(
-        self,
-        user_id: str,
-        purpose: str = "verification"
-    ) -> str:
+    async def generate_otp(self, user_id: str, purpose: str = "verification") -> str:
         """
         Generate a new OTP code for the user.
 
@@ -64,25 +65,16 @@ class OTPService:
             The generated OTP code
         """
         if purpose not in self.PURPOSES:
-            raise ValueError(f"Invalid purpose. Must be one of: {self.PURPOSES}")
+            raise BusinessRuleError(f"Invalid purpose. Must be one of: {self.PURPOSES}")
 
         # Generate random 6-digit code
-        code = ''.join([str(secrets.choice(range(10))) for _ in range(self.OTP_LENGTH)])
+        code = "".join([str(secrets.choice(range(10))) for _ in range(self.OTP_LENGTH)])
 
         # Invalidate any existing OTPs for this user and purpose
-        await self.db.execute(
-            select(OTP).where(
-                OTP.user_id == user_id,
-                OTP.purpose == purpose
-            )
-        )
+        await self.db.execute(select(OTP).where(OTP.user_id == user_id, OTP.purpose == purpose))
         # Mark existing OTPs as used (soft delete)
         existing_otps = await self.db.execute(
-            select(OTP).where(
-                OTP.user_id == user_id,
-                OTP.purpose == purpose,
-                OTP.is_used == False
-            )
+            select(OTP).where(OTP.user_id == user_id, OTP.purpose == purpose, OTP.is_used == False)
         )
         for otp in existing_otps.scalars():
             otp.is_used = True
@@ -91,8 +83,8 @@ class OTPService:
         otp = OTP(
             user_id=user_id,
             code=code,
-            expires_at=datetime.now(timezone.utc) + timedelta(minutes=self.OTP_EXPIRY_MINUTES),
-            purpose=purpose
+            expires_at=datetime.now(UTC) + timedelta(minutes=self.OTP_EXPIRY_MINUTES),
+            purpose=purpose,
         )
         self.db.add(otp)
         await self.db.commit()
@@ -102,10 +94,7 @@ class OTPService:
         return code
 
     async def verify_otp(
-        self,
-        user_id: str,
-        code: str,
-        purpose: str = "verification"
+        self, user_id: str, code: str, purpose: str = "verification", consume: bool = True
     ) -> bool:
         """
         Verify an OTP code for the user.
@@ -114,20 +103,19 @@ class OTPService:
             user_id: The user's UUID
             code: The OTP code to verify
             purpose: Purpose of OTP (verification, reset_password)
+            consume: Whether to mark OTP as used upon successful verification (default True)
 
         Returns:
             True if OTP is valid, False otherwise
         """
         if purpose not in self.PURPOSES:
-            raise ValueError(f"Invalid purpose. Must be one of: {self.PURPOSES}")
+            raise BusinessRuleError(f"Invalid purpose. Must be one of: {self.PURPOSES}")
 
         # Find active OTP for this user and purpose
         result = await self.db.execute(
-            select(OTP).where(
-                OTP.user_id == user_id,
-                OTP.purpose == purpose,
-                OTP.is_used == False
-            ).order_by(OTP.created_at.desc())
+            select(OTP)
+            .where(OTP.user_id == user_id, OTP.purpose == purpose, OTP.is_used == False)
+            .order_by(OTP.created_at.desc())
         )
         otp = result.scalars().first()
 
@@ -136,13 +124,13 @@ class OTPService:
             return False
 
         # Check expiry
-        if otp.expires_at < datetime.now(timezone.utc):
+        if otp.expires_at < datetime.now(UTC):
             logger.warning(f"Expired OTP attempt for user {user_id}")
             return False
 
-        # Verify code
+        # Verify code (constant-time comparison to avoid timing oracles)
         key = f"otp_attempts:{user_id}:{purpose}"
-        if otp.code != code:
+        if not secrets.compare_digest(otp.code, code):
             # Increment failed attempts
             attempts = 0
             if self.redis_client:
@@ -172,9 +160,10 @@ class OTPService:
                 logger.error(f"OTP invalidated due to excessive failed attempts for user {user_id}, purpose: {purpose}")
             return False
 
-        # Success - mark OTP as used
-        otp.is_used = True
-        await self.db.commit()
+        # Success - mark OTP as used if consume=True
+        if consume:
+            otp.is_used = True
+            await self.db.commit()
 
         # Clear attempts on success
         if self.redis_client:
@@ -185,7 +174,7 @@ class OTPService:
         _in_memory_attempts.pop(key, None)
         _in_memory_expiry.pop(key, None)
 
-        logger.info(f"OTP verified for user {user_id}, purpose: {purpose}")
+        logger.info(f"OTP verified for user {user_id}, purpose: {purpose} (consume={consume})")
         return True
 
     async def send_otp_sms(self, phone: str, code: str, purpose: str = "verification"):
@@ -201,7 +190,15 @@ class OTPService:
         cleaned_phone = phone.replace("+", "").strip()
 
         if not settings.HOSTPINNACLE_API_KEY or not settings.HOSTPINNACLE_PARTNER_ID:
-            logger.info(f"HOSTPINNACLE SMS credentials not configured. SMS (simulated): To={phone}, Code={code}")
+            # Never log OTP codes outside local development environments —
+            # a login-purpose OTP is a live credential.
+            if settings.ENVIRONMENT.lower() in ("development", "dev", "local"):
+                logger.info(f"HOSTPINNACLE SMS credentials not configured. SMS (simulated): To={phone}, Code={code}")
+            else:
+                logger.warning(
+                    f"HOSTPINNACLE SMS credentials not configured in {settings.ENVIRONMENT} environment. "
+                    f"OTP SMS to {phone} was NOT delivered."
+                )
             return True
 
         payload = {
@@ -209,15 +206,13 @@ class OTPService:
             "partnerID": settings.HOSTPINNACLE_PARTNER_ID,
             "message": f"Your MyMedDevices code is: {code}. Valid for {self.OTP_EXPIRY_MINUTES} min.",
             "shortcode": settings.HOSTPINNACLE_SENDER_ID,
-            "mobile": cleaned_phone
+            "mobile": cleaned_phone,
         }
 
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.post(
-                    "https://sms.textsms.co.ke/api/services/sendsms/",
-                    json=payload,
-                    timeout=10.0
+                    "https://sms.textsms.co.ke/api/services/sendsms/", json=payload, timeout=10.0
                 )
                 response_data = response.json()
                 logger.info(f"HostPinnacle SMS response: {response_data}")
@@ -231,14 +226,11 @@ class OTPService:
         Send OTP code via SMTP using the branded HTML template.
         """
         from app.domains.shopping.services.email_notification_service import EmailNotificationService
+
         email_service = EmailNotificationService()
         await email_service.send_otp(email, code, purpose)
 
-    async def initiate_verification(
-        self,
-        user: User,
-        method: str = "sms"
-    ) -> str:
+    async def initiate_verification(self, user: User, method: str = "sms") -> str:
         """
         Initiate verification process for a user.
 

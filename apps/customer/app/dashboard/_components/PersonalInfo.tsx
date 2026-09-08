@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,33 +14,31 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { PhoneInput } from '@/components/ui/phone-input';
+import { Badge } from '@/components/ui/badge';
 import { useAuthStore } from '@mymeddevices/shared-core';
 import { useCustomerProfile, useUpdateCustomerProfile, useUploadAvatar } from '@/lib/hooks/useDashboard';
 import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import { standardSchemaResolver } from '@hookform/resolvers/standard-schema';
 import { profileSchema, type ProfileFormData } from '@/lib/data/profile-validation';
+
 import { useState, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Save, X, Camera, Loader2, Check, AlertTriangle } from 'lucide-react';
+import {
+  Save,
+  X,
+  Camera,
+  Loader2,
+  Check,
+  AlertTriangle,
+  User,
+  Phone,
+  Mail,
+  ShieldCheck,
+  Building2,
+  Sparkles,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-
-const formVariants = {
-  container: {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.05,
-        delayChildren: 0.1,
-      },
-    },
-  },
-  item: {
-    hidden: { opacity: 0, y: 12 },
-    visible: { opacity: 1, y: 0 },
-  },
-};
 
 export function PersonalInfo() {
   const user = useAuthStore((state) => state.user);
@@ -56,14 +54,14 @@ export function PersonalInfo() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   const form = useForm<ProfileFormData>({
-    resolver: zodResolver(profileSchema),
+    resolver: standardSchemaResolver(profileSchema),
     defaultValues: {
       firstName: '',
       lastName: '',
       displayName: '',
       phone: '',
     },
-    mode: 'onBlur', // Validate on blur for better UX
+    mode: 'onBlur',
   });
 
   // Initialize form with profile data
@@ -87,12 +85,13 @@ export function PersonalInfo() {
     return () => subscription.unsubscribe();
   }, [form]);
 
-  const getInitial = (name: string | undefined) =>
-    name ? name[0].toUpperCase() : '';
+  const getInitial = (name: string | undefined) => (name ? name[0].toUpperCase() : '');
 
   const initials = user
     ? (getInitial(form.watch('firstName') || user.firstName) +
-        getInitial(form.watch('lastName') || user.lastName)) || 'U'
+        getInitial(form.watch('lastName') || user.lastName)) ||
+      user.email?.[0]?.toUpperCase() ||
+      'U'
     : 'U';
 
   const avatarUrl = user?.avatar_url || profile?.avatar_url;
@@ -122,7 +121,6 @@ export function PersonalInfo() {
       toast.success('Profile updated successfully');
       setHasUnsavedChanges(false);
 
-      // Reset success animation after 2 seconds
       setTimeout(() => setShowSuccess(false), 2000);
     } catch {
       toast.error('Failed to update profile');
@@ -150,7 +148,6 @@ export function PersonalInfo() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Show preview
     const reader = new FileReader();
     reader.onloadend = () => {
       setAvatarPreview(reader.result as string);
@@ -178,93 +175,92 @@ export function PersonalInfo() {
 
   if (profileLoading) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Personal Information</CardTitle>
+      <Card className="border border-border/80 shadow-xs rounded-2xl bg-card">
+        <CardHeader className="p-6 border-b border-border/60 bg-muted/10">
+          <CardTitle className="text-base font-bold">Personal Information</CardTitle>
         </CardHeader>
-        <CardContent className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        <CardContent className="flex items-center justify-center py-16">
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
         </CardContent>
       </Card>
     );
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Personal Information</CardTitle>
+    <Card className="border border-border/80 shadow-xs rounded-2xl bg-card overflow-hidden">
+      <CardHeader className="p-6 border-b border-border/60 bg-muted/10">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <CardTitle className="text-base sm:text-lg font-bold flex items-center gap-2 text-foreground">
+              <User className="h-5 w-5 text-primary" />
+              <span>Personal & Contact Information</span>
+            </CardTitle>
+            <CardDescription className="text-xs text-muted-foreground mt-0.5">
+              Update your identification details, contact numbers, and public buyer name.
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className="self-start sm:self-auto text-xs font-semibold px-2.5 py-0.5 border-primary/30 bg-primary/10 text-primary">
+            Healthcare Account
+          </Badge>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-6">
-        {/* Unsaved changes warning */}
+
+      <CardContent className="p-6 space-y-6">
+        {/* Unsaved changes warning alert */}
         <AnimatePresence>
           {hasUnsavedChanges && (
             <motion.div
-              initial={{ opacity: 0, y: -10 }}
+              initial={{ opacity: 0, y: -8 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg"
+              exit={{ opacity: 0, y: -8 }}
+              className="flex items-center gap-2.5 p-3.5 bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 rounded-xl text-xs font-medium"
             >
-              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-500 flex-shrink-0" />
-              <p className="text-sm text-amber-800 dark:text-amber-200">
-                You have unsaved changes. Don't forget to save!
-              </p>
+              <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>You have unsaved changes. Remember to click <strong>Save Changes</strong> below.</span>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Avatar section */}
-        <motion.div
-          variants={formVariants.item}
-          initial="hidden"
-          animate="visible"
-          className="flex items-center gap-4"
-        >
-          <div
-            className="relative group cursor-pointer"
-            onClick={handleAvatarClick}
-          >
-            <Avatar className="h-20 w-20">
-              <AvatarImage src={avatarPreview || avatarUrl} />
-              <AvatarFallback className="text-lg bg-primary text-primary-foreground">
+        {/* Avatar Section */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-5 p-4 rounded-2xl bg-muted/20 border border-border/60">
+          <div className="relative group cursor-pointer shrink-0 mx-auto sm:mx-0" onClick={handleAvatarClick}>
+            <Avatar className="h-20 w-20 rounded-2xl border-2 border-border shadow-xs">
+              <AvatarImage src={avatarPreview || avatarUrl} className="object-cover" />
+              <AvatarFallback className="text-lg font-extrabold bg-primary/15 text-primary rounded-2xl">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <AnimatePresence>
-              {isUploadingAvatar && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40"
-                >
+              {isUploadingAvatar ? (
+                <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/50 backdrop-blur-xs">
                   <Loader2 className="h-6 w-6 text-white animate-spin" />
-                </motion.div>
-              )}
-              {!isUploadingAvatar && (
-                <motion.div
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 0 }}
-                  whileHover={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                  className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 transition-opacity"
-                >
+                </div>
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center rounded-2xl bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-2xs">
                   <Camera className="h-6 w-6 text-white" />
-                </motion.div>
+                </div>
               )}
             </AnimatePresence>
           </div>
-          <div>
-            <p className="font-medium">
-              {form.watch('displayName') ||
-                [form.watch('firstName'), form.watch('lastName')]
-                  .filter(Boolean)
-                  .join(' ') || 'User'}
+
+          <div className="space-y-1 text-center sm:text-left flex-1">
+            <h4 className="font-bold text-sm text-foreground">Profile Picture</h4>
+            <p className="text-xs text-muted-foreground">
+              Click the photo to upload your avatar or medical clinic badge. PNG, JPG or WebP up to 10MB.
             </p>
-            <p className="text-sm text-muted-foreground">{user?.email}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Click avatar to change photo
-            </p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAvatarClick}
+              disabled={isUploadingAvatar}
+              className="mt-2 h-7 rounded-lg text-xs font-semibold gap-1.5 border-border bg-card hover:bg-muted"
+            >
+              <Camera className="h-3 w-3 text-muted-foreground" />
+              <span>Change Photo</span>
+            </Button>
           </div>
+
           <input
             ref={fileInputRef}
             type="file"
@@ -272,105 +268,111 @@ export function PersonalInfo() {
             className="hidden"
             onChange={handleAvatarUpload}
           />
-        </motion.div>
+        </div>
 
-        {/* Form */}
+        {/* Form Inputs */}
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSave)} className="space-y-4">
-            <motion.div
-              variants={formVariants.container}
-              initial="hidden"
-              animate="visible"
-              className="grid grid-cols-1 md:grid-cols-2 gap-4"
-            >
-              <motion.div variants={formVariants.item}>
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        First Name <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="John"
-                          {...field}
-                          className={cn(
-                            form.formState.errors.firstName &&
-                              'border-destructive focus-visible:ring-destructive'
-                          )}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </motion.div>
+          <form onSubmit={form.handleSubmit(handleSave)} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* First Name */}
+              <FormField
+                control={form.control}
+                name="firstName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold text-foreground">
+                      First Name <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g. Dr. Jane"
+                        {...field}
+                        className={cn(
+                          "rounded-xl h-10 text-xs bg-card border-border/80 focus-visible:ring-1",
+                          form.formState.errors.firstName && "border-destructive focus-visible:ring-destructive"
+                        )}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )}
+              />
 
-              <motion.div variants={formVariants.item}>
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>
-                        Last Name <span className="text-destructive">*</span>
-                      </FormLabel>
-                      <FormControl>
-                        <Input
-                          placeholder="Doe"
-                          {...field}
-                          className={cn(
-                            form.formState.errors.lastName &&
-                              'border-destructive focus-visible:ring-destructive'
-                          )}
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </motion.div>
+              {/* Last Name */}
+              <FormField
+                control={form.control}
+                name="lastName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs font-bold text-foreground">
+                      Last Name <span className="text-destructive">*</span>
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g. Mwangi"
+                        {...field}
+                        className={cn(
+                          "rounded-xl h-10 text-xs bg-card border-border/80 focus-visible:ring-1",
+                          form.formState.errors.lastName && "border-destructive focus-visible:ring-destructive"
+                        )}
+                      />
+                    </FormControl>
+                    <FormMessage className="text-[11px]" />
+                  </FormItem>
+                )}
+              />
 
-              <motion.div variants={formVariants.item} className="md:col-span-2">
+              {/* Display Name */}
+              <div className="md:col-span-2">
                 <FormField
                   control={form.control}
                   name="displayName"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Display Name</FormLabel>
+                      <FormLabel className="text-xs font-bold text-foreground">
+                        Display / Buyer Name
+                      </FormLabel>
                       <FormControl>
-                        <Input placeholder="John Doe" {...field} />
+                        <Input
+                          placeholder="e.g. Jane Mwangi (Nairobi West Clinic)"
+                          {...field}
+                          className="rounded-xl h-10 text-xs bg-card border-border/80 focus-visible:ring-1"
+                        />
                       </FormControl>
-                      <FormMessage />
-                      <p className="text-xs text-muted-foreground">
-                        This is how your name appears on your account
+                      <FormMessage className="text-[11px]" />
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Shown across order invoices, support tickets, and vendor reviews.
                       </p>
                     </FormItem>
                   )}
                 />
-              </motion.div>
+              </div>
 
-              <motion.div
-                variants={formVariants.item}
-                className="md:col-span-2"
-              >
-                <Label htmlFor="email">Email Address</Label>
+              {/* Verified Email */}
+              <div className="md:col-span-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="email" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Mail className="h-3.5 w-3.5 text-primary" />
+                    <span>Email Address</span>
+                  </Label>
+                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
+                    Verified Account
+                  </span>
+                </div>
                 <Input
                   id="email"
                   type="email"
                   value={user?.email || ''}
                   disabled
-                  className="bg-muted"
+                  className="bg-muted/50 rounded-xl h-10 text-xs text-muted-foreground border-border/60 cursor-not-allowed"
                 />
-                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                  <AlertTriangle className="h-3 w-3" />
-                  Email cannot be changed. Contact support if needed.
+                <p className="text-[11px] text-muted-foreground">
+                  Your primary authentication identity. Contact customer support if you need to transfer email ownership.
                 </p>
-              </motion.div>
+              </div>
 
-              <motion.div variants={formVariants.item} className="md:col-span-2">
+              {/* Phone Input */}
+              <div className="md:col-span-2 space-y-1">
                 <FormField
                   control={form.control}
                   name="phone"
@@ -378,63 +380,60 @@ export function PersonalInfo() {
                     <FormItem>
                       <PhoneInput
                         id="phone"
-                        label="Phone Number"
+                        label="Delivery & M-Pesa Phone Number"
                         value={field.value}
                         onChange={field.onChange}
                         error={form.formState.errors.phone?.message}
                       />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Used for order updates and delivery notifications
+                      <p className="text-[11px] text-muted-foreground mt-1">
+                        Utilized for Daraja M-Pesa STK push payments and courier delivery dispatch updates.
                       </p>
                     </FormItem>
                   )}
                 />
-              </motion.div>
-            </motion.div>
+              </div>
+            </div>
 
-            {/* Action buttons */}
-            <motion.div
-              variants={formVariants.item}
-              initial="hidden"
-              animate="visible"
-              className="flex items-center gap-3 pt-4 border-t"
-            >
+            {/* Action Buttons */}
+            <div className="flex flex-wrap items-center gap-3 pt-4 border-t border-border/60">
               <Button
                 type="submit"
-                className="gap-2"
                 disabled={!form.formState.isDirty || form.formState.isSubmitting || updateProfile.isPending}
+                className="gap-2 rounded-xl text-xs font-semibold h-10 shadow-xs"
               >
                 {form.formState.isSubmitting || updateProfile.isPending ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Saving...
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <span>Saving Changes...</span>
                   </>
                 ) : showSuccess ? (
                   <>
-                    <Check className="h-4 w-4" />
-                    Saved!
+                    <Check className="h-3.5 w-3.5 text-emerald-400" />
+                    <span>Changes Saved!</span>
                   </>
                 ) : (
                   <>
-                    <Save className="h-4 w-4" />
-                    Save Changes
+                    <Save className="h-3.5 w-3.5" />
+                    <span>Save Changes</span>
                   </>
                 )}
               </Button>
+
               <Button
                 type="button"
                 variant="outline"
-                className="gap-2"
                 onClick={handleCancel}
                 disabled={form.formState.isSubmitting || updateProfile.isPending || !form.formState.isDirty}
+                className="gap-1.5 rounded-xl text-xs font-semibold h-10 border-border bg-card hover:bg-muted"
               >
-                <X className="h-4 w-4" />
-                Cancel
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+                <span>Cancel</span>
               </Button>
-            </motion.div>
+            </div>
           </form>
         </Form>
       </CardContent>
     </Card>
   );
 }
+

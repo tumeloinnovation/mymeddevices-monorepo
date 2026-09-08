@@ -19,6 +19,8 @@ This is a medical device marketplace platform built as a monorepo using **pnpm w
 - **`packages/shared-core/`**: Core utilities, types, and shared business logic
 - **`packages/shared-admin/`**: Admin-specific components and utilities
 
+See `package.json` files for complete dependency information and versions.
+
 ## Development Commands
 
 ### Root Level (run from monorepo root)
@@ -33,18 +35,6 @@ pnpm dev:customer    # Customer portal on port 3000
 pnpm dev:admin       # Admin portal on port 3001
 pnpm dev:vendor      # Vendor portal on port 3002
 pnpm dev:frontend    # All frontend apps
-
-# Build all apps
-pnpm build
-
-# Run tests across all packages
-pnpm test
-
-# Lint all code
-pnpm lint
-
-# Build email templates (MJML → HTML)
-pnpm build:emails
 ```
 
 ### Backend Specific
@@ -57,13 +47,6 @@ uv sync
 
 # Run development server
 PYTHONPATH=. uv run uvicorn app.main:app --reload
-
-# Run tests
-uv run pytest
-
-# Database migrations
-uv run alembic upgrade head
-uv run alembic revision --autogenerate -m "description"
 ```
 
 ### Frontend Specific
@@ -74,23 +57,17 @@ Each Next.js app has its own package.json:
 # Customer app
 cd apps/customer
 pnpm dev          # Start dev server
-pnpm build        # Production build
-pnpm test         # Vitest unit tests
-pnpm test:ui      # Vitest UI
-pnpm pre-deploy   # Pre-deployment validation (TS, lint, critical tests)
 
 # Admin app
 cd apps/admin
 pnpm dev          # Start dev server
-pnpm build        # Production build
-pnpm build:analyze # Build with bundle analyzer
 
 # Vendor app
 cd apps/vendor
 pnpm dev          # Start dev server
-pnpm build        # Production build
-pnpm test         # Vitest unit tests
 ```
+
+For testing, database management, and email workflows, use the `/testing`, `/database`, and `/emails` skills respectively.
 
 ## Backend Architecture (Domain-Driven Design)
 
@@ -130,25 +107,13 @@ All routes are versioned at `/api/v1/`:
 - Uses SQLAlchemy 2.0 with async support
 - PostgreSQL is used (configured via `DATABASE_URL` in `.env`)
 - Connection pooling configured for production
-- Alembic for migrations
-- Reset and initialize development database schema (PostgreSQL), stamp Alembic, and seed default admin/categories:
-  ```bash
-  cd apps/backend
-  PYTHONPATH=. uv run python scripts/initialize_dev_db.py
-  ```
 - Health check at `/health` includes DB and Redis status
+
+For database migrations and setup, use the `/database` skill.
 
 ## Frontend Architecture
 
-All Next.js apps use:
-- **React 19** with TypeScript
-- **Next.js 16** with App Router (check `node_modules/next/dist/docs/` for breaking changes)
-- **Tailwind CSS v4** for styling
-- **shadcn/ui** component library (Radix UI primitives)
-- **TanStack Query** for data fetching
-- **Zustand** for state management
-- **Zod** for form validation
-- **Framer Motion** for animations
+All Next.js apps use React 19 with TypeScript, Next.js 16 with App Router, Tailwind CSS v4, shadcn/ui components, TanStack Query for data fetching, and Zustand for state management. See individual `package.json` files for complete dependency lists.
 
 ### Admin Portal Features
 
@@ -168,49 +133,22 @@ All Next.js apps use:
 
 ## Email System
 
-Emails use MJML for template generation:
-- Source templates: `apps/backend/templates/emails/`
-- Compiled output: `apps/backend/compiled_emails/`
-- Build with: `pnpm build:emails` or `python3 scripts/build_emails.py`
-- For local SMTP testing, **Mailpit** is installed at `/home/nickm/.local/bin/mailpit`
-  - Start Mailpit: `/home/nickm/.local/bin/mailpit`
-  - SMTP Port: `127.0.0.1:1025`
-  - Web UI Dashboard: `http://localhost:8025`
+Emails use MJML for template generation with source templates in `apps/backend/templates/emails/` and compiled output in `apps/backend/compiled_emails/`. For email build workflows and local SMTP testing with Mailpit, use the `/emails` skill.
 
 ## Testing
 
-### Backend
-
-```bash
-cd apps/backend
-uv run pytest
-```
-
-### Frontend
-
-**Customer app**: 39 critical tests covering order API, M-Pesa flow, order validation
-```bash
-pnpm test:critical  # Run only critical tests
-pnpm pre-deploy     # Full validation (TS, lint, tests, build)
-```
-
-**Admin app**: Vitest unit tests
-**Vendor app**: Vitest unit tests
+For testing workflows across all applications (backend pytest, frontend critical tests, pre-deploy validation), use the `/testing` skill.
 
 ## Configuration
 
 ### Environment Variables
 
-Backend uses `.env` with pydantic-settings:
-- `DATABASE_URL`: Database connection string
-- `ENVIRONMENT`: development/production
-- `SECRET_KEY`: JWT secret
-- `REDIS_URL`: Redis for rate limiting (optional, falls back to in-memory)
+Backend uses `.env` with pydantic-settings for configuration (DATABASE_URL, ENVIRONMENT, SECRET_KEY, REDIS_URL for rate limiting).
 
 ### Package Management
 
 - **pnpm** with workspaces for monorepo
-- **uv** for Python backend dependencies
+- **uv** for Python backend dependencies  
 - **Turborepo** for task orchestration
 - **Turbopack** in development for Next.js apps
 

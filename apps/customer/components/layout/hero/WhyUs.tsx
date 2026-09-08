@@ -41,13 +41,11 @@ export const WhyUs = () => {
 
         <div className="flex flex-col gap-4">
           <h1 className="text-3xl font-extrabold leading-tight text-foreground md:text-4xl">
-            Medical devices for care teams and home patients.
+            Quality medical devices for your home and family.
           </h1>
 
           <p className="text-sm text-muted-foreground max-w-xl">
-            Browse certified devices, compare specs, and get same-day shipping
-            on select items. Trusted by clinics and caregivers across the
-            region.
+            Order certified blood pressure monitors, glucose meters, wheelchairs, and daily home healthcare essentials delivered straight to your doorstep across Kenya.
           </p>
 
           <div className="mt-6 flex w-full max-w-xl flex-col gap-3 sm:flex-row sm:items-center">
@@ -70,7 +68,7 @@ export const WhyUs = () => {
                 <input
                   id="hero-search"
                   aria-label="Search devices"
-                  placeholder="Search devices, e.g. blood pressure monitor"
+                  placeholder="Search blood pressure monitors, wheelchairs, test strips..."
                   className="w-full bg-transparent text-sm outline-none text-card-foreground placeholder:text-muted-foreground"
                   ref={inputRef}
                   onFocus={() => {
@@ -127,26 +125,26 @@ export const WhyUs = () => {
           <div className="mt-4 grid w-full grid-cols-1 gap-2 sm:grid-cols-2 md:max-w-xl">
             <Badge
               icon={<Truck className="h-5 w-5" />}
-              title="Express delivery"
-              subtitle="Same day if ordered by 7pm"
+              title="Fast Countrywide Delivery"
+              subtitle="Nairobi & all 47 counties"
             />
 
             <Badge
               icon={<Clock className="h-5 w-5" />}
-              title="Customer Support"
-              subtitle="7 days a week"
+              title="Help & Support"
+              subtitle="Call or WhatsApp us"
             />
 
             <Badge
               icon={<ShieldCheck className="h-5 w-5" />}
-              title="Genuine Products"
-              subtitle="100% certified"
+              title="100% Genuine Devices"
+              subtitle="Certified with warranty"
             />
 
             <Badge
               icon={<CreditCard className="h-5 w-5" />}
-              title="Easy Payments"
-              subtitle="M-Pesa, Visa, MasterCard"
+              title="Lipa na M-Pesa"
+              subtitle="Instant & secure checkout"
             />
           </div>
         </div>

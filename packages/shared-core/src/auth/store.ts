@@ -1,7 +1,8 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { apiClient } from '../lib/services/api-client';
+import { apiClient } from '../services/api-client';
 import { toast } from 'sonner';
+
 import { setAccessToken as setToken, clearAccessToken as clearToken } from './token';
 import { logger } from '../lib/logger';
 
@@ -28,30 +29,7 @@ import type {
   VendorProfileResponse,
 } from './types';
 
-const DEMO_CUSTOMER: CustomerUser = {
-  id: 1,
-  email: 'john.doe@example.com',
-  role: 'customer',
-  phone: '+254712345678',
-  is_active: true,
-  firstName: 'John',
-  lastName: 'Doe',
-  displayName: 'John Doe',
-  avatar_url: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&h=100&fit=crop&auto=format',
-  wooCustomerId: 1,
-};
-
 let inFlightRefreshPromise: Promise<boolean> | null = null;
-
-const DEMO_VENDOR: VendorUser = {
-  id: 101,
-  email: 'vendor@medistore.co.ke',
-  role: 'vendor',
-  phone: '+254722987654',
-  is_active: true,
-  name: 'Sarah Kamau',
-  store_name: 'MediStore Kenya',
-};
 
 export interface AuthState {
   user: AuthUser | null;
@@ -65,6 +43,7 @@ export interface AuthState {
   lastValidated: number | null;
   checkoutStep?: CheckoutStep;
   vendorStatus: VendorStatus | null;
+  isSessionExpired: boolean;
 
   login: (credentials: LoginCredentials, mode?: LoginMode) => Promise<void>;
   loginWithOTP: (email: string, code: string) => Promise<void>;
@@ -96,8 +75,6 @@ export interface AuthState {
 
   loginWithRole: (credentials: LoginCredentials, mode: LoginMode) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
-  setDemoCustomer: () => void;
-  setDemoVendor: () => void;
   setCheckoutEmail: (email: string) => void;
   setCheckoutStep: (step: CheckoutStep) => void;
   setOTPVerified: (user?: AuthUser) => void;
@@ -124,6 +101,12 @@ export interface AuthState {
 function normalizeUser(user: Record<string, any> | null | undefined): AuthUser | null {
   if (!user || typeof user !== 'object') return null;
   const normalized = { ...user } as Record<string, any>;
+
+  // Convert roles array to role string (proxy.ts converts role to roles array)
+  if ('roles' in normalized && Array.isArray(normalized.roles) && !('role' in normalized)) {
+    normalized.role = normalized.roles[0];
+  }
+
   if ('is_vendor_verified' in normalized && !('isVendorVerified' in normalized)) {
     normalized.isVendorVerified = normalized.is_vendor_verified;
   }
@@ -186,10 +169,11 @@ export const useAuthStore = create<AuthState>()(
       hydrated: false,
       lastValidated: null,
       vendorStatus: null,
+      isSessionExpired: false,
 
       setHydrated: () => set({ hydrated: true }),
 
-      setUser: (user) => set({ user, isAuthenticated: true }),
+      setUser: (user) => set({ user: normalizeUser(user), isAuthenticated: true, isSessionExpired: false }),
 
       updateUser: (updates) =>
         set((state) => ({
@@ -209,6 +193,7 @@ export const useAuthStore = create<AuthState>()(
           isDemo: false,
           error: null,
           vendorStatus: null,
+          isSessionExpired: false,
         });
         if (typeof window !== 'undefined') {
           localStorage.removeItem('refresh_token');
@@ -225,6 +210,7 @@ export const useAuthStore = create<AuthState>()(
           const device_name = credentials.device_name || getDeviceName();
 
           const result = await apiClient.post<any>('/auth/login', {
+
             email: credentials.email,
             password: credentials.password,
             device_id,
@@ -239,35 +225,35 @@ export const useAuthStore = create<AuthState>()(
             toast.success(responseData.message);
           }
 
-          logger.log('✅ [AuthStore] Login API response received:', {
-            user: responseData.user?.email,
-            hasAccessToken: !!responseData.access_token,
-            hasRefreshToken: !!responseData.refresh_token,
-            expiresIn: responseData.expires_in,
-          });
-
-          const expiresIn = (responseData.expires_in || 1800) * 1000;
+          const accessToken = responseData.access_token || responseData.tokens?.access_token || responseData.token || null;
+          const refreshToken = responseData.refresh_token || responseData.tokens?.refresh_token || null;
+          const expiresIn = (responseData.expires_in || responseData.tokens?.expires_in || 1800) * 1000;
           const tokenExpiry = Date.now() + expiresIn;
 
           if (typeof window !== 'undefined') {
-            if (responseData.refresh_token) {
-              localStorage.setItem('refresh_token', responseData.refresh_token);
+            if (refreshToken) {
+              localStorage.setItem('refresh_token', refreshToken);
               logger.log('💾 [AuthStore] Refresh token saved to localStorage');
             }
-            setToken(responseData.access_token);
-            apiClient.syncAuthCookie(responseData.access_token);
+            if (accessToken) {
+              setToken(accessToken);
+              apiClient.syncAuthCookie(accessToken);
+            }
           }
 
           const normalizedUser = normalizeUser(responseData.user);
 
           set({
             user: normalizedUser,
-            accessToken: responseData.access_token,
+            accessToken,
             tokenExpiry,
             isAuthenticated: true,
+            isDemo: false,
             isLoading: false,
             lastValidated: Date.now(),
+            isSessionExpired: false,
           });
+
 
           logger.log('✅ [AuthStore] Login successful, auth state updated:', {
             isAuthenticated: true,
@@ -322,6 +308,7 @@ export const useAuthStore = create<AuthState>()(
             isAuthenticated: true,
             isLoading: false,
             lastValidated: Date.now(),
+            isSessionExpired: false,
           });
         } catch (error: any) {
           set({ isLoading: false, error: error.message });
@@ -651,10 +638,10 @@ export const useAuthStore = create<AuthState>()(
 
               return true;
             } else {
-              // Only clear auth on specific client errors (400, 401, 403) indicating invalid/expired token.
-              // Avoid logging out user on 5xx server errors.
+              // Trigger session expiration handling on 400, 401, 403 to show reconnect modal without wiping user email
               if (response.status === 400 || response.status === 401 || response.status === 403) {
-                get().clearAuth();
+                set({ isAuthenticated: false, isSessionExpired: true });
+                apiClient.handleAuthFailure();
               }
               return false;
             }
@@ -703,34 +690,6 @@ export const useAuthStore = create<AuthState>()(
         return get().forgotPassword(email);
       },
 
-      setDemoCustomer: () => {
-        set({
-          user: DEMO_CUSTOMER,
-          accessToken: 'demo-customer-token',
-          tokenExpiry: Date.now() + 3600 * 1000,
-          isAuthenticated: true,
-          isDemo: true,
-        });
-        if (typeof window !== 'undefined') {
-          setToken('demo-customer-token');
-          apiClient.syncAuthCookie('demo-customer-token');
-        }
-      },
-
-      setDemoVendor: () => {
-        set({
-          user: DEMO_VENDOR,
-          accessToken: 'demo-vendor-token',
-          tokenExpiry: Date.now() + 3600 * 1000,
-          isAuthenticated: true,
-          isDemo: true,
-        });
-        if (typeof window !== 'undefined') {
-          setToken('demo-vendor-token');
-          apiClient.syncAuthCookie('demo-vendor-token');
-        }
-      },
-
       setCheckoutEmail: (email) =>
         set({
           user: { email } as AuthUser,
@@ -743,19 +702,22 @@ export const useAuthStore = create<AuthState>()(
 
       setOTPVerified: (user) => {
         if (user) {
+          const normalizedUser = normalizeUser(user);
           const displayName =
-            user.displayName ||
-            `${user.firstName || ''} ${user.lastName || ''}`.trim() ||
-            user.email?.split('@')[0] ||
+            normalizedUser?.displayName ||
+            `${normalizedUser?.firstName || ''} ${normalizedUser?.lastName || ''}`.trim() ||
+            normalizedUser?.email?.split('@')[0] ||
             'Guest User';
 
-          set({
-            user: { ...user, displayName },
-            checkoutStep: 'complete',
-            isAuthenticated: true,
-            isDemo: true,
-            error: null,
-          });
+          if (normalizedUser) {
+            set({
+              user: { ...normalizedUser, displayName } as any,
+              checkoutStep: 'complete',
+              isAuthenticated: true,
+              isDemo: false,
+              error: null,
+            });
+          }
         } else {
           set({ checkoutStep: 'profile', error: null });
         }
@@ -780,7 +742,7 @@ export const useAuthStore = create<AuthState>()(
           user: updatedUser as AuthUser,
           checkoutStep: 'complete',
           isAuthenticated: true,
-          isDemo: true,
+          isDemo: false,
           error: null,
         });
       },
@@ -845,6 +807,7 @@ export const useAuthStore = create<AuthState>()(
           isAuthenticated: state.isAuthenticated,
           isDemo: state.isDemo,
           vendorStatus: state.vendorStatus,
+          isSessionExpired: state.isSessionExpired,
         };
         logger.log('💾 [AuthStore] Persisting state:', {
           hasUser: !!partial.user,
@@ -883,19 +846,34 @@ export const useAuthStore = create<AuthState>()(
           isDemo: state?.isDemo,
         });
 
-        // CRITICAL FIX: Check if refresh token exists before considering user authenticated
-        // If isAuthenticated is true but no refresh token exists, clear auth to prevent redirect loops
+        // Normalize rehydrated user data to ensure field names are correct
+        if (state?.user) {
+          const normalized = normalizeUser(state.user);
+          if (normalized) {
+            state.user = normalized;
+            logger.log('🔧 [AuthStore] Normalized rehydrated user data:', {
+              email: normalized.email,
+              role: normalized.role,
+              hasRole: 'role' in normalized,
+            });
+          }
+        }
+
+        // If authenticated but no refresh token exists, mark session disconnected
+        // Keep state.user intact so the SessionExpiredModal has access to user.email
         if (typeof window !== 'undefined' && state?.isAuthenticated && !state.isDemo) {
           const refreshToken = localStorage.getItem('refresh_token');
           const storedAccessToken = localStorage.getItem('access_token');
           if (!refreshToken) {
-            logger.warn('⚠️ [AuthStore] No refresh token found, clearing isAuthenticated to prevent redirect loop');
+            logger.warn('⚠️ [AuthStore] No refresh token found, updating session status to disconnected');
             state.isAuthenticated = false;
-            state.user = null;
+            state.isSessionExpired = true;
             state.accessToken = null;
           } else if (storedAccessToken && !state.accessToken) {
             state.accessToken = storedAccessToken;
-            state.tokenExpiry = Date.now() + 1800 * 1000;
+            // Use the JWT's real exp when available so validateSession refreshes at the right time,
+            // falling back to a fresh 30min window if it cannot be decoded.
+            state.tokenExpiry = getTokenExpiry(storedAccessToken) ?? Date.now() + 1800 * 1000;
             setToken(storedAccessToken);
             apiClient.syncAuthCookie(storedAccessToken);
           }
@@ -923,8 +901,22 @@ export const useAuthStore = create<AuthState>()(
 // Handle session expired event globally to sync store state
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:session-expired', () => {
-    logger.log('🚨 [AuthStore] session-expired event received, updating isAuthenticated to false');
-    useAuthStore.setState({ isAuthenticated: false });
+    logger.log('🚨 [AuthStore] session-expired event received, updating isAuthenticated to false and isSessionExpired to true');
+    useAuthStore.setState({ isAuthenticated: false, isSessionExpired: true });
+  });
+
+  // Keep store token state in sync when the api-client refreshes a token (401 path),
+  // which otherwise would leave the store's accessToken/tokenExpiry stale.
+  window.addEventListener('auth:token-refreshed', (event) => {
+    const detail = (event as CustomEvent<{ accessToken: string; expiresIn: number } | null> | null)?.detail;
+    if (!detail?.accessToken) return;
+    setToken(detail.accessToken);
+    apiClient.syncAuthCookie(detail.accessToken);
+    useAuthStore.setState({
+      accessToken: detail.accessToken,
+      tokenExpiry: Date.now() + (detail.expiresIn || 1800) * 1000,
+      lastValidated: Date.now(),
+    });
   });
 }
 

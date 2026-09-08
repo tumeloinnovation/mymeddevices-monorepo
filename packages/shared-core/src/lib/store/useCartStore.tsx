@@ -18,6 +18,8 @@ export const CART_STORAGE_KEY = 'cart-storage';
 
 interface LocalCartItem extends Partial<Product> {
   id?: string;
+  product_id?: string;
+  product_variant_id?: string;
   price?: number;
   stock_quantity?: number;
   manage_stock?: boolean;
@@ -46,21 +48,21 @@ interface CartState {
 
   // Computed helpers (backward compatibility)
   getCount: () => number;
-  isInCart: (productId: number | string) => boolean;
-  getItemQuantity: (productId: number | string) => number;
+  isInCart: (productId: number | string, variantId?: string) => boolean;
+  getItemQuantity: (productId: number | string, variantId?: string) => number;
   getTotal: () => number;
 
   // Local actions (backward compatibility)
-  addItem: (product: Product, quantity?: number) => void;
-  updateQuantity: (productId: number | string, quantity: number) => void;
-  removeItem: (productId: number | string) => void;
+  addItem: (product: Product & { product_variant_id?: string; selected_variant_id?: string; price?: number | string }, quantity?: number) => void;
+  updateQuantity: (productId: number | string, quantity: number, variantId?: string) => void;
+  removeItem: (productId: number | string, variantId?: string) => void;
   clear: () => void;
   clearLocalOnly: () => void;
 
   // Backend sync actions
   syncWithBackend: (options?: { force?: boolean }) => Promise<void>;
   syncLocalItemsToBackend: () => Promise<void>;
-  addItemToBackend: (productId: string, quantity?: number, notes?: string) => Promise<Cart>;
+  addItemToBackend: (productId: string, quantity?: number, notes?: string, productVariantId?: string) => Promise<Cart>;
   updateItemInBackend: (itemId: string, update: { quantity?: number; notes?: string }) => Promise<void>;
   removeItemFromBackend: (itemId: string) => Promise<void>;
   clearBackendCart: () => Promise<void>;
@@ -155,28 +157,48 @@ const useCartStore = create<CartState>()(
         return state.items.reduce((acc, item) => acc + item.quantity, 0);
       },
 
-      isInCart: (productId: number | string) => {
+      isInCart: (productId: number | string, variantId?: string) => {
         const state = get();
         const id = String(productId);
+        const itemKey = variantId ? `${id}-${variantId}` : id;
 
         // Check local items first (for pending or current changes)
-        if (state.items.some((item) => String(item.id) === id)) return true;
+        if (state.items.some((item) =>
+          String(item.id) === itemKey ||
+          String(item.id) === id ||
+          (String(item.product_id || item.id) === id && (!variantId ? !item.product_variant_id : item.product_variant_id === variantId))
+        )) {
+          return true;
+        }
 
-        // Fallback to backend cart
-        return state.cart?.items?.some((item) => item.product_id === id) ?? false;
+        // Fallback to backend cart ONLY when not hydrated or items array is not populated yet
+        if (!state.hydrated && state.cart?.items) {
+          return state.cart.items.some((item) =>
+            item.product_id === id && (!variantId ? !item.product_variant_id : item.product_variant_id === variantId)
+          );
+        }
+
+        return false;
       },
 
-      getItemQuantity: (productId: number | string) => {
+      getItemQuantity: (productId: number | string, variantId?: string) => {
         const state = get();
         const id = String(productId);
+        const itemKey = variantId ? `${id}-${variantId}` : id;
 
         // Check local items first (source of optimistic truth)
-        const localItem = state.items.find((item) => String(item.id) === id);
+        const localItem = state.items.find((item) =>
+          String(item.id) === itemKey ||
+          String(item.id) === id ||
+          (String(item.product_id || item.id) === id && (!variantId ? !item.product_variant_id : item.product_variant_id === variantId))
+        );
         if (localItem !== undefined) return localItem.quantity;
 
-        // Fallback to backend cart
-        if (state.cart?.items) {
-          const item = state.cart.items.find((item) => item.product_id === id);
+        // Fallback to backend cart ONLY when not hydrated
+        if (!state.hydrated && state.cart?.items) {
+          const item = state.cart.items.find((item) =>
+            item.product_id === id && (!variantId ? !item.product_variant_id : item.product_variant_id === variantId)
+          );
           if (item) return item.quantity;
         }
 
@@ -186,22 +208,22 @@ const useCartStore = create<CartState>()(
       getTotal: () => {
         const state = get();
 
-        // Use backend cart totals when available and no pending operations exist
-        if (state.pendingOps.size === 0 && state.cart?.items && state.cart.items.length > 0) {
-          return state.cart.items.reduce((acc, item) => {
-            const price = parseFloat(item.unit_price || item.product?.price || '0');
-            return acc + price * item.quantity;
-          }, 0);
-        }
-
-        // Fallback to local items
+        // If local items exist, they are the optimistic source of truth
         if (state.items.length > 0) {
           return (
             state.items.reduce((acc, curr) => {
-              const price = Math.round(Number(curr.price) * 100); // work in cents
+              const price = Math.round(Number(curr.price || 0) * 100); // work in cents
               return acc + price * curr.quantity;
             }, 0) / 100
-          ); // convert back to currency
+          );
+        }
+
+        // Fallback to backend cart totals
+        if (state.cart?.items && state.cart.items.length > 0) {
+          return state.cart.items.reduce((acc, item) => {
+            const price = parseFloat(item.unit_price || (item.product_variant as any)?.calculated_price || (item.product_variant as any)?.price || item.product?.price || '0');
+            return acc + price * item.quantity;
+          }, 0);
         }
 
         return 0;
@@ -211,72 +233,105 @@ const useCartStore = create<CartState>()(
       // Local Actions (backward compatibility)
       // ============================================================================
 
-      addItem: (product: Product, quantity: number = 1) => {
+      addItem: (product: Product & { product_variant_id?: string; selected_variant_id?: string; price?: number | string }, quantity: number = 1) => {
         const validQuantity = Math.max(1, Math.floor(quantity || 1));
-        const productId = String(product.id);
-        const opKey = getOpKey('add', productId);
+        const rawProductId = String((product as any).product_id || product.id);
+        const variantId = product.product_variant_id || (product as any).selected_variant_id;
+        const itemId = variantId ? `${rawProductId}-${variantId}` : String(product.id || rawProductId);
+        const opKey = getOpKey('add', itemId);
 
         // Check stock if managed
         const state = get();
-        const existingItem = state.items.find((item) => String(item.id) === productId);
+        const existingItem = state.items.find((item) =>
+          String(item.id) === itemId ||
+          String(item.product_id) === rawProductId ||
+          (String(item.product_id || item.id) === rawProductId && (!variantId || item.product_variant_id === variantId))
+        );
         const currentQuantity = existingItem?.quantity || 0;
 
-        if ((product as any).manage_stock) {
-          const stockQuantity = Number((product as any).stock_quantity) || 0;
+        if ((product as any).manage_stock && typeof (product as any).stock_quantity === 'number' && (product as any).stock_quantity > 0) {
+          const stockQuantity = Number((product as any).stock_quantity);
           const availableStock = stockQuantity - currentQuantity;
           if (availableStock < validQuantity) {
-            toast.error(`Only ${availableStock} items available in stock`);
+            toast.error(`Only ${Math.max(0, availableStock)} items available in stock`);
             return;
           }
         }
 
-        // Create snapshot for potential rollback
-        get().createSnapshot();
+        const numericPrice = typeof product.price === 'number'
+          ? product.price
+          : parseFloat(String(product.price || 0)) || 0;
 
         // Optimistic update
         const updatedItems = existingItem
           ? state.items.map((item) =>
-              String(item.id) === productId
-                ? { ...item, quantity: item.quantity + validQuantity }
+              (String(item.id) === itemId || String(item.product_id) === rawProductId || (String(item.product_id || item.id) === rawProductId && (!variantId || item.product_variant_id === variantId)))
+                ? { ...item, quantity: item.quantity + validQuantity, price: numericPrice > 0 ? numericPrice : item.price }
                 : item
             )
-          : [...state.items, { ...product, quantity: validQuantity, id: productId }];
+          : [
+              ...state.items,
+              {
+                ...product,
+                id: itemId,
+                product_id: rawProductId,
+                product_variant_id: variantId,
+                price: numericPrice,
+                quantity: validQuantity,
+              },
+            ];
 
         set({ items: updatedItems });
+
+        console.log('[CART STORE] addItem called:', {
+          rawProductId,
+          variantId,
+          itemId,
+          validQuantity,
+          numericPrice,
+          name: product.name,
+          currentTotalItems: updatedItems.length,
+        });
 
         // Mark operation as pending and sync to backend via queued execution
         get().pendingOps.add(opKey);
         enqueueMutation(async () => {
           try {
-            await get().addItemToBackend(productId, validQuantity);
+            console.log('[CART STORE] Syncing item to backend:', { rawProductId, validQuantity, variantId });
+            await get().addItemToBackend(rawProductId, validQuantity, undefined, variantId);
+            console.log('[CART STORE] Backend sync successful for:', itemId);
           } catch (err) {
-            console.error('Failed to add item to backend:', err);
-            get().rollback();
+            console.warn('[CART STORE] Failed to add item to backend (local cart preserved):', err);
           } finally {
             get().pendingOps.delete(opKey);
           }
         });
       },
 
-      updateQuantity: (productId: number | string, quantity: number) => {
+      updateQuantity: (productId: number | string, quantity: number, variantId?: string) => {
         const id = String(productId);
         if (!id || typeof quantity !== 'number' || isNaN(quantity) || !isFinite(quantity)) {
           return;
         }
 
         const state = get();
-        const item = state.items.find((item) => String(item.id) === id);
+        const item = state.items.find((item) =>
+          String(item.id) === id ||
+          String(item.product_id) === id ||
+          (String(item.product_id || item.id) === id && (!variantId || item.product_variant_id === variantId)) ||
+          (item.product_id && id.startsWith(String(item.product_id)) && (!variantId || item.product_variant_id === variantId))
+        );
         if (!item) return;
 
-        const opKey = getOpKey('update', id);
-
-        // Create snapshot for potential rollback
-        get().createSnapshot();
+        const targetId = String(item.id || id);
+        const rawProdId = String(item.product_id || (id.includes('-') ? id.split('-')[0] : id));
+        const effectiveVarId = variantId || item.product_variant_id;
+        const opKey = getOpKey('update', targetId);
 
         if (quantity <= 0) {
           // Remove item if quantity is 0 or less
           set({
-            items: state.items.filter((item) => String(item.id) !== id),
+            items: state.items.filter((i) => String(i.id) !== targetId && String(i.id) !== id && String(i.product_id || i.id) !== rawProdId),
           });
 
           // Mark operation as pending and sync to backend
@@ -284,13 +339,15 @@ const useCartStore = create<CartState>()(
           enqueueMutation(async () => {
             try {
               const currentCart = get().cart;
-              const backendItem = currentCart?.items?.find(i => i.product_id === id);
+              const backendItem = currentCart?.items?.find(i =>
+                i.id === targetId ||
+                (i.product_id === rawProdId && (!effectiveVarId ? !i.product_variant_id : i.product_variant_id === effectiveVarId))
+              );
               if (backendItem) {
                 await get().removeItemFromBackend(backendItem.id);
               }
             } catch (err) {
-              console.error('Failed to remove item from backend:', err);
-              get().rollback();
+              console.warn('[CART STORE] Failed to remove item from backend (local cart preserved):', err);
             } finally {
               get().pendingOps.delete(opKey);
             }
@@ -301,8 +358,8 @@ const useCartStore = create<CartState>()(
         const validQuantity = Math.max(1, Math.floor(quantity));
 
         // Check stock if managed
-        if (item.manage_stock) {
-          const stockQuantity = Number(item.stock_quantity) || 0;
+        if (item.manage_stock && typeof item.stock_quantity === 'number' && item.stock_quantity > 0) {
+          const stockQuantity = Number(item.stock_quantity);
           if (validQuantity > stockQuantity) {
             toast.error(`Only ${stockQuantity} items available in stock`);
             return;
@@ -311,10 +368,10 @@ const useCartStore = create<CartState>()(
 
         // Optimistic update
         set({
-          items: state.items.map((item) =>
-            String(item.id) === id
-              ? { ...item, quantity: validQuantity }
-              : item
+          items: state.items.map((i) =>
+            (String(i.id) === targetId || String(i.id) === id || (String(i.product_id || i.id) === rawProdId && (!effectiveVarId || i.product_variant_id === effectiveVarId)))
+              ? { ...i, quantity: validQuantity }
+              : i
           ),
         });
 
@@ -323,34 +380,42 @@ const useCartStore = create<CartState>()(
         enqueueMutation(async () => {
           try {
             const currentCart = get().cart;
-            const backendItem = currentCart?.items?.find(i => i.product_id === id);
+            const backendItem = currentCart?.items?.find(i =>
+              i.id === targetId ||
+              (i.product_id === rawProdId && (!effectiveVarId ? !i.product_variant_id : i.product_variant_id === effectiveVarId))
+            );
             if (backendItem) {
               await get().updateItemInBackend(backendItem.id, { quantity: validQuantity });
             } else {
-              await get().addItemToBackend(id, validQuantity);
+              await get().addItemToBackend(rawProdId, validQuantity, undefined, effectiveVarId);
             }
           } catch (err) {
-            console.error('Failed to update item in backend:', err);
-            get().rollback();
+            console.warn('[CART STORE] Failed to update item in backend (local cart preserved):', err);
           } finally {
             get().pendingOps.delete(opKey);
           }
         });
       },
 
-      removeItem: (productId: number | string) => {
+      removeItem: (productId: number | string, variantId?: string) => {
         const id = String(productId);
         if (!id) return;
 
         const state = get();
-        const opKey = getOpKey('remove', id);
-
-        // Create snapshot for potential rollback
-        get().createSnapshot();
+        const item = state.items.find((item) =>
+          String(item.id) === id ||
+          String(item.product_id) === id ||
+          (String(item.product_id || item.id) === id && (!variantId || item.product_variant_id === variantId)) ||
+          (item.product_id && id.startsWith(String(item.product_id)) && (!variantId || item.product_variant_id === variantId))
+        );
+        const targetId = item ? String(item.id) : id;
+        const rawProdId = String(item?.product_id || (id.includes('-') ? id.split('-')[0] : id));
+        const effectiveVarId = variantId || item?.product_variant_id;
+        const opKey = getOpKey('remove', targetId);
 
         // Optimistic update
         set({
-          items: state.items.filter((item) => String(item.id) !== id),
+          items: state.items.filter((i) => String(i.id) !== targetId && String(i.id) !== id && String(i.product_id || i.id) !== rawProdId),
         });
 
         // Mark operation as pending and sync to backend
@@ -358,13 +423,15 @@ const useCartStore = create<CartState>()(
         enqueueMutation(async () => {
           try {
             const currentCart = get().cart;
-            const backendItem = currentCart?.items?.find(i => i.product_id === id);
+            const backendItem = currentCart?.items?.find(i =>
+              i.id === targetId ||
+              (i.product_id === rawProdId && (!effectiveVarId ? !i.product_variant_id : i.product_variant_id === effectiveVarId))
+            );
             if (backendItem) {
               await get().removeItemFromBackend(backendItem.id);
             }
           } catch (err) {
-            console.error('Failed to remove item from backend:', err);
-            get().rollback();
+            console.warn('[CART STORE] Failed to remove item from backend (local cart preserved):', err);
           } finally {
             get().pendingOps.delete(opKey);
           }
@@ -437,21 +504,38 @@ const useCartStore = create<CartState>()(
 
           // Convert backend cart items to local format for backward compatibility
           const cartItems = cart.items || [];
-          const localItems: LocalCartItem[] = cartItems.map((item) => ({
-            ...item.product,
-            id: item.product_id,
-            quantity: item.quantity,
-            price: Number(item.unit_price || item.product?.price || 0),
-          }));
+          const localItems: LocalCartItem[] = cartItems.map((item) => {
+            const itemKey = item.product_variant_id ? `${item.product_id}-${item.product_variant_id}` : item.product_id;
+            return {
+              ...item.product,
+              id: itemKey,
+              product_id: item.product_id,
+              product_variant_id: item.product_variant_id,
+              name: item.product_variant?.name
+                ? `${item.product?.name || 'Product'} (${item.product_variant.name})`
+                : (item.product?.name || 'Product'),
+              sku: item.product_variant?.sku || item.product?.sku,
+              quantity: item.quantity,
+              price: Number(item.unit_price || (item.product_variant as any)?.calculated_price || (item.product_variant as any)?.price || item.product?.price || 0),
+            };
+          });
 
           // Only update items if there are no pending operations
           // This prevents overwriting optimistic updates
-          if (state.pendingOps.size === 0) {
-            set({
-              cart,
-              items: localItems,
-              isSyncing: false,
-            });
+          if (get().pendingOps.size === 0) {
+            if (localItems.length > 0) {
+              set({
+                cart,
+                items: localItems,
+                isSyncing: false,
+              });
+            } else {
+              // If backend cart is empty or fresh, keep existing local items
+              set({
+                cart,
+                isSyncing: false,
+              });
+            }
           } else {
             // Just update cart reference, don't touch items (they have pending changes)
             set({
@@ -473,10 +557,13 @@ const useCartStore = create<CartState>()(
             error: errorMessage,
           });
 
-          // If error indicates invalid cart token, clear it
-          if (errorMessage.includes('not found') ||
-              errorMessage.includes('expired') ||
-              errorMessage.includes('invalid')) {
+          // Only clear the cart token on genuine token-level failures (e.g. 404/401).
+          // Do NOT wipe the cart on generic sync errors, which would remove items
+          // the user just added optimistically.
+          const status = (error as any)?.status;
+          const tokenInvalid = status === 404 || status === 401 ||
+            errorMessage.includes('not found') || errorMessage.includes('expired');
+          if (tokenInvalid) {
             console.log('[Cart] Clearing invalid cart token after sync failure');
             get().clearCartToken();
             set({ cart: null, items: [] });
@@ -511,8 +598,11 @@ const useCartStore = create<CartState>()(
 
           // For each local item, check if it exists in backend
           for (const localItem of state.items) {
-            const productId = String(localItem.id);
-            const backendItem = backendItems.find((bi) => bi.product_id === productId);
+            const rawProdId = String(localItem.product_id || localItem.id);
+            const varId = localItem.product_variant_id;
+            const backendItem = backendItems.find((bi) =>
+              bi.product_id === rawProdId && (!varId || bi.product_variant_id === varId)
+            );
 
             if (backendItem) {
               // Update quantity if different
@@ -521,7 +611,7 @@ const useCartStore = create<CartState>()(
               }
             } else {
               // Add new item to backend
-              await get().addItemToBackend(productId, localItem.quantity);
+              await get().addItemToBackend(rawProdId, localItem.quantity, undefined, varId);
             }
           }
 
@@ -540,7 +630,8 @@ const useCartStore = create<CartState>()(
       addItemToBackend: async (
         productId: string,
         quantity = 1,
-        notes?: string
+        notes?: string,
+        productVariantId?: string
       ) => {
         const state = get();
 
@@ -550,6 +641,7 @@ const useCartStore = create<CartState>()(
           const cart = await cartService.addItem(
             {
               product_id: productId,
+              product_variant_id: productVariantId,
               quantity,
               notes,
               substitution_allowed: false,
@@ -808,8 +900,7 @@ const useCartStore = create<CartState>()(
                     console.error('[Cart] Auto-sync failed on rehydrate:', error);
                     const errorMessage = error?.message || error?.toString() || '';
                     if (errorMessage.includes('not found') ||
-                        errorMessage.includes('expired') ||
-                        errorMessage.includes('invalid')) {
+                        errorMessage.includes('expired')) {
                       console.log('[Cart] Clearing invalid cart token');
                       state.clearCartToken();
                       state.clearLocalOnly();

@@ -1,5 +1,22 @@
 import * as z from "zod";
 
+export const wizardVariantSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, "Variant name is required"),
+  sku: z.string().min(1, "SKU is required"),
+  price: z.coerce.number().min(0, "Price cannot be negative"),
+  wholesale_price: z.coerce.number().optional(),
+  cost_price: z.coerce.number().optional(),
+  stock_quantity: z.coerce.number().min(0, "Stock quantity cannot be negative").default(0),
+  attributes: z.record(z.string(), z.string()).default({}),
+  is_active: z.boolean().default(true),
+  is_default: z.boolean().default(false),
+  image_url: z.string().optional(),
+  weight_kg: z.coerce.number().optional(),
+});
+
+export type WizardVariantItem = z.infer<typeof wizardVariantSchema>;
+
 export const productWizardSchema = z.object({
   vendor_id: z.string().min(1, "Vendor selection is required"),
   name: z.string().min(3, "Product name must be at least 3 characters").max(200, "Name cannot exceed 200 characters"),
@@ -12,15 +29,17 @@ export const productWizardSchema = z.object({
   product_type: z.string().optional(),
   internal_reference: z.string().optional(),
 
-  vendor_payout: z.coerce
+  base_price: z.coerce
     .number()
-    .min(50, "Base price must be at least KES 50")
+    .min(1, "Vendor payout base price must be at least KES 1")
     .max(100000000, "Exceeds maximum allowable price"),
+  cost_price: z.coerce.number().optional(),
   wholesale_price: z.coerce.number().optional(),
-  vat_rate: z.number().default(0.16),
+  compare_at_price: z.coerce.number().optional(),
   sale_active: z.boolean().default(false),
-  sale_price: z.coerce.number().optional(),
   sale_end_date: z.string().optional(),
+  has_vat: z.boolean().default(false).optional(),
+  vat_rate: z.coerce.number().default(0).optional(),
 
   sku: z.string().min(3, "SKU identifier is required"),
   stock_quantity: z.coerce.number().min(0, "Stock quantity cannot be negative"),
@@ -32,8 +51,10 @@ export const productWizardSchema = z.object({
   width_cm: z.coerce.number().optional(),
   height_cm: z.coerce.number().optional(),
 
-  description: z.string().max(2000, "Description cannot exceed 2000 characters").optional(),
-  short_description: z.string().max(200, "Short overview cannot exceed 200 characters").optional(),
+  variants: z.array(wizardVariantSchema).default([]),
+
+  description: z.string().max(25000, "Description cannot exceed 25,000 characters").optional(),
+  short_description: z.string().max(500, "Short overview cannot exceed 500 characters").optional(),
   specifications: z.record(z.string(), z.string()).optional(),
   tags: z.array(z.string()).default([]),
   meta_title: z.string().optional(),

@@ -1,7 +1,7 @@
 /* Local Geist Fonts */
 @font-face {
   font-family: 'Geist';
-  src: url('./fonts/Geist-Regular.woff2') format('woff2');
+  src: url('./fonts/Geist-Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -9,7 +9,7 @@
 
 @font-face {
   font-family: 'Geist';
-  src: url('./fonts/Geist-Medium.woff2') format('woff2');
+  src: url('./fonts/Geist-Medium.ttf') format('truetype');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -17,19 +17,12 @@
 
 @font-face {
   font-family: 'Geist';
-  src: url('./fonts/Geist-Bold.woff2') format('woff2');
+  src: url('./fonts/Geist-Bold.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
 
-@font-face {
-  font-family: 'Geist Mono';
-  src: url('./fonts/GeistMono-Regular.woff2') format('woff2');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
 
 @import "tailwindcss";
 @import "tw-animate-css";
@@ -125,4 +118,24 @@
   --chart-3: 30 80% 55%;
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
+}
+
+@utility container {
+  width: 100%;
+  margin-inline: auto;
+  padding-inline: 1rem;
+
+  @media (min-width: 640px) {
+    padding-inline: 1.5rem;
+  }
+
+  @media (min-width: 1024px) {
+    padding-inline: 2rem;
+    max-width: 1440px;
+  }
+
+  @media (min-width: 1536px) {
+    max-width: 1600px;
+    padding-inline: 2.5rem;
+  }
 }

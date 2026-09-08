@@ -13,20 +13,16 @@ export function mapCSVRowToProduct(
   const isSale = row.on_sale?.toLowerCase() === 'true';
   const isInStock = row.in_stock?.toLowerCase() === 'true';
 
-  const priceVal = row.price ? parseFloat(row.price) : 0;
-  const regularPriceVal = row.regular_price ? parseFloat(row.regular_price) : priceVal;
-  const salePriceVal = row.sale_price ? parseFloat(row.sale_price) : priceVal;
-
-  const currentPrice = isSale ? salePriceVal : regularPriceVal;
+  const basePriceVal = row.base_price ? parseFloat(row.base_price) : (row.price ? parseFloat(row.price) : 0);
+  const compareAtPriceVal = row.compare_at_price ? parseFloat(row.compare_at_price) : undefined;
 
   return {
     name: row.name.trim(),
     slug: row.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
     sku: row.sku || undefined,
     vendor_id: vendorId,
-    price: currentPrice,
-    regular_price: regularPriceVal,
-    sale_price: salePriceVal,
+    base_price: basePriceVal,
+    compare_at_price: compareAtPriceVal,
     is_on_sale: isSale,
     stock_status: isInStock ? 'instock' : 'outofstock',
     stock_quantity: isInStock ? 10 : 0,

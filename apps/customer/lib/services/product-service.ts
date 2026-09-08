@@ -106,6 +106,7 @@ export const productService = {
           vendor_id: params.vendor_id,
           sku: params.sku,
           in_stock: params.in_stock,
+          category: params.category,
         },
       });
 

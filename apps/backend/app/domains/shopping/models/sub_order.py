@@ -5,22 +5,29 @@ A SubOrder represents a vendor's portion of a parent Order.
 When a customer checks out with items from multiple vendors,
 one parent Order is created with multiple child SubOrders.
 """
-import uuid
+
 import enum
+import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import TYPE_CHECKING
 
-from sqlalchemy import String, ForeignKey, Numeric, DateTime, Index
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+if TYPE_CHECKING:
+    from app.domains.shopping.models.order import Order, OrderItem
+    from app.domains.payments.models.vendor_ledger import LedgerTransaction
+    from app.domains.vendor.models.vendor_profile import VendorProfile
+
+from sqlalchemy import DateTime, ForeignKey, Index, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.domains.shared.models import IDMixin, AuditMixin
+from app.domains.shared.models import AuditMixin, IDMixin
 
 
 class SubOrderStatus(str, enum.Enum):
     """Status of a vendor's sub-order."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     SHIPPED = "shipped"
@@ -46,6 +53,7 @@ class SubOrder(Base, IDMixin, AuditMixin):
     - CANCELLED: SubOrder cancelled (full or partial)
     - REFUNDED: Refund processed
     """
+
     __tablename__ = "sub_orders"
     __table_args__ = (
         Index("ix_sub_orders_parent_order", "parent_order_id"),
@@ -67,10 +75,7 @@ class SubOrder(Base, IDMixin, AuditMixin):
     )
 
     # Financial
-    subtotal_amount: Mapped[Decimal] = mapped_column(
-        Numeric(12, 2),
-        nullable=False
-    )
+    subtotal_amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
 
     # Status
     status: Mapped[SubOrderStatus] = mapped_column(
@@ -80,33 +85,22 @@ class SubOrder(Base, IDMixin, AuditMixin):
     )
 
     # Tracking (optional, for vendor shipments)
-    tracking_number: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
-    tracking_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
-    shipped_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
-    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    tracking_number: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    tracking_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    shipped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Vendor notes (internal)
-    vendor_notes: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    vendor_notes: Mapped[str | None] = mapped_column(String(1000), nullable=True)
 
     # Relationships
-    parent_order: Mapped["Order"] = relationship(
-        "Order",
-        back_populates="sub_orders",
-        foreign_keys=[parent_order_id]
+    parent_order: Mapped["Order"] = relationship("Order", back_populates="sub_orders", foreign_keys=[parent_order_id])
+    vendor: Mapped["VendorProfile"] = relationship("VendorProfile", backref="sub_orders")
+    items: Mapped[list["OrderItem"]] = relationship(
+        "OrderItem", back_populates="sub_order", cascade="all, delete-orphan"
     )
-    vendor: Mapped["VendorProfile"] = relationship(
-        "VendorProfile",
-        backref="sub_orders"
-    )
-    items: Mapped[List["OrderItem"]] = relationship(
-        "OrderItem",
-        back_populates="sub_order",
-        cascade="all, delete-orphan"
-    )
-    ledger_transactions: Mapped[List["LedgerTransaction"]] = relationship(
-        "LedgerTransaction",
-        back_populates="sub_order",
-        cascade="all, delete-orphan"
+    ledger_transactions: Mapped[list["LedgerTransaction"]] = relationship(
+        "LedgerTransaction", back_populates="sub_order", cascade="all, delete-orphan"
     )
 
     @property
@@ -120,4 +114,6 @@ class SubOrder(Base, IDMixin, AuditMixin):
         return sum(int(item.quantity) for item in self.items) if self.items else 0
 
     def __repr__(self):
-        return f"<SubOrder(id={self.id}, vendor_id={self.vendor_id}, status={self.status}, amount={self.subtotal_amount})>"
+        return (
+            f"<SubOrder(id={self.id}, vendor_id={self.vendor_id}, status={self.status}, amount={self.subtotal_amount})>"
+        )

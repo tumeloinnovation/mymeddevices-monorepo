@@ -5,14 +5,14 @@ import type { Product, Review } from '@/lib/data/types'
 import { useRecentlyViewedStore } from '@/lib/store/useRecentlyViewedStore'
 
 import DescriptionTab from '@/app/(shop)/products/_components/DescriptionTab'
-import OffersTab from '@/app/(shop)/products/_components/OffersTab'
 import ProductGallery from '@/app/(shop)/products/_components/ProductGallery'
 import ProductSection from '@/components/common/ProductSection'
 import ProductInfo from '@/app/(shop)/products/_components/ProductInfo'
 import ReviewsTab from '@/app/(shop)/products/[slug]/_components/ReviewsTab'
+import BundleConfigurator from '@/app/(shop)/products/[slug]/_components/BundleConfigurator'
 import SpecsTab from '@/app/(shop)/products/_components/SpecsTab'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { FileText, MessageSquare, Sliders, Tag } from 'lucide-react'
+import { FileText, MessageSquare, Sliders, Package } from 'lucide-react'
 import ProductNotFound from '../../_components/ProductNotFound'
 import { ProductJsonLd, BreadcrumbJsonLd } from '@/components/seo'
 
@@ -28,6 +28,7 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
   const [activeTab, setActiveTab] = useState('overview')
   const [selectedImage, setSelectedImage] = useState(0)
   const [quantity, setQuantity] = useState(1)
+  const [addOnsTotal, setAddOnsTotal] = useState(0)
 
   const addRecentlyViewed = useRecentlyViewedStore((s) => s.addProduct)
   const recentlyViewedItems = useRecentlyViewedStore((s) => s.items).filter(
@@ -50,90 +51,150 @@ export default function ProductDetailClient({ product, relatedProducts, reviews 
     { name: 'Products', url: `${SITE_URL}/products` },
     ...(product.categories?.[0] ? [{
       name: product.categories[0].name,
-      url: `${SITE_URL}/categories/${product.categories[0].slug}`
+      url: `${SITE_URL}/products?category=${product.categories[0].slug}`
     }] : []),
     { name: product.name, url: productUrl }
   ]
+
+  const isBundleProduct = product.product_type === 'bundle' || (product.bundle_items?.length ?? 0) > 0
+
+  const tabsContent = (
+    <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="gap-0">
+      <TabsList className="relative h-auto w-full gap-1 bg-transparent p-0 before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-border justify-start">
+        <TabsTrigger
+          className="data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-background! text-muted-foreground hover:text-foreground overflow-hidden rounded-t-lg rounded-b-none border border-transparent py-2.5 px-5 data-[state=active]:z-10 data-[state=active]:shadow-none! flex items-center gap-2 cursor-pointer font-medium text-sm transition-all"
+          value="overview"
+        >
+          <FileText className="h-4 w-4" /> Overview
+        </TabsTrigger>
+        <TabsTrigger
+          className="data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-background! text-muted-foreground hover:text-foreground overflow-hidden rounded-t-lg rounded-b-none border border-transparent py-2.5 px-5 data-[state=active]:z-10 data-[state=active]:shadow-none! flex items-center gap-2 cursor-pointer font-medium text-sm transition-all"
+          value="specs"
+        >
+          <Sliders className="h-4 w-4" /> Specifications
+        </TabsTrigger>
+        <TabsTrigger
+          className="data-[state=active]:bg-muted data-[state=active]:text-foreground data-[state=active]:border-border data-[state=active]:border-b-background! text-muted-foreground hover:text-foreground overflow-hidden rounded-t-lg rounded-b-none border border-transparent py-2.5 px-5 data-[state=active]:z-10 data-[state=active]:shadow-none! flex items-center gap-2 cursor-pointer font-medium text-sm transition-all"
+          value="reviews"
+        >
+          <MessageSquare className="h-4 w-4" /> Reviews ({reviews?.length || 0})
+        </TabsTrigger>
+      </TabsList>
+      <div className="pt-6 sm:pt-8 px-4 sm:px-6 md:px-8">
+        <TabsContent value="overview" className="mt-0 outline-none">
+          <DescriptionTab description={product.description} />
+        </TabsContent>
+        <TabsContent value="specs" className="mt-0 outline-none">
+          <SpecsTab
+            sku={product.sku}
+            brand={product.brands?.[0]?.name || (product as any).brand}
+            category={product.categories?.map((c) => c.name)}
+            availability={product.stock_status}
+            modelNumber={product.model_number}
+            weight={product.weight || (product as any).weight_kg}
+            dimensions={(product as any).dimensions}
+            warrantyInfo={(product as any).warranty_info}
+            specifications={product.specifications}
+            tags={product.tags?.map((t) => t.name)}
+          />
+        </TabsContent>
+        <TabsContent value="reviews" className="mt-0 outline-none">
+          <ReviewsTab productId={String(product.id)} productSlug={product.slug} productName={product.name} />
+        </TabsContent>
+      </div>
+    </Tabs>
+  )
+
+  const renderProductInfo = (hidePurchase: boolean = false) => (
+    <ProductInfo
+      product={product}
+      quantity={quantity}
+      setQuantity={setQuantity}
+      relatedProducts={relatedProducts}
+      hidePurchaseActions={hidePurchase}
+      extraPrice={isBundleProduct ? addOnsTotal : 0}
+    />
+  )
 
   return (
     <>
       <ProductJsonLd product={product} url={productUrl} />
       <BreadcrumbJsonLd items={breadcrumbItems} />
 
-      <div className="px-4 py-8 max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-12 items-start">
-          <div className="sticky top-8">
-            <ProductGallery images={images} selected={selectedImage} onSelect={setSelectedImage} />
-          </div>
+      <div className="container mx-auto px-4 py-6">
 
-          <div>
-            <ProductInfo product={product} quantity={quantity} setQuantity={setQuantity} />
-          </div>
-        </div>
+        {isBundleProduct ? (
+          // 3-column layout for bundle products
+          <div className="grid gap-6 lg:gap-8 items-start grid-cols-1 lg:grid-cols-12">
+            {/* Left Column: Gallery */}
+            <div className="lg:col-span-4 lg:sticky lg:top-8">
+              <ProductGallery images={images} selected={selectedImage} onSelect={setSelectedImage} />
+            </div>
 
-        {/* Tabs Section */}
+            {/* Middle Column: Product Info */}
+            <div className="lg:col-span-4 xl:col-span-4">
+              {renderProductInfo(true)}
+            </div>
+
+            {/* Right Column: Bundles & Add-ons */}
+            <div className="lg:col-span-4 xl:col-span-4 lg:sticky lg:top-8">
+              <BundleConfigurator
+                product={product}
+                relatedProducts={relatedProducts}
+                quantity={quantity}
+                setQuantity={setQuantity}
+                onAddOnsChange={setAddOnsTotal}
+              />
+            </div>
+          </div>
+        ) : (
+          // 2-column layout for simple products
+          <div className="grid gap-6 lg:gap-8 items-start grid-cols-1 lg:grid-cols-2">
+            {/* Left Column: Gallery */}
+            <div className="lg:sticky lg:top-8">
+              <ProductGallery images={images} selected={selectedImage} onSelect={setSelectedImage} />
+            </div>
+
+            {/* Right Column: Product Info */}
+            <div>
+              {renderProductInfo(false)}
+            </div>
+          </div>
+        )}
+
+        {/* Tabs Section - Full width below columns */}
         <div className="mt-8">
-          <div className="bg-white dark:bg-card border dark:border-border rounded-lg shadow-sm transition-colors duration-300">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <TabsList className="px-4 py-3 border-b dark:border-border bg-gray-50 dark:bg-muted/30 rounded-t-lg flex gap-2">
-                <TabsTrigger value="overview" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-                  <FileText className="h-4 w-4" /> Description
-                </TabsTrigger>
-                <TabsTrigger value="specs" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-                  <Sliders className="h-4 w-4" /> Specifications
-                </TabsTrigger>
-                <TabsTrigger value="reviews" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-                  <MessageSquare className="h-4 w-4" /> Reviews
-                </TabsTrigger>
-                <TabsTrigger value="offers" className="flex items-center gap-2 data-[state=active]:text-primary dark:data-[state=active]:text-primary transition-colors">
-                  <Tag className="h-4 w-4" /> Offers
-                </TabsTrigger>
-              </TabsList>
-
-              <div className="p-4">
-                <TabsContent value="overview">
-                  <DescriptionTab description={product.description} />
-                </TabsContent>
-                <TabsContent value="specs">
-                  <SpecsTab
-                    sku={product.sku}
-                    brand={product.brands?.[0]?.name}
-                    category={product.categories?.map((c) => c.name)}
-                    availability={product.stock_status}
-                    modelNumber={product.model_number}
-                    weight={product.weight}
-                    specifications={product.specifications}
-                    tags={product.tags?.map((t) => t.name)}
-                  />
-                </TabsContent>
-                <TabsContent value="reviews">
-                  <ReviewsTab productId={String(product.id)} productSlug={product.slug} productName={product.name} />
-                </TabsContent>
-                <TabsContent value="offers">
-                  <OffersTab />
-                </TabsContent>
-              </div>
-            </Tabs>
-          </div>
+          {tabsContent}
         </div>
 
-        {relatedProducts.length > 0 && (
-          <section className="py-2 mt-12">
+        {/* Recommendations — show related first, fall back to recently viewed, else placeholder */}
+        {relatedProducts.length > 0 ? (
+          <section className="py-4 mt-12">
             <ProductSection
-              title="You may also like"
-              description="Explore similar products that might interest you."
+              title="You Might Also Like"
+              description="Discover similar products and accessories."
               items={relatedProducts}
             />
           </section>
-        )}
-
-        {recentlyViewedItems.length > 0 && (
-          <section className="py-2 mt-12">
+        ) : recentlyViewedItems.length > 0 ? (
+          <section className="py-4 mt-12">
             <ProductSection
               title="Recently Viewed"
               description="Products you browsed recently."
-              items={recentlyViewedItems}
+              items={recentlyViewedItems.slice(0, 4)}
             />
+          </section>
+        ) : (
+          <section className="py-4 mt-12">
+            <div className="text-center py-12 bg-gray-50 dark:bg-muted/20 rounded-xl">
+              <Package className="w-16 h-16 mx-auto text-gray-400 mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                More Products Coming Soon
+              </h3>
+              <p className="text-sm text-gray-600 dark:text-gray-400 max-w-md mx-auto">
+                We're constantly updating our catalog. Check back later for more great products.
+              </p>
+            </div>
           </section>
         )}
       </div>

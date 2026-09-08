@@ -9,6 +9,7 @@ export * from './services/vendor-service';
 export * from './services/shopping-service';
 export * from './services/users-service';
 export * from './services/system-service';
+export * from './services/admin-service';
 export * from './types/users';
 export * from './lib/validation/admin';
 export { ErrorBoundary } from './error-boundary';
@@ -16,10 +17,14 @@ export * from './loading';
 export { SkipNav } from './skip-nav';
 export * from './lib/utils/utils';
 export { useCheckoutAuthStore } from './lib/store/useAuthStore';
+export { useSessionValidation } from './lib/hooks/useAuth';
 export { useCartStore, CART_STORAGE_KEY } from './lib/store/useCartStore';
 export type { Cart, CartItem } from './lib/services/cart-service';
 export type { Cart as ShoppingCart } from './services/shopping-service';
 export * from './lib/logger';
 export * from './lib/config/platform-fees';
-export * from './lib/utils/product-mapper';
+export * from './lib/utils/sanitizer';
+export * from './lib/store/useAddressStore';
+export * from './lib/utils/address-mapper';
+
 

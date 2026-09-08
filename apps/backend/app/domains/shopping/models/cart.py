@@ -1,14 +1,21 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional, List
+from typing import TYPE_CHECKING, Optional
 
-from sqlalchemy import String, Boolean, Integer, ForeignKey, Numeric, DateTime
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
-from app.domains.shared.models import IDMixin, AuditMixin
+from app.domains.shared.models import AuditMixin, IDMixin
+
+if TYPE_CHECKING:
+    from app.domains.auth.models.user import User
+    from app.domains.catalog.models.product import Product
+    from app.domains.catalog.models.product_variant import ProductVariant
+    from app.domains.shopping.models.cart_discount import CartDiscount
+    from app.domains.shopping.models.cart_share import CartShare
 
 
 class Cart(Base, IDMixin, AuditMixin):
@@ -25,74 +32,43 @@ class Cart(Base, IDMixin, AuditMixin):
     __tablename__ = "carts"
 
     # User association (nullable for guest carts)
-    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=True,
-        index=True
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
 
     # Guest cart tracking
-    session_id: Mapped[Optional[str]] = mapped_column(
-        String(255),
-        nullable=True,
-        unique=True,
-        index=True
+    session_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True, unique=True, index=True
     )  # Browser session ID for guest carts
 
-    cart_token: Mapped[Optional[str]] = mapped_column(
-        String(64),
-        nullable=True,
-        unique=True,
-        index=True
+    cart_token: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, unique=True, index=True
     )  # Token for cart retrieval (guest carts)
 
     # Cart expiration (guest carts only)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True),
-        nullable=True,
-        index=True
-    )
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
 
     # Cart state
     is_active: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
-        nullable=False,
-        index=True
+        Boolean, default=True, nullable=False, index=True
     )  # Soft delete flag (different from SoftDeleteMixin as it might be used differently)
 
     cart_type: Mapped[str] = mapped_column(
-        String(20),
-        default="persistent",
-        nullable=False
+        String(20), default="persistent", nullable=False
     )  # 'persistent' (customer) or 'guest'
 
     # Relationships
-    user: Mapped[Optional["User"]] = relationship(
-        "User",
-        lazy="selectin"
+    user: Mapped[Optional["User"]] = relationship("User", lazy="selectin")
+
+    items: Mapped[list["CartItem"]] = relationship(
+        "CartItem", back_populates="cart", cascade="all, delete-orphan", lazy="selectin"
     )
 
-    items: Mapped[List["CartItem"]] = relationship(
-        "CartItem",
-        back_populates="cart",
-        cascade="all, delete-orphan",
-        lazy="selectin"
+    discounts: Mapped[list["CartDiscount"]] = relationship(
+        "CartDiscount", back_populates="cart", cascade="all, delete-orphan", lazy="selectin"
     )
 
-    discounts: Mapped[List["CartDiscount"]] = relationship(
-        "CartDiscount",
-        back_populates="cart",
-        cascade="all, delete-orphan",
-        lazy="selectin"
-    )
-
-    shares: Mapped[List["CartShare"]] = relationship(
-        "CartShare",
-        back_populates="cart",
-        cascade="all, delete-orphan"
-    )
+    shares: Mapped[list["CartShare"]] = relationship("CartShare", back_populates="cart", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         if self.user_id:
@@ -100,59 +76,54 @@ class Cart(Base, IDMixin, AuditMixin):
         return f"<Cart(id={self.id}, guest, token={self.cart_token})>"
 
 
+from sqlalchemy import UniqueConstraint
+
+
 class CartItem(Base, IDMixin, AuditMixin):
     """Item in a shopping cart with customization options."""
 
     __tablename__ = "cart_items"
+    __table_args__ = (
+        UniqueConstraint(
+            "cart_id",
+            "product_id",
+            "product_variant_id",
+            name="uq_cart_items_cart_product_variant",
+            postgresql_nulls_not_distinct=True,
+        ),
+    )
 
     cart_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("carts.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        UUID(as_uuid=True), ForeignKey("carts.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
     product_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True),
-        ForeignKey("products.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True
+        UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False, index=True
     )
 
-    quantity: Mapped[int] = mapped_column(
-        Integer,
-        default=1,
-        nullable=False
+    product_variant_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("product_variants.id", ondelete="CASCADE"), nullable=True, index=True
     )
+
+    quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     # Price snapshot at time of adding to cart
-    unit_price: Mapped[Optional[Decimal]] = mapped_column(
-        Numeric(12, 2),
-        nullable=True
+    unit_price: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2), nullable=True
     )  # NULL means use current product price
 
     # Item customization
-    notes: Mapped[Optional[str]] = mapped_column(
-        String(500),
-        nullable=True
-    )  # Customer notes for this item
+    notes: Mapped[str | None] = mapped_column(String(500), nullable=True)  # Customer notes for this item
 
     substitution_allowed: Mapped[bool] = mapped_column(
-        Boolean,
-        default=True,
-        nullable=False
+        Boolean, default=True, nullable=False
     )  # Allow substitution if out of stock
 
     # Relationships
-    cart: Mapped["Cart"] = relationship(
-        "Cart",
-        back_populates="items"
-    )
+    cart: Mapped["Cart"] = relationship("Cart", back_populates="items")
 
-    product: Mapped["Product"] = relationship(
-        "Product",
-        lazy="selectin"
-    )
+    product: Mapped["Product"] = relationship("Product", lazy="selectin")
+    product_variant: Mapped[Optional["ProductVariant"]] = relationship("ProductVariant", lazy="selectin")
 
     def __repr__(self) -> str:
-        return f"<CartItem(id={self.id}, cart_id={self.cart_id}, product_id={self.product_id}, qty={self.quantity})>"
+        return f"<CartItem(id={self.id}, cart_id={self.cart_id}, product_id={self.product_id}, variant_id={self.product_variant_id}, qty={self.quantity})>"

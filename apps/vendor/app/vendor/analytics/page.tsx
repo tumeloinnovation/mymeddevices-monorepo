@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   TrendingUp,
   TrendingDown,
@@ -103,8 +104,10 @@ function VendorAnalyticsSkeleton() {
 }
 
 export default function VendorAnalytics() {
+  const searchParams = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'overview';
   const [period, setPeriod] = useState<'7d' | '30d' | '90d'>('30d');
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const { data, loading, error, refetch } = useVendorAnalytics(period);
 
   const formatCurrency = (amount: number) => {

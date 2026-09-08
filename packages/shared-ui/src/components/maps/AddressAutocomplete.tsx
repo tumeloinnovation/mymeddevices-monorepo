@@ -51,7 +51,7 @@ interface Suggestion {
   };
 }
 
-export default function AddressAutocomplete({
+export function AddressAutocomplete({
   onPlaceSelected,
   placeholder = "Search for an address...",
   disabled = false,
@@ -389,3 +389,5 @@ export default function AddressAutocomplete({
     </div>
   );
 }
+
+export default AddressAutocomplete;

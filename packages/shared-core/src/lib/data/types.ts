@@ -32,6 +32,7 @@ export interface Product {
   date_created: string;
   permalink: string;
   type: string;
+  product_type?: string;
   purchasable: boolean;
   catalog_visibility: string;
   cost_price?: string;
@@ -42,6 +43,7 @@ export interface Product {
   model_number?: string;
   specifications?: Record<string, any>;
   variants?: ProductVariant[];
+  bundle_items?: BundleItem[];
 }
 
 export interface ProductImage {
@@ -83,9 +85,34 @@ export interface ProductVariant {
   name: string;
   sku?: string;
   price: number;
+  price_adjustment?: number;
+  override_price?: number;
+  calculated_price?: number;
   stock_quantity: number;
   attributes: Record<string, string>;
   is_active: boolean;
+  is_default?: boolean;
+  image_url?: string;
+  sort_order?: number;
+  weight_kg?: number;
+}
+
+export interface BundleItem {
+  id: string;
+  bundle_product_id: string;
+  component_product_id: string;
+  component_product?: {
+    id: string;
+    name: string;
+    slug: string;
+    sku?: string;
+    price?: number;
+    image_url?: string;
+    stock_status?: string;
+  };
+  quantity: number;
+  sort_order: number;
+  is_optional: boolean;
 }
 
 export interface Dimensions {

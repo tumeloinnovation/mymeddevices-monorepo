@@ -12,14 +12,17 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { formatCurrency } from '@/lib/utils/utils'
 import { PACKAGING_FEE, SERVICES_FEE } from '@/lib/config/fees'
-import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft, Package, TrendingUp, Tag, X, Loader2 } from 'lucide-react'
+import { Minus, Plus, Trash2, ShoppingBag, ArrowLeft, Package, TrendingUp, Tag, X, Loader2, Gift, Award } from 'lucide-react'
 import { customerService } from '@/lib/services/customer-service'
 import { customerCouponsApi } from '@/lib/api/endpoints/coupons'
 import { useAuthStore } from '@/lib/store/useAuthStore'
+import { useLoyaltyPoints } from '@/lib/hooks/useLoyalty'
+import { getValidImageUrl } from '@/lib/utils/image'
 
 export default function CartPage() {
   const { items, hydrated, getTotal, updateQuantity, removeItem, clear, cart } = useCartStore()
   const { isAuthenticated } = useAuthStore()
+  const { points: loyaltyPoints, tier: loyaltyTier, isLoading: loyaltyLoading } = useLoyaltyPoints({ enabled: isAuthenticated })
   const [couponCode, setCouponCode] = useState('')
   const [isApplyingCoupon, setIsApplyingCoupon] = useState(false)
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null)
@@ -71,7 +74,9 @@ export default function CartPage() {
   const subtotal = getTotal()
   const shipping = subtotal >= 50000 ? 0 : 500
   const discountAmount = appliedCoupon?.discount_amount || 0
-  const total = Math.max(0, subtotal + (hasPrimaryAddress ? shipping : 0) + PACKAGING_FEE + SERVICES_FEE - discountAmount)
+  const discountedSubtotal = Math.max(0, subtotal - discountAmount)
+  const tax = discountedSubtotal * 0.16 // 16% VAT on discounted subtotal
+  const total = Math.max(0, discountedSubtotal + (hasPrimaryAddress ? shipping : 0) + tax + PACKAGING_FEE + SERVICES_FEE)
 
   const handleApplyCoupon = async () => {
     if (!couponCode.trim()) return
@@ -132,7 +137,10 @@ export default function CartPage() {
                 {items.map((item) => {
                   const itemTotal = Number(item.price) * item.quantity
                   const itemId = item.id as string
-                  const imageSrc = item?.images?.[0]?.url || (item?.images?.[0] as any)?.src || (item as any).image_url || '/logos/logo-portrait.png'
+                  const imageSrc = getValidImageUrl(
+                    item?.images?.[0]?.url || (item?.images?.[0] as any)?.src || (item as any).image_url,
+                    '/logos/logo-portrait.png'
+                  )
                   return (
                     <div key={itemId} className="flex items-start gap-4 py-4 first:pt-0 last:pb-0">
                       <div className="relative h-20 w-20 rounded-lg overflow-hidden bg-muted shrink-0">
@@ -285,6 +293,10 @@ export default function CartPage() {
                 <span className="text-muted-foreground">Services Fee</span>
                 <span className="font-medium">Ksh {formatCurrency(SERVICES_FEE)}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">VAT (16%)</span>
+                <span className="font-medium">Ksh {formatCurrency(tax)}</span>
+              </div>
               {appliedCoupon && (
                 <div className="flex justify-between text-emerald-600 font-medium">
                   <span className="flex items-center gap-1">
@@ -294,6 +306,49 @@ export default function CartPage() {
                   <span>- Ksh {formatCurrency(discountAmount)}</span>
                 </div>
               )}
+
+              {/* Loyalty Points Preview */}
+              {isAuthenticated && (
+                <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/20">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Gift className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                      <span className="text-sm font-medium text-amber-900 dark:text-amber-100">Your Rewards</span>
+                    </div>
+                    <Link
+                      href="/dashboard/loyalty"
+                      className="text-xs text-amber-700 dark:text-amber-300 hover:underline"
+                    >
+                      View Details
+                    </Link>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      {loyaltyLoading ? (
+                        <Skeleton className="h-5 w-16 rounded bg-amber-200/50" />
+                      ) : (
+                        <>
+                          <span className="text-lg font-bold text-amber-900 dark:text-amber-100">
+                            {loyaltyPoints.toLocaleString()}
+                          </span>
+                          <span className="text-xs text-amber-700 dark:text-amber-300">pts</span>
+                        </>
+                      )}
+                    </div>
+                    {!loyaltyLoading && loyaltyPoints > 0 && (
+                      <div className="text-right">
+                        <p className="text-xs text-amber-700 dark:text-amber-300">
+                          = Ksh {formatCurrency(Math.floor(loyaltyPoints / 2))} discount
+                        </p>
+                        <p className="text-[10px] text-amber-600 dark:text-amber-400">
+                          Redeem at checkout
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <Separator />
               <div className="flex justify-between text-base font-semibold">
                 <span>Total</span>

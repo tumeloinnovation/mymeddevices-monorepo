@@ -13,29 +13,29 @@ import { formatCurrency } from "@/lib/utils/utils";
 const slides = [
 	{
 		badgeText: "BEST SELLER",
-		announcement: "Foldable and durable design",
+		announcement: "Comfortable & easy to fold for home care",
 		title: "Pediatric Wheelchair",
-		subtitle: "BT973-35/BA021",
+		subtitle: "Certified Quality Home Care",
 		price: "13000",
 		image: "/images/Pediatric-Wheelchair.png",
 		bgColor: "bg-primary/5",
 		slug: "wheelchair-peadiatric-bt973-35-ba021",
 	},
 	{
-		badgeText: "NEW ARRIVAL",
-		announcement: "Ideal for Carpal Tunnel recovery",
+		badgeText: "TOP CHOICE",
+		announcement: "Daily joint support & fast recovery",
 		title: "Wrist & Forearm Brace",
-		subtitle: "Universal Support",
+		subtitle: "Comfortable Universal Fit",
 		price: "1920",
 		image: "/images/Wrist-and-Forearm-Brace.png",
 		bgColor: "bg-secondary/5",
 		slug: "wrist-forearm-brace-universal",
 	},
 	{
-		badgeText: "SALE",
-		announcement: "Lightweight and ergonomic",
+		badgeText: "SPECIAL OFFER",
+		announcement: "Extra stability for walking safely at home",
 		title: "Walking Stick Tripod",
-		subtitle: "Enhanced Stability",
+		subtitle: "Steady 3-Leg Base",
 		price: "2000",
 		image: "/images/Walking-Sticks-Tripod.png",
 		bgColor: "bg-accent/5",
@@ -121,19 +121,19 @@ export const HeroSection: FC = () => {
 					<div className="bg-primary/10 dark:bg-primary/5 rounded-3xl p-6 flex justify-between items-center h-full transform transition-transform duration-300 ease-in-out hover:scale-105 flex-1 min-h-[180px] md:min-h-[180px] lg:min-h-[160px]">
 						<div className="flex-1">
 							<h3 className="text-2xl font-bold text-foreground dark:text-white mb-2">
-								Mobility Solutions
+								Mobility & Walking Aids
 							</h3>
 							<Link
-								href="/categories/mobility-rehabilitation-aids"
+								href="/products?category=mobility-rehabilitation-aids"
 								className="font-medium text-muted-foreground dark:text-slate-300 hover:text-primary inline-flex items-center"
 							>
-								View more <ArrowRight size={16} className="ml-1" />
+								Explore wheelchairs & aids <ArrowRight size={16} className="ml-1" />
 							</Link>
 						</div>
 						<div className="w-28 h-28 md:w-32 md:h-32 flex items-center justify-center">
 							<Image
 								src="/images/wheelchair.png"
-								alt="Modern Wheelchair"
+								alt="Quality Wheelchair"
 								width={140}
 								height={140}
 								className="object-contain"
@@ -143,16 +143,16 @@ export const HeroSection: FC = () => {
 					<div className="bg-secondary/10 dark:bg-secondary/5 rounded-3xl p-6 flex justify-between items-center h-full transform transition-transform duration-300 ease-in-out hover:scale-105 flex-1 min-h-[180px] md:min-h-[180px] lg:min-h-[160px]">
 						<div className="flex-1">
 							<h3 className="text-2xl font-bold text-foreground dark:text-white mb-2">
-								Diagnostic Equipment
+								Blood Pressure & Vitals
 							</h3>
 							<p className="text-muted-foreground dark:text-slate-300 mb-2">
-								Up to 20% Discount
+								Accurate monitors with up to 20% off
 							</p>
 							<Link
-								href="/categories/diagnostic-devices"
+								href="/products?category=diagnostic-devices"
 								className="font-medium text-muted-foreground dark:text-slate-300 hover:text-primary inline-flex items-center"
 							>
-								View more <ArrowRight size={16} className="ml-1" />
+								View home monitors <ArrowRight size={16} className="ml-1" />
 							</Link>
 						</div>
 						<div className="w-28 h-28 md:w-32 md:h-32 flex items-center justify-center">

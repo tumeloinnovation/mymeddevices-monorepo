@@ -1,41 +1,87 @@
 import uuid
-from datetime import datetime, timezone, timedelta
-from typing import Tuple, List, Optional
-from sqlalchemy import select, func, and_, desc
+from contextlib import asynccontextmanager
+from typing import Any
+
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import BusinessRuleError
 from app.domains.customers.models.customer_profile import CustomerProfile
 from app.domains.customers.models.loyalty_ledger import LoyaltyLedger
-from app.domains.auth.models.user import User
 
 
 class LoyaltyService:
     """Service for managing customer loyalty programs."""
 
     # Tier thresholds
-    TIERS = {
-        "bronze": {"min_points": 0, "multiplier": 1.0, "benefits": ["Basic membership", "5% bonus points on purchases"]},
-        "silver": {"min_points": 1000, "multiplier": 1.25, "benefits": ["All Bronze benefits", "10% bonus points on purchases", "Early access to sales"]},
-        "gold": {"min_points": 5000, "multiplier": 1.5, "benefits": ["All Silver benefits", "15% bonus points on purchases", "Free shipping on orders over KES 5000", "Priority customer support"]},
-        "platinum": {"min_points": 15000, "multiplier": 2.0, "benefits": ["All Gold benefits", "20% bonus points on purchases", "Free shipping on all orders", "Dedicated account manager", "Exclusive products access"]},
+    TIERS: dict[str, dict[str, Any]] = {
+        "bronze": {
+            "min_points": 0,
+            "multiplier": 1.0,
+            "benefits": ["Basic membership", "5% bonus points on purchases"],
+        },
+        "silver": {
+            "min_points": 1000,
+            "multiplier": 1.25,
+            "benefits": ["All Bronze benefits", "10% bonus points on purchases", "Early access to sales"],
+        },
+        "gold": {
+            "min_points": 5000,
+            "multiplier": 1.5,
+            "benefits": [
+                "All Silver benefits",
+                "15% bonus points on purchases",
+                "Free shipping on orders over KES 5000",
+                "Priority customer support",
+            ],
+        },
+        "platinum": {
+            "min_points": 15000,
+            "multiplier": 2.0,
+            "benefits": [
+                "All Gold benefits",
+                "20% bonus points on purchases",
+                "Free shipping on all orders",
+                "Dedicated account manager",
+                "Exclusive products access",
+            ],
+        },
     }
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
+    @asynccontextmanager
+    async def _transaction(self):
+        """Use begin_nested (SAVEPOINT) when already in a transaction."""
+        if self.db.in_transaction():
+            async with self.db.begin_nested():
+                yield
+        else:
+            async with self.db.begin():
+                yield
+
+    async def _get_or_create_profile(self, customer_id: uuid.UUID, for_update: bool = False) -> CustomerProfile:
+        """Get or create customer profile if missing with optional row locking."""
+        query = select(CustomerProfile).where(CustomerProfile.user_id == customer_id)
+        if for_update:
+            query = query.with_for_update()
+        result = await self.db.execute(query)
+        profile = result.scalar_one_or_none()
+        if not profile:
+            profile = CustomerProfile(user_id=customer_id, loyalty_points=0, loyalty_tier="bronze")
+            self.db.add(profile)
+            await self.db.flush()
+        return profile
+
     async def get_summary(self, customer_id: uuid.UUID) -> dict:
         """Get loyalty summary including tier info and progress."""
-        # Get customer profile
-        result = await self.db.execute(
-            select(CustomerProfile).where(CustomerProfile.user_id == customer_id)
-        )
-        profile = result.scalar_one_or_none()
-
-        if not profile:
-            raise ValueError("Customer profile not found")
+        profile = await self._get_or_create_profile(customer_id)
 
         total_points = profile.loyalty_points or 0
-        current_tier_name = profile.loyalty_tier or "bronze"
+        current_tier_name = (profile.loyalty_tier or "bronze").lower()
+        if current_tier_name not in self.TIERS:
+            current_tier_name = "bronze"
 
         # Calculate tier progress
         current_tier = self.TIERS[current_tier_name]
@@ -55,9 +101,9 @@ class LoyaltyService:
 
             # Calculate progress percentage within current tier
             if current_idx > 0:
-                prev_tier_min = self.TIERS[tier_names[current_idx - 1]]["min_points"]
+                self.TIERS[tier_names[current_idx - 1]]["min_points"]
             else:
-                prev_tier_min = 0
+                pass
 
             current_tier_min = current_tier["min_points"]
             tier_range = next_tier["min_points"] - current_tier_min
@@ -74,82 +120,135 @@ class LoyaltyService:
             },
             "next_tier": {
                 "name": next_tier_name,
-                "points_needed": points_to_next_tier,
-            } if next_tier_name else None,
+                "multiplier": self.TIERS[next_tier_name]["multiplier"],
+                "benefits": self.TIERS[next_tier_name]["benefits"],
+            }
+            if next_tier_name
+            else None,
             "points_to_next_tier": points_to_next_tier,
-            "tier_progress": tier_progress,
+            "tier_progress": round(tier_progress, 1),
         }
 
     async def get_ledger(
         self,
         customer_id: uuid.UUID,
-        transaction_type: Optional[str] = None,
+        transaction_type: str | None = None,
         offset: int = 0,
         limit: int = 20,
-    ) -> Tuple[List[LoyaltyLedger], int]:
+    ) -> tuple[list[LoyaltyLedger], int]:
         """Get loyalty ledger entries."""
         query = select(LoyaltyLedger).where(LoyaltyLedger.customer_id == customer_id)
-
         if transaction_type:
             query = query.where(LoyaltyLedger.transaction_type == transaction_type)
-
-        # Get total count
         count_query = select(func.count()).select_from(query.subquery())
-        total_result = await self.db.execute(count_query)
-        total = total_result.scalar() or 0
-
-        # Get paginated results
-        query = query.order_by(desc(LoyaltyLedger.created_at))
-        query = query.offset(offset).limit(limit)
-
+        total = (await self.db.execute(count_query)).scalar() or 0
+        query = query.order_by(desc(LoyaltyLedger.created_at)).offset(offset).limit(limit)
         result = await self.db.execute(query)
         entries = result.scalars().all()
-
         return list(entries), total
+
+    async def get_history(
+        self,
+        customer_id: uuid.UUID,
+        page: int = 1,
+        page_size: int = 20,
+        transaction_type: str | None = None,
+    ) -> tuple[list[LoyaltyLedger], int]:
+        """Get paginated loyalty points history."""
+        offset = (page - 1) * page_size
+        return await self.get_ledger(customer_id, transaction_type, offset, page_size)
 
     async def earn_points(
         self,
         customer_id: uuid.UUID,
         points: int,
         description: str,
-        reference_type: Optional[str] = None,
-        reference_id: Optional[uuid.UUID] = None,
+        reference_type: str | None = None,
+        reference_id: uuid.UUID | None = None,
     ) -> LoyaltyLedger:
-        """Add points to customer's balance."""
-        # Get current profile
-        result = await self.db.execute(
-            select(CustomerProfile).where(CustomerProfile.user_id == customer_id)
+        """Add points to customer's balance with row-level locking."""
+        if points <= 0:
+            raise BusinessRuleError("Points to earn must be positive")
+
+        # Use transaction block for atomic points earning with row locking
+        async with self._transaction():
+            profile = await self._get_or_create_profile(customer_id, for_update=True)
+
+            current_points = profile.loyalty_points or 0
+            new_points = current_points + points
+
+            # Create ledger entry
+            entry = LoyaltyLedger(
+                id=uuid.uuid4(),
+                customer_id=customer_id,
+                transaction_type="earn",
+                points=points,
+                balance_after=new_points,
+                description=description,
+                reference_type=reference_type,
+                reference_id=reference_id,
+            )
+
+            # Update profile
+            profile.loyalty_points = new_points
+
+            # Update tier if needed
+            await self._update_tier(profile)
+
+            self.db.add(entry)
+            await self.db.flush()
+            entry_id = entry.id
+
+        # Reload and return
+        stmt = select(LoyaltyLedger).where(LoyaltyLedger.id == entry_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
+
+    async def award_points_for_order(self, order: Any) -> bool:
+        """Award loyalty points for a paid order exactly once.
+
+        Idempotent: keyed on the earn ledger entry referenced to the order, so
+        repeated OrderPaid event processing never double-awards. Returns True
+        if points were awarded this call.
+
+        Points: 1 point per KES 100 spent, multiplied by the customer's tier
+        multiplier (minimum 1 point for any order above KES 0).
+        """
+        if not order.user_id:
+            return False
+
+        existing = (
+            await self.db.execute(
+                select(LoyaltyLedger).where(
+                    LoyaltyLedger.customer_id == order.user_id,
+                    LoyaltyLedger.transaction_type == "earn",
+                    LoyaltyLedger.reference_type == "order",
+                    LoyaltyLedger.reference_id == order.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return False
+
+        from decimal import Decimal
+
+        base_points = int(order.total_amount / Decimal("100"))
+        if base_points <= 0:
+            return False
+
+        profile = await self._get_or_create_profile(order.user_id)
+        tier_config = self.TIERS.get((profile.loyalty_tier or "bronze").lower(), {})
+        multiplier = Decimal(str(tier_config.get("multiplier", 1.0)))
+        final_points = max(1, int(base_points * multiplier))
+
+        await self.earn_points(
+            customer_id=order.user_id,
+            points=final_points,
+            description=f"Earned from Order #{order.order_number}",
+            reference_type="order",
+            reference_id=order.id,
         )
-        profile = result.scalar_one_or_none()
-
-        if not profile:
-            raise ValueError("Customer profile not found")
-
-        current_points = profile.loyalty_points or 0
-        new_points = current_points + points
-
-        # Create ledger entry
-        entry = LoyaltyLedger(
-            customer_id=customer_id,
-            transaction_type="earn",
-            points=points,
-            balance_after=new_points,
-            description=description,
-            reference_type=reference_type,
-            reference_id=reference_id,
-        )
-
-        # Update profile
-        profile.loyalty_points = new_points
-
-        # Update tier if needed
-        await self._update_tier(profile)
-
-        self.db.add(entry)
-        await self.db.commit()
-        await self.db.refresh(entry)
-
-        return entry
+        return True
 
     async def redeem_points(
         self,
@@ -157,47 +256,46 @@ class LoyaltyService:
         points: int,
         description: str,
     ) -> LoyaltyLedger:
-        """Redeem points from customer's balance."""
+        """Redeem points from customer's balance with row-level locking."""
         if points <= 0:
-            raise ValueError("Points must be positive")
+            raise BusinessRuleError("Points must be positive")
 
-        # Get current profile
-        result = await self.db.execute(
-            select(CustomerProfile).where(CustomerProfile.user_id == customer_id)
-        )
-        profile = result.scalar_one_or_none()
+        # Use transaction block for atomic points redemption with row locking
+        async with self._transaction():
+            profile = await self._get_or_create_profile(customer_id, for_update=True)
 
-        if not profile:
-            raise ValueError("Customer profile not found")
+            current_points = profile.loyalty_points or 0
 
-        current_points = profile.loyalty_points or 0
+            if current_points < points:
+                raise BusinessRuleError(f"Insufficient points. You have {current_points} points.")
 
-        if current_points < points:
-            raise ValueError(f"Insufficient points. You have {current_points} points.")
+            new_points = current_points - points
 
-        new_points = current_points - points
+            # Create ledger entry
+            entry = LoyaltyLedger(
+                id=uuid.uuid4(),
+                customer_id=customer_id,
+                transaction_type="redeem",
+                points=-points,
+                balance_after=new_points,
+                description=description,
+                reference_type="redemption",
+            )
 
-        # Create ledger entry
-        entry = LoyaltyLedger(
-            customer_id=customer_id,
-            transaction_type="redeem",
-            points=-points,
-            balance_after=new_points,
-            description=description,
-            reference_type="redemption",
-        )
+            # Update profile
+            profile.loyalty_points = new_points
 
-        # Update profile
-        profile.loyalty_points = new_points
+            # Update tier if needed
+            await self._update_tier(profile)
 
-        # Update tier if needed
-        await self._update_tier(profile)
+            self.db.add(entry)
+            await self.db.flush()
+            entry_id = entry.id
 
-        self.db.add(entry)
-        await self.db.commit()
-        await self.db.refresh(entry)
-
-        return entry
+        # Reload and return
+        stmt = select(LoyaltyLedger).where(LoyaltyLedger.id == entry_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
     async def _update_tier(self, profile: CustomerProfile):
         """Update customer's loyalty tier based on points."""
@@ -206,7 +304,7 @@ class LoyaltyService:
         # Find appropriate tier
         new_tier = "bronze"
         for tier_name, tier_config in reversed(list(self.TIERS.items())):
-            if points >= tier_config["min_points"]:
+            if points >= int(tier_config["min_points"]):
                 new_tier = tier_name
                 break
 
@@ -220,45 +318,43 @@ class LoyaltyService:
         admin_user_id: uuid.UUID,
     ) -> LoyaltyLedger:
         """Manually adjust points (admin only)."""
-        # Get current profile
-        result = await self.db.execute(
-            select(CustomerProfile).where(CustomerProfile.user_id == customer_id)
-        )
-        profile = result.scalar_one_or_none()
+        # Use transaction block for atomic points adjustment
+        async with self.db.begin():
+            profile = await self._get_or_create_profile(customer_id)
 
-        if not profile:
-            raise ValueError("Customer profile not found")
+            current_points = profile.loyalty_points or 0
+            new_points = current_points + points  # Can be negative
 
-        current_points = profile.loyalty_points or 0
-        new_points = current_points + points  # Can be negative
+            if new_points < 0:
+                raise BusinessRuleError("Cannot reduce points below zero")
 
-        if new_points < 0:
-            raise ValueError("Cannot reduce points below zero")
+            # Create ledger entry
+            entry = LoyaltyLedger(
+                customer_id=customer_id,
+                transaction_type="adjust",
+                points=points,
+                balance_after=new_points,
+                description=description,
+                reference_type="manual",
+                reference_id=admin_user_id,
+            )
 
-        # Create ledger entry
-        entry = LoyaltyLedger(
-            customer_id=customer_id,
-            transaction_type="adjust",
-            points=points,
-            balance_after=new_points,
-            description=description,
-            reference_type="manual",
-            reference_id=admin_user_id,
-        )
+            # Update profile
+            profile.loyalty_points = new_points
 
-        # Update profile
-        profile.loyalty_points = new_points
+            # Update tier if needed
+            await self._update_tier(profile)
 
-        # Update tier if needed
-        await self._update_tier(profile)
+            self.db.add(entry)
+            entry_id = entry.id
 
-        self.db.add(entry)
-        await self.db.commit()
-        await self.db.refresh(entry)
+        # Transaction commits automatically
+        # Reload and return
+        stmt = select(LoyaltyLedger).where(LoyaltyLedger.id == entry_id)
+        result = await self.db.execute(stmt)
+        return result.scalar_one()
 
-        return entry
-
-    async def get_points_expiry(self, customer_id: uuid.UUID) -> List[dict]:
+    async def get_points_expiry(self, customer_id: uuid.UUID) -> list[dict]:
         """Get points that will expire soon (if expiry is enabled)."""
         # For now, return empty list as points don't expire
         # This can be implemented later if needed

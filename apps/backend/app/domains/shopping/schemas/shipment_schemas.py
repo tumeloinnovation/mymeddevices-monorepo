@@ -1,28 +1,31 @@
-from pydantic import BaseModel
-from typing import Optional, Any
-from datetime import datetime
 import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict
+
 
 class ShipmentBase(BaseModel):
     order_id: uuid.UUID
-    tracking_number: Optional[str] = None
-    carrier: Optional[str] = None
+    tracking_number: str | None = None
+    carrier: str | None = None
     status: str = "pending"
-    estimated_delivery: Optional[datetime] = None
-    shipping_details: Optional[dict] = None
+    estimated_delivery: datetime | None = None
+    shipping_details: dict | None = None
+
 
 class ShipmentCreate(BaseModel):
     order_id: uuid.UUID
     carrier: str
-    tracking_number: Optional[str] = None
+    tracking_number: str | None = None
+
 
 class ShipmentResponse(ShipmentBase):
     id: uuid.UUID
     created_at: datetime
-    updated_at: Optional[datetime]
+    updated_at: datetime | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
 
 class MockShipmentProcess(BaseModel):
     order_id: uuid.UUID

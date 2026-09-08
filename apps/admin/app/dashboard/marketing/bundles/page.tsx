@@ -1,23 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   Package,
   Plus,
   Search,
-  Filter,
   MoreVertical,
   Boxes,
   CheckCircle2,
-  TrendingUp,
   DollarSign,
   Layers,
-  Sparkles,
   Trash2,
-  Edit,
+  Eye,
+  Loader2,
   Power,
   PowerOff,
-  Eye,
 } from "lucide-react";
 import DashboardLayout from "@/components/dashboard-layout";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,311 +39,330 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { toast } from "sonner";
 
-interface BundleDeal {
+// Types for Bundle API
+interface BundleComponent {
   id: string;
-  title: string;
-  description: string;
-  items_included: string[];
-  original_price_ksh: number;
-  bundle_price_ksh: number;
-  stock_packages: number;
-  sold_count: number;
-  is_active: boolean;
+  product_id: string;
+  product_name: string;
+  product_slug: string;
+  quantity: number;
+  sort_order: number;
 }
 
-const INITIAL_BUNDLES: BundleDeal[] = [
-  {
-    id: "bundle-1",
-    title: "ICU Critical Care Starter Package",
-    description: "Complete ICU setup including patient monitor, defibrillator, and dual-flow oxygen concentrator.",
-    items_included: [
-      "1x Mindray Patient Monitor ePM 10",
-      "1x Medtronic Portable Defibrillator",
-      "1x 10L Dual-Flow Oxygen Concentrator",
-    ],
-    original_price_ksh: 480000,
-    bundle_price_ksh: 395000,
-    stock_packages: 15,
-    sold_count: 12,
-    is_active: true,
-  },
-  {
-    id: "bundle-2",
-    title: "Clinic Diagnostic & Screening Combo",
-    description: "All-in-one diagnostic setup for outpatient clinics and health centers.",
-    items_included: [
-      "1x Contec 12-Lead ECG Machine",
-      "2x Digital Blood Pressure Monitors",
-      "5x Fingertip Pulse Oximeters",
-      "1x Non-Contact Infrared Thermometer",
-    ],
-    original_price_ksh: 185000,
-    bundle_price_ksh: 149000,
-    stock_packages: 30,
-    sold_count: 24,
-    is_active: true,
-  },
-  {
-    id: "bundle-3",
-    title: "Surgical Theatre Consumable Box (Bulk 50x)",
-    description: "Sterile surgical drapes, gowns, gloves, and scalpels for operating theaters.",
-    items_included: [
-      "50x Sterile Surgical Gown Sets",
-      "10x Boxes Latex Gloves (100s)",
-      "5x Disposable Scalpel Boxes",
-    ],
-    original_price_ksh: 75000,
-    bundle_price_ksh: 58000,
-    stock_packages: 50,
-    sold_count: 45,
-    is_active: true,
-  },
-];
+interface Bundle {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  discount_type: "FIXED_AMOUNT" | "PERCENTAGE";
+  discount_value: number;
+  funding_source: string;
+  is_active: boolean;
+  is_available: boolean;
+  gross_customer_price: number | null;
+  discount_amount: number | null;
+  net_customer_price: number | null;
+  components: BundleComponent[];
+  created_at: string;
+  updated_at: string;
+}
 
 export default function BundleDealsPage() {
-  const [bundles, setBundles] = useState<BundleDeal[]>(INITIAL_BUNDLES);
+  const router = useRouter();
+  const [bundles, setBundles] = useState<Bundle[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedBundle, setSelectedBundle] = useState<BundleDeal | null>(null);
+  const [selectedBundle, setSelectedBundle] = useState<Bundle | null>(null);
 
-  const [formData, setFormData] = useState({
-    title: "",
-    description: "",
-    items_included: "1x Diagnostic Monitor\n2x Oxygen Sensors\n1x Power Adapter",
-    original_price_ksh: "150000",
-    bundle_price_ksh: "120000",
-    stock_packages: "20",
-  });
+  // Get auth token
+  const getAuthToken = () => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("token") || "";
+    }
+    return "";
+  };
+
+  // Fetch bundles
+  const fetchBundles = async () => {
+    try {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/bundles`, {
+        headers: {
+          Authorization: `Bearer ${getAuthToken()}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setBundles(data);
+      } else {
+        console.error("Failed to fetch bundles:", response.statusText);
+      }
+    } catch (error) {
+      console.error("Failed to fetch bundles:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBundles();
+  }, []);
 
   const filteredBundles = bundles.filter(
     (b) =>
-      b.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      b.description.toLowerCase().includes(searchQuery.toLowerCase())
+      b.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (b.description && b.description.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const activeCount = bundles.filter((b) => b.is_active).length;
-  const totalRevenue = bundles.reduce((sum, b) => sum + b.sold_count * b.bundle_price_ksh, 0);
-  const totalPackagesSold = bundles.reduce((sum, b) => sum + b.sold_count, 0);
+  const totalComponents = bundles.reduce((sum, b) => sum + (b.components?.length || 0), 0);
 
-  const handleCreateBundle = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.title) {
-      toast.error("Bundle title is required");
-      return;
+  const handleToggleActive = async (bundle: Bundle) => {
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/bundles/${bundle.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${getAuthToken()}`,
+          },
+          body: JSON.stringify({ is_active: !bundle.is_active }),
+        }
+      );
+
+      if (response.ok) {
+        setBundles((prev) =>
+          prev.map((b) => (b.id === bundle.id ? { ...b, is_active: !b.is_active } : b))
+        );
+        toast.success("Bundle status updated");
+      } else {
+        toast.error("Failed to update bundle status");
+      }
+    } catch (error) {
+      toast.error("Failed to update bundle status");
     }
-
-    const items = formData.items_included.split("\n").filter((i) => i.trim().length > 0);
-
-    const newBundle: BundleDeal = {
-      id: `bundle-${Date.now()}`,
-      title: formData.title,
-      description: formData.description,
-      items_included: items,
-      original_price_ksh: parseFloat(formData.original_price_ksh) || 100000,
-      bundle_price_ksh: parseFloat(formData.bundle_price_ksh) || 85000,
-      stock_packages: parseInt(formData.stock_packages) || 10,
-      sold_count: 0,
-      is_active: true,
-    };
-
-    setBundles([newBundle, ...bundles]);
-    setIsModalOpen(false);
-    toast.success("Bundle Package Deal created!");
-    setFormData({
-      title: "",
-      description: "",
-      items_included: "1x Diagnostic Monitor\n2x Oxygen Sensors\n1x Power Adapter",
-      original_price_ksh: "150000",
-      bundle_price_ksh: "120000",
-      stock_packages: "20",
-    });
   };
 
-  const handleToggleActive = (id: string) => {
-    setBundles((prev) =>
-      prev.map((b) => (b.id === id ? { ...b, is_active: !b.is_active } : b))
+  const handleDelete = async (bundleId: string) => {
+    if (!confirm("Are you sure you want to delete this bundle?")) return;
+
+    try {
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL}/api/v1/admin/bundles/${bundleId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${getAuthToken()}`,
+          },
+        }
+      );
+
+      if (response.ok) {
+        setBundles((prev) => prev.filter((b) => b.id !== bundleId));
+        toast.success("Bundle deleted successfully");
+      } else {
+        toast.error("Failed to delete bundle");
+      }
+    } catch (error) {
+      toast.error("Failed to delete bundle");
+    }
+  };
+
+  if (loading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </DashboardLayout>
     );
-    toast.success("Bundle deal status updated");
-  };
-
-  const handleDelete = (id: string) => {
-    setBundles((prev) => prev.filter((b) => b.id !== id));
-    toast.success("Bundle package deal deleted");
-  };
+  }
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-8">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
+          <div className="space-y-1">
             <h1 className="text-3xl font-bold tracking-tight">Bundle Deals & Equipment Packages</h1>
             <p className="text-muted-foreground text-sm">
-              Combine complementary medical devices and consumables into discounted package deals for clinics.
+              Create and manage merchandising bundles with automatic discount allocation.
             </p>
           </div>
-          <Button onClick={() => setIsModalOpen(true)} className="bg-primary text-primary-foreground">
-            <Plus className="mr-2 h-4 w-4" /> Create Bundle Package
+          <Button onClick={() => router.push("/dashboard/marketing/bundles/new")} className="bg-primary text-primary-foreground" size="lg">
+            <Plus className="mr-2 h-4 w-4" /> Create Bundle
           </Button>
         </div>
 
-        {/* Analytics Header Cards */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <Card className="border shadow-xs">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase">Active Bundles</CardTitle>
+        {/* Analytics Header Cards - Full Width */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="border shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Active Bundles</CardTitle>
               <Boxes className="h-4 w-4 text-primary" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{activeCount}</div>
+              <div className="text-3xl font-bold tracking-tight">{activeCount}</div>
               <p className="text-xs text-muted-foreground mt-1">Live equipment packages</p>
             </CardContent>
           </Card>
 
-          <Card className="border shadow-xs">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase">Packages Sold</CardTitle>
-              <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+          <Card className="border shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Total Bundles</CardTitle>
+              <Layers className="h-4 w-4 text-blue-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-emerald-600">{totalPackagesSold}</div>
-              <p className="text-xs text-muted-foreground mt-1">Clinic bundle orders</p>
+              <div className="text-3xl font-bold tracking-tight">{bundles.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">All merchandising bundles</p>
             </CardContent>
           </Card>
 
-          <Card className="border shadow-xs">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase">Bundle Sales Revenue</CardTitle>
-              <TrendingUp className="h-4 w-4 text-blue-500" />
+          <Card className="border shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Components</CardTitle>
+              <Package className="h-4 w-4 text-purple-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-blue-600">KSh {totalRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">Total revenue generated</p>
+              <div className="text-3xl font-bold tracking-tight">{totalComponents}</div>
+              <p className="text-xs text-muted-foreground mt-1">Total component products</p>
             </CardContent>
           </Card>
 
-          <Card className="border shadow-xs">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-xs font-medium text-muted-foreground uppercase">Average Buyer Savings</CardTitle>
-              <DollarSign className="h-4 w-4 text-purple-500" />
+          <Card className="border shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">Avg Discount</CardTitle>
+              <DollarSign className="h-4 w-4 text-emerald-500" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-purple-600">18.5% OFF</div>
-              <p className="text-xs text-muted-foreground mt-1">Versus buying items individually</p>
+              <div className="text-3xl font-bold tracking-tight">
+                {bundles.length > 0
+                  ? Math.round(
+                      bundles.reduce(
+                        (sum, b) => sum + (b.discount_type === "PERCENTAGE" ? b.discount_value : 0),
+                        0
+                      ) / bundles.length
+                    )
+                  : 0}
+                %
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Average bundle discount</p>
             </CardContent>
           </Card>
         </div>
 
-        {/* Table & Search */}
-        <Card className="border shadow-xs">
-          <CardHeader className="pb-3">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        {/* Table Card - Full Width */}
+        <Card className="border shadow-sm">
+          <CardHeader className="space-y-4 pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="relative flex-1 max-w-lg">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search bundle packages..."
+                  placeholder="Search bundles by name or description..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-8"
+                  className="pl-9 h-10"
                 />
               </div>
             </div>
           </CardHeader>
 
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="w-full overflow-x-auto">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Bundle Title & Description</TableHead>
-                    <TableHead>Included Items</TableHead>
-                    <TableHead>Pricing & Savings</TableHead>
-                    <TableHead>Stock & Claims</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
+                  <TableRow className="border-b bg-muted/50 hover:bg-muted/50">
+                    <TableHead className="font-semibold w-[30%]">Bundle Name & Description</TableHead>
+                    <TableHead className="font-semibold w-[12%]">Components</TableHead>
+                    <TableHead className="font-semibold w-[20%]">Discount & Pricing</TableHead>
+                    <TableHead className="font-semibold w-[18%]">Status</TableHead>
+                    <TableHead className="font-semibold text-right w-[20%]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredBundles.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                        No bundle deals found.
+                      <TableCell colSpan={5} className="h-40 text-center text-muted-foreground">
+                        {loading ? (
+                          <div className="flex items-center justify-center gap-2">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Loading bundles...
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2">
+                            <Package className="h-8 w-8 text-muted-foreground/50" />
+                            <p>No bundles found. Create your first bundle to get started.</p>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ) : (
                     filteredBundles.map((b) => {
-                      const savingsKsh = b.original_price_ksh - b.bundle_price_ksh;
-                      const savingsPct = Math.round((savingsKsh / b.original_price_ksh) * 100);
+                      const discountDisplay =
+                        b.discount_type === "PERCENTAGE"
+                          ? `${b.discount_value}%`
+                          : `Ksh ${b.discount_value?.toLocaleString()}`;
+
                       return (
-                        <TableRow key={b.id} className="hover:bg-muted/50 transition-colors">
-                          <TableCell>
-                            <div className="font-semibold text-foreground">{b.title}</div>
-                            <p className="text-xs text-muted-foreground line-clamp-1">{b.description}</p>
+                        <TableRow key={b.id} className="hover:bg-muted/30 transition-colors border-b">
+                          <TableCell className="py-4">
+                            <div className="font-semibold text-foreground">{b.name}</div>
+                            <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">{b.description || b.slug}</p>
                           </TableCell>
-                          <TableCell>
-                            <div className="space-y-1">
-                              {b.items_included.map((item, idx) => (
-                                <Badge key={idx} variant="outline" className="text-[10px] block font-normal w-fit">
-                                  {item}
-                                </Badge>
-                              ))}
-                            </div>
+                          <TableCell className="py-4">
+                            <Badge variant="outline" className="text-xs font-medium">
+                              {b.components?.length || 0} items
+                            </Badge>
                           </TableCell>
-                          <TableCell>
-                            <div className="font-bold text-sm text-foreground">
-                              KSh {b.bundle_price_ksh.toLocaleString()}
-                            </div>
-                            <div className="text-xs text-muted-foreground line-through">
-                              KSh {b.original_price_ksh.toLocaleString()}
-                            </div>
-                            <div className="text-[10px] font-bold text-emerald-600">
-                              Save KSh {savingsKsh.toLocaleString()} ({savingsPct}%)
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-sm">
-                            <span className="font-semibold">{b.sold_count}</span> / {b.stock_packages} sold
-                          </TableCell>
-                          <TableCell>
-                            {b.is_active ? (
-                              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/20">
-                                Active
-                              </Badge>
-                            ) : (
-                              <Badge variant="secondary" className="text-muted-foreground">
-                                Inactive
-                              </Badge>
+                          <TableCell className="py-4">
+                            <div className="font-bold text-sm text-emerald-600">{discountDisplay} OFF</div>
+                            {b.net_customer_price && (
+                              <div className="text-xs text-muted-foreground mt-0.5">
+                                Ksh {b.net_customer_price.toLocaleString()} bundle price
+                              </div>
                             )}
                           </TableCell>
-                          <TableCell className="text-right">
+                          <TableCell className="py-4">
+                            <div className="flex items-center gap-2">
+                              {b.is_active ? (
+                                <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 text-xs font-medium">
+                                  Active
+                                </Badge>
+                              ) : (
+                                <Badge variant="secondary" className="text-muted-foreground text-xs font-medium">
+                                  Inactive
+                                </Badge>
+                              )}
+                              {!b.is_available && (
+                                <Badge variant="outline" className="text-amber-600 border-amber-600/30 text-xs font-medium">
+                                  Unavailable
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell className="py-4 text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="icon">
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
                                   <MoreVertical className="h-4 w-4" />
                                 </Button>
                               </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                <DropdownMenuItem onClick={() => setSelectedBundle(b)}>
-                                  <Eye className="mr-2 h-4 w-4" /> View Package Items
+                              <DropdownMenuContent align="end" className="w-[160px]">
+                                <DropdownMenuLabel className="text-xs">Actions</DropdownMenuLabel>
+                                <DropdownMenuItem onClick={() => setSelectedBundle(b)} className="cursor-pointer">
+                                  <Eye className="mr-2 h-4 w-4" /> View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleToggleActive(b.id)}>
+                                <DropdownMenuItem onClick={() => handleToggleActive(b)} className="cursor-pointer">
                                   {b.is_active ? (
                                     <>
                                       <PowerOff className="mr-2 h-4 w-4 text-amber-500" /> Deactivate
@@ -359,9 +376,9 @@ export default function BundleDealsPage() {
                                 <DropdownMenuSeparator />
                                 <DropdownMenuItem
                                   onClick={() => handleDelete(b.id)}
-                                  className="text-destructive focus:text-destructive"
+                                  className="text-destructive focus:text-destructive cursor-pointer"
                                 >
-                                  <Trash2 className="mr-2 h-4 w-4" /> Delete Package
+                                  <Trash2 className="mr-2 h-4 w-4" /> Delete Bundle
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -377,123 +394,61 @@ export default function BundleDealsPage() {
         </Card>
       </div>
 
-      {/* Create Slide-over Sheet */}
-      <Sheet open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <SheetContent side="right" className="sm:max-w-md overflow-y-auto p-6">
-          <form onSubmit={handleCreateBundle} className="space-y-6">
-            <SheetHeader>
-              <SheetTitle className="flex items-center gap-2 text-xl">
-                <Boxes className="h-5 w-5 text-primary" /> Create Equipment Bundle Package
-              </SheetTitle>
-              <SheetDescription>
-                Group multiple medical items together and set a special discounted bundle price.
-              </SheetDescription>
-            </SheetHeader>
-
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="b_title">Bundle Title *</Label>
-                <Input
-                  id="b_title"
-                  placeholder="e.g. Clinic Outpatient Diagnostic Suite"
-                  value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="b_desc">Package Overview</Label>
-                <Textarea
-                  id="b_desc"
-                  rows={2}
-                  placeholder="e.g. Complete outpatient kit designed for small clinics and health centers."
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="b_items">Bundled Items List (One per line)</Label>
-                <Textarea
-                  id="b_items"
-                  rows={4}
-                  value={formData.items_included}
-                  onChange={(e) => setFormData({ ...formData, items_included: e.target.value })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="orig_price">Original Total (KSh)</Label>
-                <Input
-                  id="orig_price"
-                  type="number"
-                  value={formData.original_price_ksh}
-                  onChange={(e) => setFormData({ ...formData, original_price_ksh: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="bundle_price">Bundle Price (KSh)</Label>
-                <Input
-                  id="bundle_price"
-                  type="number"
-                  value={formData.bundle_price_ksh}
-                  onChange={(e) => setFormData({ ...formData, bundle_price_ksh: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="stock_pkgs">Stock Cap</Label>
-                <Input
-                  id="stock_pkgs"
-                  type="number"
-                  value={formData.stock_packages}
-                  onChange={(e) => setFormData({ ...formData, stock_packages: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <SheetFooter className="flex-row justify-end gap-3 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={() => setIsModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" className="bg-primary text-primary-foreground">
-                Publish Bundle Package
-              </Button>
-            </SheetFooter>
-          </form>
-        </SheetContent>
-      </Sheet>
-
-      {/* Items Preview Slide-over Sheet */}
+      {/* View Details Dialog */}
       {selectedBundle && (
-        <Sheet open={!!selectedBundle} onOpenChange={() => setSelectedBundle(null)}>
-          <SheetContent side="right" className="sm:max-w-md p-6">
-            <SheetHeader>
-              <SheetTitle>{selectedBundle.title}</SheetTitle>
-              <SheetDescription>{selectedBundle.description}</SheetDescription>
-            </SheetHeader>
-            <div className="space-y-4 py-4">
-              <Label className="text-xs font-semibold">Included Items Breakdown:</Label>
-              <div className="space-y-2 border rounded-lg p-3 bg-muted/30">
-                {selectedBundle.items_included.map((item, idx) => (
-                  <div key={idx} className="text-xs flex items-center gap-2">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
-                    <span>{item}</span>
-                  </div>
-                ))}
+        <Dialog open={!!selectedBundle} onOpenChange={() => setSelectedBundle(null)}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader className="space-y-2 pb-4">
+              <DialogTitle className="text-xl">{selectedBundle.name}</DialogTitle>
+              <DialogDescription className="text-sm">{selectedBundle.description || selectedBundle.slug}</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-5 py-2">
+              {/* Discount Section */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Discount</Label>
+                <div className="text-2xl font-bold text-emerald-600">
+                  {selectedBundle.discount_type === "PERCENTAGE"
+                    ? `${selectedBundle.discount_value}%`
+                    : `Ksh ${selectedBundle.discount_value?.toLocaleString()}`}{" "}
+                  OFF
+                </div>
               </div>
-              <div className="flex justify-between items-center text-xs border-t pt-3">
-                <span>Bundle Offer Price:</span>
-                <span className="font-bold text-sm text-primary">KSh {selectedBundle.bundle_price_ksh.toLocaleString()}</span>
+
+              {/* Components Section */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Components ({selectedBundle.components?.length || 0})
+                </Label>
+                <div className="space-y-2 border rounded-lg p-4 bg-muted/30 max-h-64 overflow-y-auto">
+                  {selectedBundle.components?.map((comp) => (
+                    <div key={comp.id} className="flex items-center justify-between py-2 border-b last:border-b-0 last:pb-0">
+                      <div className="flex items-center gap-3">
+                        <CheckCircle2 className="h-4 w-4 text-emerald-500 flex-shrink-0" />
+                        <span className="text-sm font-medium">{comp.product_name}</span>
+                      </div>
+                      <Badge variant="outline" className="text-xs">×{comp.quantity}</Badge>
+                    </div>
+                  ))}
+                </div>
               </div>
+
+              {/* Bundle Price */}
+              {selectedBundle.net_customer_price && (
+                <div className="flex justify-between items-center pt-3 border-t">
+                  <span className="text-sm font-medium">Bundle Price:</span>
+                  <span className="font-bold text-lg text-primary">
+                    Ksh {selectedBundle.net_customer_price.toLocaleString()}
+                  </span>
+                </div>
+              )}
             </div>
-            <SheetFooter>
-              <Button variant="outline" onClick={() => setSelectedBundle(null)}>
+            <DialogFooter className="pt-4 border-t">
+              <Button variant="outline" onClick={() => setSelectedBundle(null)} className="min-w-[100px]">
                 Close
               </Button>
-            </SheetFooter>
-          </SheetContent>
-        </Sheet>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       )}
     </DashboardLayout>
   );

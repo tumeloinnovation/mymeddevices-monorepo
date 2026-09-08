@@ -5,11 +5,11 @@ Revises: 0627d3c3e41e
 Create Date: 2026-06-17 22:32:15.214187
 
 """
-from typing import Sequence, Union
+from collections.abc import Sequence
+from typing import Union
 
-from alembic import op
 import sqlalchemy as sa
-
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = 'b4d0b13eb535'

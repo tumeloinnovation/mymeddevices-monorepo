@@ -1,20 +1,20 @@
-from typing import Annotated, Optional
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.responses import success_response, ApiSuccessResponse
 from app.core.dependencies import get_current_user
+from app.core.responses import ApiSuccessResponse, success_response
 from app.domains.auth.models.user import User
 from app.domains.tickets.schemas.ticket_schemas import (
     TicketCreate,
-    TicketUpdate,
-    TicketReplyCreate,
-    TicketResponse,
     TicketDetailResponse,
     TicketListResponse,
+    TicketReplyCreate,
     TicketReplyResponse,
+    TicketResponse,
 )
 from app.domains.tickets.services.ticket_service import TicketService
 
@@ -38,16 +38,20 @@ async def list_my_tickets(
     current_user: Annotated[User, Depends(get_current_user)],
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    status: Optional[str] = Query(None),
-    search: Optional[str] = Query(None),
+    status: str | None = Query(None),
+    search: str | None = Query(None),
+    customer_id: uuid.UUID | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """List my support tickets."""
+    """List support tickets. Staff can view all or filter by customer; customers view their own."""
     service = TicketService(db)
     offset = (page - 1) * limit
 
+    is_staff = current_user.role in ("admin", "worker")
+    target_customer_id = customer_id if is_staff else current_user.id
+
     tickets, total = await service.list_tickets(
-        customer_id=current_user.id,
+        customer_id=target_customer_id,
         status=status,
         search=search,
         offset=offset,
@@ -70,22 +74,21 @@ async def get_ticket_details(
     current_user: Annotated[User, Depends(get_current_user)],
     db: AsyncSession = Depends(get_db),
 ):
-    """Get ticket details with replies."""
+    """Get ticket details with replies. Staff can view all replies; customers only see public replies."""
     service = TicketService(db)
     ticket = await service.get_ticket(ticket_id)
 
     if not ticket:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
-    # Verify ownership
-    if ticket.customer_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+    is_staff = current_user.role in ("admin", "worker")
+    if not is_staff and ticket.customer_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     replies = await service.get_replies(ticket_id)
+    if not is_staff:
+        # Redact internal staff notes from regular customer responses
+        replies = [r for r in replies if r.is_internal != "yes"]
 
     return success_response(
         TicketDetailResponse(
@@ -107,22 +110,20 @@ async def add_reply(
     ticket = await service.get_ticket(ticket_id)
 
     if not ticket:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
-    # Verify ownership
-    if ticket.customer_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+    is_staff = current_user.role in ("admin", "worker")
+    if not is_staff and ticket.customer_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    # Customers cannot create internal notes
+    if not is_staff and reply_in.is_internal == "yes":
+        reply_in.is_internal = "no"
 
     reply = await service.add_reply(ticket_id, current_user.id, reply_in)
 
     if not reply:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to add reply"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to add reply")
 
     return success_response(_reply_to_response(reply, ticket))
 
@@ -138,22 +139,16 @@ async def close_ticket(
     ticket = await service.get_ticket(ticket_id)
 
     if not ticket:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
 
-    # Verify ownership
-    if ticket.customer_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+    is_staff = current_user.role in ("admin", "worker")
+    if not is_staff and ticket.customer_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
     closed_ticket = await service.close_ticket(ticket_id, current_user.id)
 
     if not closed_ticket:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to close ticket"
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Failed to close ticket")
 
     return success_response(_ticket_to_response(closed_ticket))
 
@@ -178,7 +173,7 @@ def _ticket_to_response(ticket) -> TicketResponse:
         created_at=ticket.created_at,
         updated_at=ticket.updated_at,
         last_reply_at=ticket.last_reply_at,
-        reply_count=len(ticket.replies) if ticket.replies else 0,
+        reply_count=len(ticket.replies) if ("replies" in ticket.__dict__ and ticket.replies) else 0,
     )
 
 
@@ -188,8 +183,11 @@ def _reply_to_response(reply, ticket) -> TicketReplyResponse:
     user_role = None
 
     if reply.user:
-        user_name = reply.user.display_name or reply.user.email
-        if reply.user.role == "admin":
+        full_name = (
+            f"{getattr(reply.user, 'first_name', '') or ''} {getattr(reply.user, 'last_name', '') or ''}".strip()
+        )
+        user_name = full_name or getattr(reply.user, "email", None) or "User"
+        if reply.user.role in ("admin", "worker"):
             user_role = "Support Agent"
         elif reply.user.role == "vendor":
             user_role = "Vendor"

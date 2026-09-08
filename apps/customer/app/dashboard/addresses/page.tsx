@@ -4,23 +4,21 @@ import { useState } from 'react';
 import { ErrorBoundary } from '@/components/ui/error-boundary';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Loader2 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { useAddressStore, type Address } from '@mymeddevices/core/lib/store/useAddressStore';
-import { AddressCard, AddAddressCard } from './_components/address-card';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Plus,
+  Loader2,
+  MapPin,
+  ShieldCheck,
+  Building2,
+  Truck,
+  Sparkles,
+} from 'lucide-react';
+import { useAddressStore, type Address } from '@mymeddevices/shared-core';
+import { AddressCard } from './_components/address-card';
 import { AddressesEmptyState } from './_components/addresses-empty-state';
 import { DeleteAddressDialog } from './_components/delete-address-dialog';
 import DeliveryAddressSheet from '@/components/maps/DeliveryAddressSheet';
-
-const containerVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: {
-      staggerChildren: 0.1,
-    },
-  },
-};
 
 function AddressesPage() {
   const { addresses, hydrated, removeAddress, setDefaultAddress } = useAddressStore();
@@ -38,11 +36,9 @@ function AddressesPage() {
   const handleDeleteConfirm = () => {
     if (!addressToDelete) return;
 
-    // Check if it's a default address
-    const isDefault = addresses.some(a => a.id === addressToDelete.id && a.isDefault);
+    const isDefault = addresses.some((a) => a.id === addressToDelete.id && a.isDefault);
 
     if (isDefault && addresses.length === 1) {
-      // Cannot delete the only default address
       return;
     }
 
@@ -62,84 +58,120 @@ function AddressesPage() {
     setDefaultAddress(addressId);
   };
 
-  const handleNewAddress = (address: Address) => {
-    // The DeliveryAddressSheet handles adding to the store
-    // We just need to close the sheet
+  const handleNewAddress = () => {
     setAddSheetOpen(false);
+    setEditingAddress(undefined);
   };
 
   const handleEditAddress = (address: Address) => {
     setEditingAddress(address);
-    // In a full implementation, this would open a pre-filled sheet
-    // For now, we'll just show a message
-    console.log('Edit address:', address);
+    setAddSheetOpen(true);
   };
 
-  // Get default shipping and billing addresses
-  // For now, we use the single isDefault flag
-  const defaultAddress = addresses.find((a: Address) => a.isDefault);
-
   const hasAddresses = hydrated && addresses.length > 0;
+  const defaultAddress = addresses.find((a) => a.isDefault) || addresses[0];
 
   return (
-    <div className="space-y-6">
-      {/* Page Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground">My Addresses</h1>
-          <p className="text-muted-foreground mt-1">
-            Manage your delivery addresses for faster checkout
-          </p>
-        </div>
-        <Button onClick={() => setAddSheetOpen(true)} className="gap-2">
-          <MapPin className="h-4 w-4" />
-          Add Address
-        </Button>
-      </div>
+    <div className="space-y-6 max-w-5xl mx-auto">
+      {/* 1. Header Banner */}
+      <Card className="border border-border/80 shadow-xs overflow-hidden rounded-2xl bg-card">
+        <div className="p-6 md:p-8 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/15 text-primary border border-primary/20">
+                <MapPin className="h-3.5 w-3.5" />
+                <span>Delivery & Dispatch Management</span>
+              </div>
+              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+                Shipping Addresses
+              </h1>
+              <p className="text-xs sm:text-sm text-muted-foreground max-w-xl">
+                Manage your hospital, clinic, practice, and residential delivery destinations for rapid checkout and courier tracking.
+              </p>
+            </div>
 
-      {/* Content */}
-      {!hydrated ? (
-        <Card>
-          <CardContent className="flex items-center justify-center py-16">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </CardContent>
-        </Card>
-      ) : !hasAddresses ? (
-        <AddressesEmptyState onAdd={() => setAddSheetOpen(true)} />
-      ) : (
-        <motion.div
-          variants={containerVariants}
-          initial="hidden"
-          animate="visible"
-          className="grid gap-4 md:grid-cols-2 lg:grid-cols-3"
-        >
-          <AnimatePresence mode="popLayout">
-            {addresses.map((address) => (
-              <AddressCard
-                key={address.id}
-                address={address}
-                isDefaultShipping={address.isDefault}
-                isDefaultBilling={address.isDefault}
-                onSetDefaultShipping={() => handleSetDefault(address.id!)}
-                onEdit={() => handleEditAddress(address)}
-                onDelete={() => handleDeleteClick(address)}
-              />
-            ))}
-          </AnimatePresence>
-
-          {/* Add Card */}
-          <div className="md:col-span-1">
-            <AddAddressCard onClick={() => setAddSheetOpen(true)} />
+            <Button
+              onClick={() => {
+                setEditingAddress(undefined);
+                setAddSheetOpen(true);
+              }}
+              className="gap-2 rounded-xl font-semibold shrink-0 shadow-xs self-start sm:self-auto"
+            >
+              <Plus className="h-4 w-4" />
+              <span>Add New Address</span>
+            </Button>
           </div>
-        </motion.div>
+
+          {/* Quick Summary Chips */}
+          <div className="mt-5 pt-4 border-t border-border/50 flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-border/60 bg-background text-foreground shadow-2xs">
+              <Building2 className="h-3.5 w-3.5 text-primary" />
+              <span className="text-muted-foreground">Saved Locations:</span>
+              <span className="font-bold">{hydrated ? addresses.length : '...'}</span>
+            </div>
+
+            {defaultAddress && (
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-primary/20 bg-primary/10 text-primary shadow-2xs max-w-sm truncate">
+                <Truck className="h-3.5 w-3.5 shrink-0" />
+                <span className="text-muted-foreground">Default:</span>
+                <span className="font-bold truncate">{defaultAddress.address}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      {/* 2. Main Address List in 2 columns */}
+      {!hydrated ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Skeleton className="h-44 w-full rounded-2xl" />
+          <Skeleton className="h-44 w-full rounded-2xl" />
+        </div>
+      ) : !hasAddresses ? (
+        <AddressesEmptyState
+          onAdd={() => {
+            setEditingAddress(undefined);
+            setAddSheetOpen(true);
+          }}
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {addresses.map((address) => (
+            <AddressCard
+              key={address.id}
+              address={address}
+              isDefaultShipping={address.isDefault}
+              isDefaultBilling={address.isDefault}
+              onSetDefaultShipping={() => handleSetDefault(address.id)}
+              onEdit={() => handleEditAddress(address)}
+              onDelete={() => handleDeleteClick(address)}
+            />
+          ))}
+        </div>
       )}
 
-      {/* Add/Edit Address Sheet */}
+      {/* 3. Delivery Assurance Information Card */}
+      <div className="p-5 rounded-2xl bg-gradient-to-r from-emerald-500/10 via-primary/5 to-transparent border border-emerald-500/20 flex items-start gap-4">
+        <div className="p-2.5 rounded-xl bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 shrink-0">
+          <ShieldCheck className="h-5 w-5" />
+        </div>
+        <div className="space-y-1 text-xs">
+          <h4 className="font-bold text-foreground text-sm">Cold-Chain & Sensitive Equipment Dispatch</h4>
+          <p className="text-muted-foreground leading-relaxed">
+            All medical deliveries include temperature-monitored courier handling and direct doorstep delivery across all 47 counties in Kenya. Our couriers follow strict GDP (Good Distribution Practice) guidelines.
+          </p>
+        </div>
+      </div>
+
+      {/* Delivery Address Google Maps Sheet */}
       <DeliveryAddressSheet
         delivery={editingAddress as any}
         onSelect={handleNewAddress as any}
         open={addSheetOpen}
-        onOpenChange={setAddSheetOpen}
+        onOpenChange={(open) => {
+          setAddSheetOpen(open);
+          if (!open) setEditingAddress(undefined);
+        }}
       />
 
       {/* Delete Confirmation Dialog */}
@@ -149,7 +181,6 @@ function AddressesPage() {
         onConfirm={handleDeleteConfirm}
         address={addressToDelete}
         isDefaultShipping={addressToDelete?.isDefault}
-        isDefaultBilling={addressToDelete?.isDefault}
       />
     </div>
   );
@@ -162,4 +193,3 @@ export default function AddressesPageWrapper() {
     </ErrorBoundary>
   );
 }
-

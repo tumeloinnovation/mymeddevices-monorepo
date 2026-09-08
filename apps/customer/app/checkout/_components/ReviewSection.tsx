@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import useCartStore from '@/lib/store/useCartStore';
 import { formatCurrency } from '@/lib/utils/utils';
+import { getValidImageUrl } from '@/lib/utils/image';
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { CheckCircle2, Mail, MapPin, Phone, User } from 'lucide-react';
@@ -86,7 +87,7 @@ export default function ReviewSection({
     // triggering other components' updates during this component's render
     if (updated) {
       if (onUpdateItem) onUpdateItem(updated);
-      else cart.updateQuantity(Number(updated.id), updated.quantity);
+      else cart.updateQuantity(updated.id, updated.quantity);
     }
   };
 
@@ -103,7 +104,7 @@ export default function ReviewSection({
   const remove = (id: string | number) => {
     setItems((prev) => prev.filter((p) => p.id !== id));
     if (onRemoveItem) onRemoveItem(id);
-    else cart.removeItem(Number(id));
+    else cart.removeItem(id);
   };
 
   const total = useMemo(() => {
@@ -127,10 +128,10 @@ export default function ReviewSection({
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <Image
-                      src={
-                        // prefer WooCommerce `images` array
-                        (it as any).images?.[0]?.src || it.image || (it as any).thumbnail || '/logos/logo-portrait.png'
-                      }
+                      src={getValidImageUrl(
+                        (it as any).images?.[0]?.src || it.image || (it as any).image_url || (it as any).thumbnail,
+                        '/logos/logo-portrait.png'
+                      )}
                       alt={
                         (it as any).images?.[0]?.alt || it.name || it.title || `Item ${it.id}`
                       }

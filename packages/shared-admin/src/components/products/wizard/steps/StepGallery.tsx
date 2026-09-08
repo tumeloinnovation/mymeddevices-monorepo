@@ -1,90 +1,105 @@
 "use client";
 
 import React, { useState } from "react";
-import { Image as ImageIcon, Upload, X, AlertCircle, GripVertical } from "lucide-react";
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from "@dnd-kit/core";
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
+import { Image as ImageIcon, Upload, X, AlertCircle, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../../../ui/card";
 import { Badge } from "../../../ui/badge";
+import { Button } from "../../../ui/button";
 import { useProductWizardStore } from "../use-product-wizard-store";
 import { cn } from "../../../../lib/utils";
 
-interface SortableImageItemProps {
+interface GalleryImageItemProps {
   id: number;
   src: string;
   isPrimary: boolean;
+  totalImages: number;
   onSetPrimary: (idx: number) => void;
   onRemove: (idx: number) => void;
+  onMove: (fromIdx: number, toIdx: number) => void;
   shotType?: string;
 }
 
-function SortableImageItem({ id, src, isPrimary, onSetPrimary, onRemove, shotType }: SortableImageItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
-
+function GalleryImageItem({
+  id,
+  src,
+  isPrimary,
+  totalImages,
+  onSetPrimary,
+  onRemove,
+  onMove,
+  shotType
+}: GalleryImageItemProps) {
   return (
     <div
-      ref={setNodeRef}
-      style={style}
       className={cn(
-        "relative aspect-square border-2 cursor-pointer group bg-zinc-100 dark:bg-zinc-900 overflow-hidden",
+        "relative aspect-square border-2 group bg-zinc-100 dark:bg-zinc-900 overflow-hidden flex flex-col justify-between",
         isPrimary
           ? "border-emerald-600 dark:border-emerald-400 ring-2 ring-emerald-500/20"
           : "border-zinc-200 dark:border-zinc-800 hover:border-zinc-400"
       )}
     >
-      <button
-        type="button"
-        className="absolute top-1 left-1 bg-zinc-900/60 text-white p-1.5 rounded hover:bg-zinc-700 transition-colors z-10"
-        {...attributes}
-        {...listeners}
-      >
-        <GripVertical className="h-3 w-3" />
-      </button>
+      {/* Top action bar */}
+      <div className="absolute top-1 inset-x-1 flex items-center justify-between z-10">
+        <div className="flex items-center gap-1">
+          {id > 0 && (
+            <button
+              type="button"
+              onClick={() => onMove(id, id - 1)}
+              className="bg-zinc-900/80 text-white p-1 hover:bg-zinc-700 transition-colors rounded text-xs"
+              title="Move image left"
+            >
+              <ChevronLeft className="h-3 w-3" />
+            </button>
+          )}
+          {id < totalImages - 1 && (
+            <button
+              type="button"
+              onClick={() => onMove(id, id + 1)}
+              className="bg-zinc-900/80 text-white p-1 hover:bg-zinc-700 transition-colors rounded text-xs"
+              title="Move image right"
+            >
+              <ChevronRight className="h-3 w-3" />
+            </button>
+          )}
+        </div>
 
-      <img src={src} alt="Preview" className="w-full h-full object-cover" onClick={() => onSetPrimary(id)} />
+        <button
+          type="button"
+          onClick={() => onRemove(id)}
+          className="bg-zinc-900/80 text-white p-1 hover:bg-rose-600 transition-colors rounded"
+          title="Remove image"
+        >
+          <X className="h-3 w-3" />
+        </button>
+      </div>
+
+      {/* Image Preview & Click to Set Primary */}
+      <img
+        src={src}
+        alt={`Equipment Photo ${id + 1}`}
+        className="w-full h-full object-cover cursor-pointer"
+        onClick={() => onSetPrimary(id)}
+      />
 
       {shotType && (
-        <div className="absolute top-1 right-10 bg-indigo-600/90 text-white text-[8px] font-mono uppercase px-1.5 py-0.5 rounded">
+        <div className="absolute top-8 left-1 bg-indigo-600/90 text-white text-[8px] font-mono uppercase px-1.5 py-0.5 rounded">
           {shotType.replace("_", " ")}
         </div>
       )}
 
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove(id);
-        }}
-        className="absolute top-1 right-1 bg-zinc-900/80 text-white p-1 hover:bg-rose-600 transition-colors z-10"
-      >
-        <X className="h-3 w-3" />
-      </button>
-
-      {isPrimary && (
-        <span className="absolute bottom-0 inset-x-0 bg-emerald-600 text-white text-[9px] font-mono uppercase text-center py-0.5 font-bold">
-          Primary Image
+      {/* Bottom primary badge / action */}
+      {isPrimary ? (
+        <span className="absolute bottom-0 inset-x-0 bg-emerald-600 text-white text-[9px] font-mono uppercase text-center py-0.5 font-bold flex items-center justify-center gap-1">
+          <Check className="h-3 w-3" /> Primary Image
         </span>
+      ) : (
+        <button
+          type="button"
+          onClick={() => onSetPrimary(id)}
+          className="absolute bottom-0 inset-x-0 bg-zinc-900/70 hover:bg-zinc-900 text-white text-[9px] font-mono uppercase text-center py-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        >
+          Set as Primary
+        </button>
       )}
     </div>
   );
@@ -101,25 +116,29 @@ export function StepGallery({ images, imagePreviews, setImages, setImagePreviews
   const { primaryImageIndex, setPrimaryImage, imageShotTypes } = useProductWizardStore();
   const [uploadError, setUploadError] = useState<string | null>(null);
 
-  const sensors = useSensors(
-    useSensor(PointerSensor),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
-  );
+  const handleMove = (fromIndex: number, toIndex: number) => {
+    if (fromIndex < 0 || fromIndex >= imagePreviews.length || toIndex < 0 || toIndex >= imagePreviews.length) {
+      return;
+    }
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      const oldIndex = imagePreviews.findIndex((_, idx) => idx === active.id);
-      const newIndex = imagePreviews.findIndex((_, idx) => idx === over.id);
+    setImages((prev) => {
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIndex, 1);
+      copy.splice(toIndex, 0, moved);
+      return copy;
+    });
 
-      setImages((prev) => arrayMove(prev, oldIndex, newIndex));
-      setImagePreviews((prev) => arrayMove(prev, oldIndex, newIndex));
+    setImagePreviews((prev) => {
+      const copy = [...prev];
+      const [moved] = copy.splice(fromIndex, 1);
+      copy.splice(toIndex, 0, moved);
+      return copy;
+    });
 
-      if (primaryImageIndex === oldIndex) {
-        setPrimaryImage(newIndex);
-      } else if (primaryImageIndex === newIndex) {
-        setPrimaryImage(oldIndex);
-      }
+    if (primaryImageIndex === fromIndex) {
+      setPrimaryImage(toIndex);
+    } else if (primaryImageIndex === toIndex) {
+      setPrimaryImage(fromIndex);
     }
   };
 
@@ -182,43 +201,41 @@ export function StepGallery({ images, imagePreviews, setImages, setImagePreviews
                 </Badge>
               )}
             </div>
-            <span className="text-[10px] text-zinc-400">Drag to reorder • Click to set primary</span>
+            <span className="text-[10px] text-zinc-400">Click arrows to reorder • Click image to set primary</span>
           </div>
 
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-            <SortableContext items={imagePreviews.map((_, idx) => idx)} strategy={verticalListSortingStrategy}>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                {imagePreviews.map((src, idx) => (
-                  <SortableImageItem
-                    key={src}
-                    id={idx}
-                    src={src}
-                    isPrimary={idx === primaryImageIndex}
-                    onSetPrimary={(i) => setPrimaryImage(i)}
-                    onRemove={(i) => {
-                      setImages((prev) => prev.filter((_, index) => index !== i));
-                      setImagePreviews((prev) => prev.filter((_, index) => index !== i));
-                      if (primaryImageIndex === i) setPrimaryImage(0);
-                    }}
-                    shotType={imageShotTypes[idx]}
-                  />
-                ))}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {imagePreviews.map((src, idx) => (
+              <GalleryImageItem
+                key={src}
+                id={idx}
+                src={src}
+                isPrimary={idx === primaryImageIndex}
+                totalImages={imagePreviews.length}
+                onSetPrimary={(i) => setPrimaryImage(i)}
+                onMove={handleMove}
+                onRemove={(i) => {
+                  setImages((prev) => prev.filter((_, index) => index !== i));
+                  setImagePreviews((prev) => prev.filter((_, index) => index !== i));
+                  if (primaryImageIndex === i) setPrimaryImage(0);
+                }}
+                shotType={imageShotTypes[idx]}
+              />
+            ))}
 
-                <label className="aspect-square border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 flex flex-col items-center justify-center cursor-pointer p-4 transition-colors">
-                  <Upload className="h-6 w-6 text-zinc-400 mb-2" />
-                  <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 text-center">Upload Photos</span>
-                  <span className="text-[10px] text-zinc-400 text-center mt-0.5">PNG, JPG up to 10MB each</span>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/png,image/jpeg,image/jpg,image/webp"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
-                </label>
-              </div>
-            </SortableContext>
-          </DndContext>
+            <label className="aspect-square border-2 border-dashed border-zinc-300 dark:border-zinc-700 hover:border-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800 bg-zinc-50 dark:bg-zinc-900/40 flex flex-col items-center justify-center cursor-pointer p-4 transition-colors">
+              <Upload className="h-6 w-6 text-zinc-400 mb-2" />
+              <span className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 text-center">Upload Photos</span>
+              <span className="text-[10px] text-zinc-400 text-center mt-0.5">PNG, JPG up to 10MB each</span>
+              <input
+                type="file"
+                multiple
+                accept="image/png,image/jpeg,image/jpg,image/webp"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </label>
+          </div>
         </CardContent>
       </Card>
     </div>

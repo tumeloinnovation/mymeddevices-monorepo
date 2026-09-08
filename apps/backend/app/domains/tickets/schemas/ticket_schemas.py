@@ -1,7 +1,7 @@
-from pydantic import BaseModel, Field
-from typing import Optional, List
-from datetime import datetime
 import uuid
+from datetime import datetime
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TicketBase(BaseModel):
@@ -16,10 +16,10 @@ class TicketCreate(TicketBase):
 
 
 class TicketUpdate(BaseModel):
-    subject: Optional[str] = Field(None, min_length=1, max_length=500)
-    description: Optional[str] = Field(None, min_length=1)
-    category: Optional[str] = None
-    priority: Optional[str] = None
+    subject: str | None = Field(None, min_length=1, max_length=500)
+    description: str | None = Field(None, min_length=1)
+    category: str | None = None
+    priority: str | None = None
 
 
 class TicketReplyCreate(BaseModel):
@@ -33,11 +33,10 @@ class TicketReplyResponse(BaseModel):
     content: str
     is_internal: str
     created_at: datetime
-    user_name: Optional[str] = None
-    user_role: Optional[str] = None
+    user_name: str | None = None
+    user_role: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TicketResponse(BaseModel):
@@ -49,29 +48,27 @@ class TicketResponse(BaseModel):
     category: str
     priority: str
     status: str
-    assigned_to: Optional[uuid.UUID] = None
-    assignee_name: Optional[str] = None
-    resolution: Optional[str] = None
-    resolved_at: Optional[datetime] = None
-    closed_at: Optional[datetime] = None
+    assigned_to: uuid.UUID | None = None
+    assignee_name: str | None = None
+    resolution: str | None = None
+    resolved_at: datetime | None = None
+    closed_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
-    last_reply_at: Optional[datetime] = None
+    last_reply_at: datetime | None = None
     reply_count: int = 0
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TicketDetailResponse(TicketResponse):
-    replies: List[TicketReplyResponse] = []
+    replies: list[TicketReplyResponse] = []
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class TicketListResponse(BaseModel):
-    items: List[TicketResponse]
+    items: list[TicketResponse]
     total: int
     page: int
     limit: int

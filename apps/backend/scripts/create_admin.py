@@ -1,18 +1,16 @@
-import asyncio
 import argparse
+import asyncio
 import getpass
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from sqlalchemy import select
+
 from app.core.database import AsyncSessionLocal
 from app.core.security import get_password_hash
 from app.domains.auth.models.user import User
-from app.domains.vendor.models.vendor_profile import VendorProfile
-from app.domains.auth.models.token_device import RefreshToken, UserDevice
-from app.domains.auth.models.otp import OTP
-from sqlalchemy import select
 
 
 async def main():

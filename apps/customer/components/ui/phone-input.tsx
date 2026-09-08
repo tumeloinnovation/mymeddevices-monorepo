@@ -23,9 +23,21 @@ export function PhoneInput({ value, onChange, label, error, id, className, ...pr
   const [displayValue, setDisplayValue] = React.useState(value);
   const inputRef = React.useRef<HTMLInputElement>(null);
 
-  // Update display value when prop changes
+  // Update display value when prop changes - show raw digits only
   React.useEffect(() => {
-    setDisplayValue(formatPhoneDisplay(value));
+    if (!value) {
+      setDisplayValue('');
+      return;
+    }
+    // Extract just the 9 digits for display
+    const digits = value.replace(/\D/g, '');
+    if (digits.startsWith('254')) {
+      setDisplayValue(digits.substring(3, 12));
+    } else if (digits.startsWith('0')) {
+      setDisplayValue(digits.substring(1, 10));
+    } else {
+      setDisplayValue(digits.substring(0, 9));
+    }
   }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -43,15 +55,11 @@ export function PhoneInput({ value, onChange, label, error, id, className, ...pr
       input = input.substring(0, 9);
     }
 
-    if (input.length === 0) {
-      setDisplayValue('');
-      onChange('');
-      return;
-    }
+    // Display just the raw digits, but store with +254 prefix
+    setDisplayValue(input);
 
-    // Format as +254 XXX XXX XXX
-    const formatted = formatPhoneNumber(input);
-    setDisplayValue(formatted);
+    // Format as +254 XXX XXX XXX for storage
+    const formatted = input.length > 0 ? formatPhoneNumber(input) : '';
     onChange(formatted);
   };
 
@@ -77,7 +85,7 @@ export function PhoneInput({ value, onChange, label, error, id, className, ...pr
           ref={inputRef}
           id={id}
           type="tel"
-          value={displayValue.replace(/^\+254\s?/, '')}
+          value={displayValue}
           onChange={handleChange}
           onBlur={handleBlur}
           className={cn('pl-14', error && 'border-destructive focus-visible:ring-destructive', className)}

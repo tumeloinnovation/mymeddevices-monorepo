@@ -10,7 +10,7 @@ function buildCategoryTree(categories: Category[]): Category[] {
   const map = new Map<number | string, any>();
   const roots: any[] = [];
   categories.forEach((cat) => {
-    map.set(cat.id, { ...cat, children: [] });
+    map.set(cat.id, { ...cat, children: cat.subCategories ? [...cat.subCategories] : [] });
   });
   categories.forEach((cat) => {
     const node = map.get(cat.id)!;
@@ -22,6 +22,52 @@ function buildCategoryTree(categories: Category[]): Category[] {
   });
   return roots as Category[];
 }
+
+function getCategoryMatchIdentifiers(targetCategory: string, categories: Category[]): Set<string> {
+  const matches = new Set<string>();
+  const normalizedTarget = targetCategory.toLowerCase().trim();
+  matches.add(normalizedTarget);
+  matches.add(targetCategory);
+
+  const findCategoryNode = (list: any[]): any | null => {
+    for (const item of list) {
+      if (
+        item.slug?.toLowerCase() === normalizedTarget ||
+        String(item.id).toLowerCase() === normalizedTarget ||
+        item.name?.toLowerCase() === normalizedTarget ||
+        item.name?.toLowerCase().replace(/\s+/g, '-') === normalizedTarget
+      ) {
+        return item;
+      }
+      const children = item.children || item.subCategories;
+      if (children && children.length > 0) {
+        const found = findCategoryNode(children);
+        if (found) return found;
+      }
+    }
+    return null;
+  };
+
+  const targetNode = findCategoryNode(categories);
+  if (targetNode) {
+    const collectDescendants = (node: any) => {
+      if (node.slug) matches.add(node.slug.toLowerCase());
+      if (node.id) matches.add(String(node.id).toLowerCase());
+      if (node.name) {
+        matches.add(node.name.toLowerCase());
+        matches.add(node.name.toLowerCase().replace(/\s+/g, '-'));
+      }
+      const children = node.children || node.subCategories || [];
+      for (const child of children) {
+        collectDescendants(child);
+      }
+    };
+    collectDescendants(targetNode);
+  }
+
+  return matches;
+}
+
 import ShopHeader from "./ShopHeader";
 import ShopSidebar from "./ShopSidebar";
 import ShopFiltersDrawer from "./ShopFiltersDrawer";
@@ -78,37 +124,115 @@ export default function ShopPage({
   const effectiveMaxPrice = maxPriceParam !== null ? parseFloat(maxPriceParam) : filters.priceRange[1];
   const effectiveCategory = categoryParam || filters.selectedCategory || initialSelectedCategory;
 
+  const handleCategoryChange = useCallback(
+    (categorySlug?: string) => {
+      setFilter("selectedCategory", categorySlug);
+      const params = new URLSearchParams(searchParams.toString());
+      if (categorySlug) {
+        params.set("category", categorySlug);
+      } else {
+        params.delete("category");
+      }
+      const queryString = params.toString();
+      router.replace(`${pathname}${queryString ? `?${queryString}` : ""}`, { scroll: false });
+    },
+    [setFilter, searchParams, pathname, router]
+  );
+
   const handleResetFilters = useCallback(() => {
     clearFilters();
     if (searchParams.toString()) {
-      router.push(pathname);
+      router.replace(pathname, { scroll: false });
     }
   }, [clearFilters, searchParams, router, pathname]);
 
   // Build category tree
   const categoryTree = useMemo(() => buildCategoryTree(categories), [categories]);
 
-  // Find selected category data
+  // Find selected category data recursively
   const selectedCategoryData = useMemo(() => {
     if (!effectiveCategory) return null;
-    return categories.find((c) => c.slug === effectiveCategory) ?? null;
+    const normalized = effectiveCategory.toLowerCase().trim();
+
+    const findNode = (list: any[]): Category | null => {
+      for (const item of list) {
+        if (
+          item.slug?.toLowerCase() === normalized ||
+          String(item.id).toLowerCase() === normalized ||
+          item.name?.toLowerCase() === normalized ||
+          item.name?.toLowerCase().replace(/\s+/g, '-') === normalized
+        ) {
+          return item;
+        }
+        const children = item.children || item.subCategories;
+        if (children && children.length > 0) {
+          const found = findNode(children);
+          if (found) return found;
+        }
+      }
+      return null;
+    };
+
+    return findNode(categories);
   }, [effectiveCategory, categories]);
 
   // Apply all filters client-side
   const { orderby, order } = getSortParams(filters.sortOrder);
   const filteredProducts = useMemo(() => {
-    const filtered = filterProducts(products, {
-      category: effectiveCategory,
+    let result = products;
+
+    // Apply category filter with hierarchy awareness
+    if (effectiveCategory) {
+      const allowedCategories = getCategoryMatchIdentifiers(effectiveCategory, categories);
+      result = result.filter((product) => {
+        // Check product.categories array
+        if (product.categories && product.categories.length > 0) {
+          const matched = product.categories.some((cat) => {
+            const slug = (cat.slug || '').toLowerCase();
+            const id = String(cat.id || '').toLowerCase();
+            const name = (cat.name || '').toLowerCase();
+            const nameSlug = name.replace(/\s+/g, '-');
+            return (
+              allowedCategories.has(slug) ||
+              allowedCategories.has(id) ||
+              allowedCategories.has(name) ||
+              allowedCategories.has(nameSlug)
+            );
+          });
+          if (matched) return true;
+        }
+
+        // Check product category string or category_id directly
+        const rawCat = (
+          (product as any).category_slug ||
+          (product as any).category_name ||
+          (product as any).category ||
+          ''
+        ).toLowerCase();
+        if (rawCat && (allowedCategories.has(rawCat) || allowedCategories.has(rawCat.replace(/\s+/g, '-')))) {
+          return true;
+        }
+        const rawCatId = String((product as any).category_id || '').toLowerCase();
+        if (rawCatId && allowedCategories.has(rawCatId)) {
+          return true;
+        }
+
+        return false;
+      });
+    }
+
+    // Apply other filters (price, on sale, rating, etc.)
+    const filtered = filterProducts(result, {
       min_price: effectiveMinPrice,
       max_price: effectiveMaxPrice,
       on_sale: filters.onSaleOnly || undefined,
-      stock_status:
-        filters.stockStatus === "any" ? undefined : filters.stockStatus,
+      stock_status: filters.stockStatus === "any" ? undefined : filters.stockStatus,
       min_rating: filters.minRating > 0 ? filters.minRating : undefined,
       status: "publish",
     });
+
     return sortProducts(filtered, orderby, order);
-  }, [products, filters, effectiveCategory, effectiveMinPrice, effectiveMaxPrice, orderby, order]);
+  }, [products, categories, filters, effectiveCategory, effectiveMinPrice, effectiveMaxPrice, orderby, order]);
 
   return (
     <div className="min-h-[calc(100vh-120px)] py-6">
@@ -129,23 +253,28 @@ export default function ShopPage({
             <div className="grid grid-cols-12 gap-6">
               {/* Sidebar */}
               <aside className="hidden md:block md:col-span-3">
-                <ShopSidebar categories={categoryTree} categoriesLoading={false} />
+                <ShopSidebar
+                  categories={categoryTree}
+                  categoriesLoading={false}
+                  selectedCategory={effectiveCategory}
+                  onCategoryChange={handleCategoryChange}
+                />
               </aside>
 
               {/* Main content */}
               <main className="col-span-12 lg:col-span-9">
-                <ShopFiltersDrawer categories={categoryTree} categoriesLoading={false} />
+                <ShopFiltersDrawer
+                  categories={categoryTree}
+                  categoriesLoading={false}
+                  selectedCategory={effectiveCategory}
+                  onCategoryChange={handleCategoryChange}
+                />
                 <ShopHeader
                   sortOrder={filters.sortOrder}
                   onSortChange={(value) => setFilter("sortOrder", value)}
                   productCount={filteredProducts.length}
                   selectedCategoryName={selectedCategoryData?.name}
-                  onClearCategory={() => {
-                    setFilter("selectedCategory", undefined);
-                    if (searchParams.get("category")) {
-                      router.push(pathname);
-                    }
-                  }}
+                  onClearCategory={() => handleCategoryChange(undefined)}
                 />
                 <ProductGrid
                   products={filteredProducts}
