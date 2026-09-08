@@ -255,5 +255,3 @@ export const useCheckoutFlow = () => {
     handleCloseSuccessModal,
   };
 };
-
-export default useCheckoutFlow;

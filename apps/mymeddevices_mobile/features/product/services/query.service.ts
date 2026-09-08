@@ -36,7 +36,7 @@ export const useRelatedProductsQueries = (relatedIds: number[]) => {
   });
 };
 
-export const category_params: CategoryQueryParams = {
+const category_params: CategoryQueryParams = {
   per_page: 10,
   order: "asc",
   orderby: "name",

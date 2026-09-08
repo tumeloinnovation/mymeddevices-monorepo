@@ -19,3 +19,8 @@ export interface Colors {
   border: string;
   notification: string;
 }
+
+export interface SheetRefProps {
+  openSheet: () => void;
+  close: () => void;
+}

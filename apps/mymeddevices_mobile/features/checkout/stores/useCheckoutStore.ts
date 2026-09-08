@@ -54,4 +54,4 @@ export const useCheckoutStore = create<CheckoutStoreState>((set) => ({
 }));
 
 // Re-export types for convenience
-export type { CheckoutAddress, CheckoutCustomer, CheckoutMode, CheckoutCoupon };
+export type { CheckoutMode };

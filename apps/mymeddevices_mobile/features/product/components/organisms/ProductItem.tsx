@@ -9,6 +9,7 @@ import Icon from "@/components/common/Icon";
 import useCartStore from "@/features/cart/stores/useCartStore";
 import type { StyleProp, ViewStyle } from "react-native";
 import { useWishlistStore } from "@/features/wishlist/stores/useWishlistStore";
+import ProductItemPrice from "../atoms/ProductItemPrice";
 
 interface Props {
   data: Product;
@@ -121,24 +122,7 @@ const ProductItem: React.FC<Props> = ({ data, style }) => {
         </Text>
 
         {/* Pricing */}
-        <View style={styles.priceRow}>
-          {data?.on_sale ? (
-            <View style={styles.priceGroup}>
-              <Text style={styles.salePrice}>
-                Ksh {Number(data?.sale_price || data?.price || 0).toLocaleString()}
-              </Text>
-              {data?.regular_price ? (
-                <Text style={styles.regularPrice}>
-                  Ksh {Number(data.regular_price).toLocaleString()}
-                </Text>
-              ) : null}
-            </View>
-          ) : (
-            <Text style={styles.normalPrice}>
-              Ksh {Number(data?.regular_price || data?.price || 0).toLocaleString()}
-            </Text>
-          )}
-        </View>
+        <ProductItemPrice product={data} colors={colors} />
 
         {/* Option B: Bottom Full-Width Add To Cart Button */}
         <TouchableOpacity
@@ -259,33 +243,6 @@ const createStyles = (colors: Colors, dark: boolean) =>
       color: colors.text,
       lineHeight: 18,
       minHeight: 36, // Ensures alignment for 1 vs 2 lines
-    },
-    priceRow: {
-      marginVertical: 2,
-      minHeight: 22,
-      justifyContent: "center",
-    },
-    priceGroup: {
-      flexDirection: "row",
-      alignItems: "baseline",
-      flexWrap: "wrap",
-      gap: 5,
-    },
-    salePrice: {
-      fontSize: 14,
-      fontWeight: "700",
-      color: colors.primary,
-    },
-    regularPrice: {
-      fontSize: 11,
-      color: colors.textSecondary || "#94A3B8",
-      textDecorationLine: "line-through",
-      fontWeight: "500",
-    },
-    normalPrice: {
-      fontSize: 14,
-      fontWeight: "700",
-      color: colors.text,
     },
     actionButton: {
       flexDirection: "row",

@@ -245,8 +245,3 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     }
   },
 }));
-
-export const useCurrentUser = () => useAuthStore((state) => state.user);
-export const useAuthCustomer = () => useAuthStore((state) => state.customer);
-export const useIsAuthenticated = () => useAuthStore((state) => state.isAuthenticated);
-export const useAuthLoading = () => useAuthStore((state) => state.isLoading);

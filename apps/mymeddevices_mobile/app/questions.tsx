@@ -49,9 +49,9 @@ const QuestionsPage = () => {
     setActiveSections(sections.includes(undefined as unknown as number) ? [] : sections);
   };
 
-  const AccordionHeader = (
+  const renderAccordionHeader = (
     item: Section,
-    _: number,
+    _index: number,
     isActive: boolean
   ) => {
     return (
@@ -82,10 +82,10 @@ const QuestionsPage = () => {
     );
   };
 
-  const AccordionBody = (
+  const renderAccordionContent = (
     item: Section,
-    _: number,
-    isActive: boolean
+    _index: number,
+    _isActive: boolean
   ) => {
     return (
       <View
@@ -101,7 +101,6 @@ const QuestionsPage = () => {
             color: colors.text,
             lineHeight: 20,
             fontSize: SIZES.fontMD,
-
             fontWeight: "400",
           }}
         >
@@ -118,10 +117,7 @@ const QuestionsPage = () => {
         duration={300}
         sectionContainerStyle={[
           {
-            // borderWidth: 1,
-            // borderColor: theme.dark ? COLORS.white : colors.borderColor,
             marginBottom: 15,
-            //paddingHorizontal: 20,
             borderRadius: 10,
             backgroundColor: colors.card,
           },
@@ -129,8 +125,8 @@ const QuestionsPage = () => {
         activeSections={activeSections}
         onChange={setSections}
         touchableComponent={TouchableOpacity}
-        renderHeader={AccordionHeader}
-        renderContent={AccordionBody}
+        renderHeader={renderAccordionHeader}
+        renderContent={renderAccordionContent}
       />
     </ContainerView>
   );

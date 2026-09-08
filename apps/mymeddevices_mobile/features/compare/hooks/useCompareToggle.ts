@@ -2,9 +2,9 @@ import { toast } from "sonner-native";
 import { Product } from "@/types/product";
 import useCompareStore from "@/features/compare/stores/useCompareStore";
 
-export const MAX_COMPARE_ITEMS = 2;
+const MAX_COMPARE_ITEMS = 2;
 
-export type CompareToggleResult = "added" | "removed" | "limit" | "none";
+type CompareToggleResult = "added" | "removed" | "limit" | "none";
 
 /**
  * Centralizes the add/remove-to-compare logic so the compare button and the

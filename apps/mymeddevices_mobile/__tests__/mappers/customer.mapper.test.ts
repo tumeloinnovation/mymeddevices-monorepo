@@ -1,4 +1,4 @@
-import { mapBackendCustomer } from "@/features/user/services/customer.api";
+import { mapBackendCustomer } from "@/features/user/services/customer.mapper";
 import { BackendAddress, BackendCustomer } from "@/types/user";
 
 describe("Customer Mapper (mapBackendCustomer)", () => {

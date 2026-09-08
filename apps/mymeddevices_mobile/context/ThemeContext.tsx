@@ -1,7 +1,7 @@
 import React, { createContext, useState, useCallback } from "react";
 import { ColorSchemeName, useColorScheme } from "react-native";
 
-export interface ThemeContextValueTypes {
+interface ThemeContextValueTypes {
   theme: ColorSchemeName;
   changeTheme: (theme: ColorSchemeName) => void;
 }

@@ -27,8 +27,7 @@ import { SIZES } from "@/styles/sizes";
 import useShopStore from "@/stores/useShopStore";
 import SortSheet from "@/components/sheets/SortSheet";
 import FilterSheet from "@/components/sheets/FilterSheet";
-import { RefProps } from "./(shop)";
-import { Colors } from "@/types/app";
+import { Colors, SheetRefProps } from "@/types/app";
 import {
   getCategoryImageUrl,
   getCategorySubtitle,
@@ -40,8 +39,8 @@ const CategoryPage = () => {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
 
-  const filterRef = useRef<RefProps>(null);
-  const sortRef = useRef<RefProps>(null);
+  const filterRef = useRef<SheetRefProps>(null);
+  const sortRef = useRef<SheetRefProps>(null);
   const [footerVisible] = useState(() => new Animated.Value(1));
   const [refreshing, setRefreshing] = useState(false);
 

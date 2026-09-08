@@ -1,8 +1,8 @@
 import * as SecureStore from "expo-secure-store";
 
-export const ACCESS_TOKEN_KEY = "auth_access_token";
-export const REFRESH_TOKEN_KEY = "auth_refresh_token";
-export const USER_KEY = "auth_user";
+const ACCESS_TOKEN_KEY = "auth_access_token";
+const REFRESH_TOKEN_KEY = "auth_refresh_token";
+const USER_KEY = "auth_user";
 
 const SECURE_OPTIONS: SecureStore.SecureStoreOptions = {
   keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
@@ -82,5 +82,3 @@ export const tokenStorage = {
     ]);
   },
 };
-
-export default tokenStorage;

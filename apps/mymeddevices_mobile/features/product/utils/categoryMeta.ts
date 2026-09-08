@@ -11,7 +11,7 @@ interface CategoryMetaItem {
  * Curated high-resolution medical product images for child categories.
  * All images are verified, fast-loading, HTTPS CDN URLs with high uptime.
  */
-export const CATEGORY_META_MAP: Record<string, CategoryMetaItem> = {
+const CATEGORY_META_MAP: Record<string, CategoryMetaItem> = {
   // Diagnostic Devices
   "digital-thermometers": {
     imageUrl:

@@ -1,8 +1,4 @@
-import { format, getHours } from "date-fns";
-
-export const currentDate = format(new Date(), "EEEE, do MMM");
-
-export const currentTime = format(new Date(), "h:mm a");
+import { getHours } from "date-fns";
 
 export const getGreeting = (): string => {
   const hours = getHours(new Date());

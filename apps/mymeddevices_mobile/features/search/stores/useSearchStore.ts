@@ -3,7 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import { generateUUID } from "@/utils/generateUUID";
 
-export type SearchHistoryItem = {
+type SearchHistoryItem = {
   id: string;
   term: string;
   timestamp: number;

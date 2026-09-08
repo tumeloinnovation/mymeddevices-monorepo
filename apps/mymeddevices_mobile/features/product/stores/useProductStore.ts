@@ -2,7 +2,7 @@ import { create } from "zustand";
 
 import { Product } from "@/types/product";
 
-export type ProductStore = {
+type ProductStore = {
   product: Product | null;
   setProduct: (product: Product) => void;
 };

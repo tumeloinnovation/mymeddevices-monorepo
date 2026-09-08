@@ -4,7 +4,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Haptics from "expo-haptics";
 import { Product } from "@/types/product";
 
-export interface CartItem extends Product {
+interface CartItem extends Product {
   quantity: number;
   variation_id?: number;
 }

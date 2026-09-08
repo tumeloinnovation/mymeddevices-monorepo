@@ -75,6 +75,8 @@ export interface MetaData {
   id?: number;
   key: string;
   value: string;
+  display_key?: string;
+  display_value?: string;
 }
 
 export interface Customer {

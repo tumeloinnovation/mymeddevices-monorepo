@@ -50,7 +50,7 @@ const openWhatsAppOrderHistory = async () => {
 };
 
 // Social media links with app deep links where possible
-export const socialLinks = {
+const socialLinks = {
   instagram: {
     url: "instagram://user?username=mymedevices",
     webUrl: "https://www.instagram.com/mymedevices/",
@@ -107,10 +107,9 @@ const openSocialMedia = async (platform: keyof typeof socialLinks) => {
 };
 
 export { 
-  handleSocialMedia, 
   shareLink, 
   openWhatsApp, 
   openWhatsAppOrderHistory, 
-  openSocialMedia,
-  WHATSAPP_PHONE 
+  openSocialMedia 
 };
+

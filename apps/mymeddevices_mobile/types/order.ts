@@ -1,4 +1,4 @@
-import { Billing, Shipping } from "./user";
+import { Billing, Shipping, MetaData } from "./user";
 
 export interface BackendOrderItem {
   id: string | number;
@@ -95,13 +95,7 @@ export interface Image {
   src: string;
 }
 
-export interface MetaData {
-  id?: number;
-  key: string;
-  value: string;
-  display_key?: string;
-  display_value?: string;
-}
+export type { MetaData };
 
 export interface LineItem {
   id: number | string;

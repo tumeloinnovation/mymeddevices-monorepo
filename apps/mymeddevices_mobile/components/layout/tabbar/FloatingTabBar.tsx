@@ -27,8 +27,8 @@ import Icon from "@/components/common/Icon";
 import useCartStore from "@/features/cart/stores/useCartStore";
 import useAppStore from "@/stores/useAppStore";
 
-export const CAPSULE_HEIGHT = 60;
-export const CAPSULE_SHRUNK_HEIGHT = 46;
+const CAPSULE_HEIGHT = 60;
+const CAPSULE_SHRUNK_HEIGHT = 46;
 export const FLOATING_TABBAR_CLEARANCE = 96;
 
 type TabName = "index" | "category" | "ai" | "cart" | "account";

@@ -1,4 +1,5 @@
 import { api } from "@/services/api.client";
+import { formatMpesaPhoneNumber } from "@/utils/phoneUtils";
 
 export interface StkPushParams {
   order_id: string | number;
@@ -47,12 +48,7 @@ export const paymentApi = {
    * Trigger M-Pesa Daraja STK Push prompt to customer's phone
    */
   initiateStkPush: async (params: StkPushParams): Promise<StkPushResponse> => {
-    let formattedPhone = params.phone_number.replace(/\D/g, "");
-    if (formattedPhone.startsWith("0")) {
-      formattedPhone = `254${formattedPhone.substring(1)}`;
-    } else if (formattedPhone.startsWith("7") || formattedPhone.startsWith("1")) {
-      formattedPhone = `254${formattedPhone}`;
-    }
+    const formattedPhone = formatMpesaPhoneNumber(params.phone_number);
 
     try {
       const response = await api.post("/shopping/mpesa/stk-push", {

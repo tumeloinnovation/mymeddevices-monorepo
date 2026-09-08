@@ -25,7 +25,7 @@ import OrderItem from "@/features/order/components/OrderItem";
 import { Order } from "@/types/order";
 import { openWhatsAppOrderHistory } from "@/utils/externalLinks";
 
-export type OrderTabKey =
+type OrderTabKey =
   | "all"
   | "pending"
   | "processing"

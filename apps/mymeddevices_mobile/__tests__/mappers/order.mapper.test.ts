@@ -1,4 +1,4 @@
-import { mapBackendOrder } from "@/features/order/services/order.api";
+import { mapBackendOrder } from "@/features/order/services/order.mapper";
 import { BackendOrder } from "@/types/order";
 
 describe("Order Mapper (mapBackendOrder)", () => {
@@ -61,4 +61,15 @@ describe("Order Mapper (mapBackendOrder)", () => {
     expect(order.line_items[0].sku).toBe("STETH-3");
     expect(order.line_items[0].image.src).toBe("https://example.com/steth.jpg");
   });
+
+  it("handles empty and default fields gracefully", () => {
+    const emptyOrder = mapBackendOrder({});
+    expect(emptyOrder.id).toBe(1);
+    expect(emptyOrder.status).toBe("pending");
+    expect(emptyOrder.currency).toBe("KES");
+    expect(emptyOrder.billing.city).toBe("Nairobi");
+    expect(emptyOrder.shipping.city).toBe("Nairobi");
+    expect(emptyOrder.line_items).toEqual([]);
+  });
 });
+

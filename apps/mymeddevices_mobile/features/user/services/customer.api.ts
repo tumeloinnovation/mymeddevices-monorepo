@@ -4,72 +4,16 @@
 import { api } from "@/services/api.client";
 import {
   BackendAddress,
-  BackendCustomer,
   Customer,
   UpdateCustomerParams,
 } from "@/types/user";
+import { mapBackendCustomer } from "./customer.mapper";
+
+export { mapBackendCustomer } from "./customer.mapper";
 
 export interface UpdateCustomerData {
   customerId?: number | string;
   params: UpdateCustomerParams;
-}
-
-export function mapBackendCustomer(
-  c: BackendCustomer | any,
-  addresses?: BackendAddress[] | any[]
-): Customer {
-  const first = c?.first_name || "";
-  const last = c?.last_name || "";
-  const email = c?.email || "";
-  const phone = c?.phone || "";
-
-  const defaultShipping =
-    addresses?.find((a: any) => a.type === "shipping" && a.is_default) ||
-    addresses?.find((a: any) => a.type === "shipping") ||
-    addresses?.[0];
-
-  const defaultBilling =
-    addresses?.find((a: any) => a.type === "billing" && a.is_default) ||
-    addresses?.find((a: any) => a.type === "billing") ||
-    defaultShipping;
-
-  return {
-    id: c?.id || 1,
-    email,
-    first_name: first,
-    last_name: last,
-    role: "customer",
-    username: email,
-    billing: {
-      first_name: defaultBilling?.first_name || first,
-      last_name: defaultBilling?.last_name || last,
-      company: defaultBilling?.company || c?.company || "",
-      email,
-      phone: defaultBilling?.phone || phone,
-      address_1: defaultBilling?.address_line1 || c?.address || "",
-      address_2: defaultBilling?.address_line2 || "",
-      city: defaultBilling?.city || c?.city || "Nairobi",
-      state: defaultBilling?.state || c?.state || "Nairobi",
-      postcode: defaultBilling?.postal_code || "00100",
-      country: defaultBilling?.country || "KE",
-    },
-    shipping: {
-      first_name: defaultShipping?.first_name || first,
-      last_name: defaultShipping?.last_name || last,
-      company: defaultShipping?.company || c?.company || "",
-      phone: defaultShipping?.phone || phone,
-      address_1: defaultShipping?.address_line1 || c?.address || "",
-      address_2: defaultShipping?.address_line2 || "",
-      city: defaultShipping?.city || c?.city || "Nairobi",
-      state: defaultShipping?.state || c?.state || "Nairobi",
-      postcode: defaultShipping?.postal_code || "00100",
-      country: defaultShipping?.country || "KE",
-    },
-    avatar_url: c?.avatar_url || "",
-    loyalty_points: c?.loyalty_points || 0,
-    loyalty_tier: c?.loyalty_tier || "Bronze",
-    is_paying_customer: true,
-  };
 }
 
 export const customerApi = {
@@ -326,7 +270,5 @@ export const customerApi = {
     }
   },
 };
-
-export default customerApi;
 
 

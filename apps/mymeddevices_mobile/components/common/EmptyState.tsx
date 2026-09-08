@@ -16,7 +16,7 @@ interface EmptyStateProps {
   onPress?: () => void;
 }
 
-export const EmptyState: React.FC<EmptyStateProps> = ({
+const EmptyState: React.FC<EmptyStateProps> = ({
   image,
   title,
   desc,
@@ -45,7 +45,7 @@ export const EmptyState: React.FC<EmptyStateProps> = ({
   );
 };
 
-export const ProductCardSkeleton: React.FC = () => {
+const ProductCardSkeleton: React.FC = () => {
   const { colors } = useTheme();
   const styles = createSkeletonStyles(colors);
   const opacity = useRef(new Animated.Value(0.3)).current;

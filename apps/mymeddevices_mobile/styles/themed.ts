@@ -2,7 +2,7 @@ import { StyleSheet } from "react-native";
 import { SIZES } from "./sizes";
 import { Colors } from "@/types/app";
 
-export const createThemedStyles = (colors?: Colors) =>
+const createThemedStyles = (colors?: Colors) =>
   StyleSheet.create({
     container: {
       flex: 1,

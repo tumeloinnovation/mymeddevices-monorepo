@@ -57,5 +57,3 @@ export function parseGoogleAddress(
     lng: details?.geometry?.location?.lng,
   };
 }
-
-export default parseGoogleAddress;

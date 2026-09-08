@@ -88,7 +88,7 @@ export function mapProduct(p: BackendProduct | any): Product {
   };
 }
 
-export function mapCategory(c: any): Category {
+function mapCategory(c: any): Category {
   return {
     id: c.id,
     name: c.name,

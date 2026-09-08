@@ -23,9 +23,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Icon from "@/components/common/Icon";
 import useShopStore from "@/stores/useShopStore";
-import { Colors } from "@/types/app";
+import { Colors, SheetRefProps } from "@/types/app";
 import { SIZES } from "@/styles/sizes";
-import { RefProps } from "@/app/(shop)";
 
 const ANIMATION_DURATION = 240;
 
@@ -36,7 +35,7 @@ const PRICE_PRESETS = [
   { label: "50k+", min: "50000", max: "250000" },
 ];
 
-const FilterSheet = forwardRef<RefProps, {}>((_props, ref) => {
+const FilterSheet = forwardRef<SheetRefProps, {}>((_props, ref) => {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => createStyles(colors, insets.bottom), [colors, insets.bottom]);

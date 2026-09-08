@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { toast } from "sonner-native";
 import { authService } from "@/services/auth.service";
 
-export type ForgotPasswordStep = "email" | "otp" | "newPassword";
+type ForgotPasswordStep = "email" | "otp" | "newPassword";
 
 export const useForgotPasswordWizard = () => {
   const [step, setStep] = useState<ForgotPasswordStep>("email");

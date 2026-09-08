@@ -28,6 +28,10 @@ import useDeliveryLocationStore, {
 import { useCheckoutStore } from "@/features/checkout/stores/useCheckoutStore";
 import { parseGoogleAddress } from "@/utils/googlePlaces";
 import { formatGeocodedAddress } from "@/utils/addressFormatter";
+import {
+  createCustomDeliveryLocation,
+  buildCombinedSavedAddresses,
+} from "@/features/checkout/utils/addressHelpers";
 
 const CheckoutAddressScreen = () => {
   const { colors, dark } = useTheme();
@@ -85,24 +89,11 @@ const CheckoutAddressScreen = () => {
 
   const handlePlaceSelected = useCallback(
     (data: any, details: any = null) => {
-      let parsed = details ? parseGoogleAddress(details, data) : null;
-      const state =
-        parsed?.city ||
-        parsed?.state ||
-        parsed?.region ||
-        data?.structured_formatting?.secondary_text?.split(",")?.[0]?.trim() ||
-        "Kenya";
-      const fee = matchDeliveryFee(parsed?.region || state);
-      const cleanAddress =
-        parsed?.formattedAddress || data?.structured_formatting?.main_text || state;
-
-      const newLoc: DeliveryLocation = {
-        code: "CUSTOM",
-        state,
-        price: fee,
-        formattedAddress: cleanAddress,
-        label: data?.structured_formatting?.main_text || parsed?.city || state,
-      };
+      const { location: newLoc, state, cleanAddress } = createCustomDeliveryLocation(
+        data,
+        details,
+        matchDeliveryFee
+      );
 
       addSavedAddress(newLoc);
       setDeliveryLocation(newLoc);
@@ -110,7 +101,7 @@ const CheckoutAddressScreen = () => {
         address: cleanAddress,
         region: state,
       });
-      setShipping(fee);
+      setShipping(newLoc.price);
 
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
       toast.success(`Delivery address set to ${state}`);
@@ -203,43 +194,10 @@ const CheckoutAddressScreen = () => {
   }, [apiKey, isLocating, matchDeliveryFee, addSavedAddress, setDeliveryLocation, setDelivery, setShipping]);
 
   // Combined Saved Addresses List
-  const combinedSavedAddresses = useMemo(() => {
-    const list: DeliveryLocation[] = [];
-    const seenAddresses = new Set<string>();
-
-    const addUnique = (loc: DeliveryLocation) => {
-      const key = (loc.formattedAddress || loc.state).trim().toLowerCase();
-      if (!seenAddresses.has(key)) {
-        seenAddresses.add(key);
-        list.push(loc);
-      }
-    };
-
-    if (isAuthenticated && customer?.shipping?.address_1) {
-      const shipState = customer.shipping.city || customer.shipping.state || "Kenya";
-      addUnique({
-        id: "profile-shipping",
-        code: "PROFILE_SHIPPING",
-        state: shipState,
-        price: matchDeliveryFee(shipState),
-        formattedAddress: `${customer.shipping.address_1}${customer.shipping.city ? `, ${customer.shipping.city}` : ""}`,
-        label: "Primary Shipping Address",
-        isDefault: true,
-      });
-    }
-
-    for (const saved of savedAddresses) {
-      if (
-        saved.id !== "default-nairobi" &&
-        saved.label !== "Default Location" &&
-        saved.state !== "Nairobi County"
-      ) {
-        addUnique(saved);
-      }
-    }
-
-    return list;
-  }, [customer, isAuthenticated, savedAddresses, matchDeliveryFee]);
+  const combinedSavedAddresses = useMemo(
+    () => buildCombinedSavedAddresses(customer, isAuthenticated, savedAddresses, matchDeliveryFee),
+    [customer, isAuthenticated, savedAddresses, matchDeliveryFee]
+  );
 
   const isLocationSelected = (loc: DeliveryLocation) => {
     const activeAddr = delivery?.address || currentLocation?.formattedAddress || currentLocation?.state;

@@ -12,7 +12,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { router } from "expo-router";
 
-import { Colors } from "@/types/app";
+import { Colors, SheetRefProps } from "@/types/app";
 import { Product } from "@/types/product";
 import useShopStore from "@/stores/useShopStore";
 import SortSheet from "@/components/sheets/SortSheet";
@@ -24,18 +24,13 @@ import SearchModal from "@/features/search/components/SearchModal";
 import { SIZES } from "@/styles/sizes";
 import { useTabBarScroll } from "@/hooks/useTabBarScroll";
 
-export interface RefProps {
-  openSheet: () => void;
-  close: () => void;
-}
-
 const Shop = () => {
   const flatListRef = useRef<FlatList>(null);
   useScrollToTop(flatListRef);
   const { onScroll, scrollEventThrottle } = useTabBarScroll();
 
-  const filterRef = useRef<RefProps>(null);
-  const sortRef = useRef<RefProps>(null);
+  const filterRef = useRef<SheetRefProps>(null);
+  const sortRef = useRef<SheetRefProps>(null);
   const [searchVisible, setSearchVisible] = useState(false);
 
   const { colors } = useTheme();
